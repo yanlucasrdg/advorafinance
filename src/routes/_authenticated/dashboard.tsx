@@ -96,7 +96,7 @@ function Dashboard() {
         ))}
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <section className="stagger grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="glass rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
