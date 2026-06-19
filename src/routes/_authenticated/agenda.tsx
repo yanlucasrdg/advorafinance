@@ -248,8 +248,8 @@ function Agenda() {
                     </div>
                   ))}
                   {weekHours.map(h => (
-                    <>
-                      <div key={`h-${h}`} className="bg-card/20 p-2 text-[10px] text-muted-foreground text-right tabular-nums">{h}:00</div>
+                    <Fragment key={`h-${h}`}>
+                      <div className="bg-card/20 p-2 text-[10px] text-muted-foreground text-right tabular-nums">{h}:00</div>
                       {weekDays.map((day, di) => {
                         const cellStart = new Date(day); cellStart.setHours(h, 0, 0, 0);
                         const cellEnd = new Date(day); cellEnd.setHours(h + 1, 0, 0, 0);
@@ -270,7 +270,7 @@ function Agenda() {
                           </div>
                         );
                       })}
-                    </>
+                    </Fragment>
                   ))}
                 </div>
               </div>
