@@ -81,7 +81,7 @@ function Dashboard() {
 
       <section className="stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {kpis.map(k => (
-          <div key={k.label} className="glass rounded-2xl p-5 hover:-translate-y-0.5 hover:glow-ring">
+          <div key={k.label} className="glass rounded-2xl p-5 hover-lift">
             <div className="flex items-start justify-between">
               <div className="space-y-1 min-w-0">
                 <p className="text-xs text-muted-foreground truncate">{k.label}</p>
