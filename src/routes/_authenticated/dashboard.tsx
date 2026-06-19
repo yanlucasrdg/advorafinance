@@ -69,7 +69,7 @@ function Dashboard() {
         supabase.from("deadlines").select("id", { count: "exact", head: true }).eq("done", false).lte("due_at", in2.toISOString()).gte("due_at", now.toISOString()),
         supabase.from("deadlines").select("id, updated_at").eq("done", true).gte("updated_at", sevenDaysAgo.toISOString()),
         supabase.from("deadlines").select("id, title, due_at, kind, case_id, cases(number)").eq("done", false).gte("due_at", now.toISOString()).order("due_at", { ascending: true }).limit(5),
-        supabase.from("cases").select("id, title, number, status, area, client_id, clients(full_name)").order("updated_at", { ascending: false }).limit(5),
+        supabase.from("cases").select("id, title, number, status, area, client_id, clients(name)").order("updated_at", { ascending: false }).limit(5),
       ]);
 
       // 6-month revenue
@@ -127,9 +127,9 @@ function Dashboard() {
           id: u.id, title: u.title, due_at: u.due_at, kind: u.kind,
           case_number: u.cases?.number ?? null,
         })),
-        recentCases: (recent.data ?? []).map((c: { id: string; title: string; number: string | null; status: string; area: string | null; clients: { full_name: string | null } | null }) => ({
+        recentCases: (recent.data ?? []).map((c: { id: string; title: string; number: string | null; status: string; area: string | null; clients: { name: string | null } | null }) => ({
           id: c.id, title: c.title, number: c.number, status: c.status, area: c.area,
-          client_name: c.clients?.full_name ?? null,
+          client_name: c.clients?.name ?? null,
         })),
         revenue6m,
         areaDist,
