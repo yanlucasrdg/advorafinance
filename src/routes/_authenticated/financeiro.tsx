@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, TrendingUp, TrendingDown, Wallet } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
 import { PageHeader, Panel, EmptyState, formatBRL } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +14,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/financeiro")({
   head: () => ({ meta: [{ title: "Financeiro — Legion AI" }] }),
-  component: () => <AppShell><Financeiro /></AppShell>,
+  component: Financeiro,
 });
 
 type Entry = { id: string; description: string; kind: string; amount_cents: number; status: string; due_date: string | null; paid_at: string | null; clients?: { name: string } | null };
@@ -83,7 +82,7 @@ function Financeiro() {
                       <SelectContent><SelectItem value="receita">Receita</SelectItem><SelectItem value="despesa">Despesa</SelectItem></SelectContent>
                     </Select>
                   </div>
-                  <div><Label>Valor (R$)*</Label><Input type="number" value={form.amount_cents / 100} onChange={e => setForm({ ...form, amount_cents: Math.round(Number(e.target.value) * 100) })} /></div>
+                  <div><Label>Valor (R$)*</Label><Input inputMode="numeric" value={formatBRL(form.amount_cents).replace("R$", "").trim()} onChange={e => { const digits = e.target.value.replace(/\D/g, ""); setForm({ ...form, amount_cents: Number(digits || 0) }); }} /></div>
                   <div><Label>Vencimento</Label><Input type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} /></div>
                 </div>
                 <div>

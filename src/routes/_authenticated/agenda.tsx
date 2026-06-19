@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Plus, Trash2, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
 import { PageHeader, Panel, EmptyState } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +13,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/agenda")({
   head: () => ({ meta: [{ title: "Agenda & Prazos — Legion AI" }] }),
-  component: () => <AppShell><Agenda /></AppShell>,
+  component: Agenda,
 });
 
 type Deadline = { id: string; title: string; kind: string; due_at: string; done: boolean; case_id: string | null; cases?: { title: string } | null };

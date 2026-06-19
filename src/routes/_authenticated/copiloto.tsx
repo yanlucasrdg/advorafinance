@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Bot, Send, Sparkles, User } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
 import { PageHeader, Panel } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,7 +11,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/copiloto")({
   head: () => ({ meta: [{ title: "Copiloto IA — Legion AI" }] }),
-  component: () => <AppShell><Copiloto /></AppShell>,
+  component: Copiloto,
 });
 
 type Msg = { id: string; role: string; content: string; created_at: string };
