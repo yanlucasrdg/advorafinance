@@ -82,7 +82,7 @@ function Financeiro() {
                       <SelectContent><SelectItem value="receita">Receita</SelectItem><SelectItem value="despesa">Despesa</SelectItem></SelectContent>
                     </Select>
                   </div>
-                  <div><Label>Valor (R$)*</Label><Input type="number" value={form.amount_cents / 100} onChange={e => setForm({ ...form, amount_cents: Math.round(Number(e.target.value) * 100) })} /></div>
+                  <div><Label>Valor (R$)*</Label><Input inputMode="numeric" value={formatBRL(form.amount_cents).replace("R$", "").trim()} onChange={e => { const digits = e.target.value.replace(/\D/g, ""); setForm({ ...form, amount_cents: Number(digits || 0) }); }} /></div>
                   <div><Label>Vencimento</Label><Input type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} /></div>
                 </div>
                 <div>
