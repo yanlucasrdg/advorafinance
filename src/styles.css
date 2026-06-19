@@ -162,12 +162,34 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; }
+}
 
 @utility animate-fade-up {
   animation: fade-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @utility animate-fade-in-soft {
   animation: fade-in-soft 0.4s ease-out both;
+}
+@utility animate-pulse-soft {
+  animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+/* Shimmering skeletons */
+@utility skeleton {
+  background: linear-gradient(90deg,
+    oklch(0.24 0.013 265 / 0.6) 0%,
+    oklch(0.32 0.016 265 / 0.7) 50%,
+    oklch(0.24 0.013 265 / 0.6) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+  border-radius: 8px;
 }
 
 /* Stagger helpers — apply on parent: children get incremental delay */
@@ -178,13 +200,55 @@
 .stagger > *:nth-child(4) { animation-delay: 180ms; }
 .stagger > *:nth-child(5) { animation-delay: 240ms; }
 .stagger > *:nth-child(6) { animation-delay: 300ms; }
-.stagger > *:nth-child(n+7) { animation-delay: 360ms; }
+.stagger > *:nth-child(7) { animation-delay: 360ms; }
+.stagger > *:nth-child(8) { animation-delay: 420ms; }
+.stagger > *:nth-child(n+9) { animation-delay: 480ms; }
+
+/* Lift on hover — fluid card interaction */
+@utility hover-lift {
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 280ms ease,
+              border-color 200ms ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px -12px oklch(0 0 0 / 0.55), 0 0 0 1px oklch(0.70 0.18 285 / 0.25);
+}
+
+/* Subtle row highlight with gradient sweep */
+@utility row-hover {
+  transition: background-color 200ms ease;
+}
+.row-hover:hover {
+  background: linear-gradient(90deg,
+    oklch(0.70 0.18 285 / 0.07) 0%,
+    oklch(0.70 0.18 285 / 0.02) 60%,
+    transparent 100%);
+}
 
 /* Smooth interactive transitions everywhere */
-a, button, [role="button"], .glass {
+a, button, [role="button"], .glass, input, textarea, select {
   transition: background-color 200ms ease, border-color 200ms ease,
               color 200ms ease, box-shadow 250ms ease, transform 200ms ease, opacity 200ms ease;
 }
+
+/* Focus rings */
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px oklch(0.70 0.18 285 / 0.5);
+  border-radius: 6px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: oklch(0.30 0.015 265 / 0.6);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: oklch(0.40 0.020 270 / 0.8); background-clip: padding-box; border: 2px solid transparent; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
