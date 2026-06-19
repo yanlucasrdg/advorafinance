@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
-    <header className="flex items-end justify-between gap-4 mb-6">
+    <header className="flex items-end justify-between gap-4 mb-6 animate-fade-up">
       <div>
         <p className="text-xs text-muted-foreground uppercase tracking-wider">Módulo</p>
         <h1 className="text-2xl font-bold tracking-tight mt-1">{title}</h1>
@@ -14,7 +14,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
 }
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`glass rounded-2xl ${className}`}>{children}</div>;
+  return <div className={`glass rounded-2xl animate-fade-up ${className}`}>{children}</div>;
 }
 
 export function EmptyState({ title, hint }: { title: string; hint?: string }) {

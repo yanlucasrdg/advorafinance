@@ -99,7 +99,7 @@ function Financeiro() {
         }
       />
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <section className="stagger grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { label: "Receita realizada", v: totals.receita, icon: TrendingUp, tone: "text-emerald-400" },
           { label: "Despesa realizada", v: totals.despesa, icon: TrendingDown, tone: "text-rose-400" },

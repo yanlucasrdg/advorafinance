@@ -68,20 +68,20 @@ function Dashboard() {
 
   return (
     <div className="p-8 space-y-8 max-w-7xl mx-auto">
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex items-end justify-between gap-4 animate-fade-up">
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wider">Dashboard executivo</p>
           <h1 className="text-3xl font-bold tracking-tight mt-1">Olá, {firstName} 👋</h1>
           <p className="text-sm text-muted-foreground mt-1">Visão geral do escritório hoje, {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}.</p>
         </div>
-        <Link to="/copiloto" className="glass rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 hover:glow-ring transition-all">
+        <Link to="/copiloto" className="glass rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 hover:glow-ring hover:-translate-y-0.5">
           <Sparkles className="size-4 text-primary" /> Perguntar ao copiloto
         </Link>
       </header>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <section className="stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {kpis.map(k => (
-          <div key={k.label} className="glass rounded-2xl p-5">
+          <div key={k.label} className="glass rounded-2xl p-5 hover:-translate-y-0.5 hover:glow-ring">
             <div className="flex items-start justify-between">
               <div className="space-y-1 min-w-0">
                 <p className="text-xs text-muted-foreground truncate">{k.label}</p>
@@ -96,7 +96,7 @@ function Dashboard() {
         ))}
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <section className="stagger grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="glass rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
