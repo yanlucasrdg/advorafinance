@@ -44,7 +44,7 @@ export const askCopilot = createServerFn({ method: "POST" })
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: `Você é o Copiloto Jurídico da Legion AI Legal OS, assistente para advogados brasileiros. Seja direto, prático e cite a legislação aplicável (CPC, CLT, CDC, CC) quando relevante. Contexto do escritório: ${summary}` },
+          { role: "system", content: `Você é o Copiloto Jurídico da Advora Legal OS, assistente para advogados brasileiros. Seja direto, prático e cite a legislação aplicável (CPC, CLT, CDC, CC) quando relevante. Contexto do escritório: ${summary}` },
           { role: "user", content: data.prompt },
         ],
       }),

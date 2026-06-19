@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/processos")({
-  head: () => ({ meta: [{ title: "Processos — Legion AI" }] }),
+  head: () => ({ meta: [{ title: "Processos — Advora" }] }),
   component: Processos,
 });
 

@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({ meta: [{ title: "Entrar — Legion AI Legal OS" }, { name: "description", content: "Acesse o Legion AI Legal OS." }] }),
+  head: () => ({ meta: [{ title: "Entrar — Advora Legal OS" }, { name: "description", content: "Acesse o Advora Legal OS." }] }),
   component: AuthPage,
 });
 
@@ -67,7 +67,7 @@ function AuthPage() {
           <div className="size-9 rounded-lg bg-[image:var(--gradient-brand)] grid place-items-center shadow-[var(--shadow-glow)]">
             <Scale className="size-4 text-primary-foreground" />
           </div>
-          <span className="font-semibold tracking-tight text-lg">Legion <span className="gradient-text">AI</span></span>
+          <span className="font-semibold tracking-tight text-lg">Advora</span>
         </Link>
         <div className="relative space-y-4">
           <h2 className="text-4xl font-bold tracking-tight leading-tight">
@@ -77,7 +77,7 @@ function AuthPage() {
             CRM, processos, financeiro e copiloto IA — uma plataforma, todos os dados conectados.
           </p>
         </div>
-        <p className="relative text-xs text-muted-foreground">© 2026 Legion AI Legal OS</p>
+        <p className="relative text-xs text-muted-foreground">© 2026 Advora Legal OS</p>
       </div>
 
       {/* Right — form */}
@@ -87,7 +87,7 @@ function AuthPage() {
             <div className="size-8 rounded-lg bg-[image:var(--gradient-brand)] grid place-items-center">
               <Scale className="size-4 text-primary-foreground" />
             </div>
-            <span className="font-semibold">Legion <span className="gradient-text">AI</span></span>
+            <span className="font-semibold">Advora</span>
           </div>
 
           <Tabs defaultValue="signin" className="w-full">

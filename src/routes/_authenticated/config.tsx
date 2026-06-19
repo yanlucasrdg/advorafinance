@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/config")({
-  head: () => ({ meta: [{ title: "Configurações — Legion AI" }] }),
+  head: () => ({ meta: [{ title: "Configurações — Advora" }] }),
   component: Config,
 });
 

@@ -5,6 +5,7 @@ import {
   MessageSquare, Zap, Plug, Settings, LogOut, Search, Bell, Sparkles, Command,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import advoraLogo from "@/assets/advora-logo.png.asset.json";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const nav = [
@@ -36,12 +37,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* Brand */}
         <div className="px-5 py-5 flex items-center gap-3">
-          <div className="size-9 rounded-xl bg-[image:var(--gradient-brand)] grid place-items-center shadow-[var(--shadow-glow)] relative">
-            <span className="font-display font-black text-base text-white drop-shadow">L</span>
-            <span className="absolute -inset-0.5 rounded-xl ring-1 ring-white/15" />
+          <div className="size-9 rounded-xl bg-black grid place-items-center ring-1 ring-white/10 shadow-[var(--shadow-glow)] overflow-hidden">
+            <img src={advoraLogo.url} alt="Advora" className="size-7 object-contain" />
           </div>
           <div className="leading-tight">
-            <div className="text-sm font-semibold tracking-tight">Legion <span className="gradient-text">AI</span></div>
+            <div className="text-sm font-semibold tracking-tight gradient-text">Advora</div>
             <div className="text-[10px] text-muted-foreground/80 font-mono">Legal OS · v2.3.0</div>
           </div>
         </div>

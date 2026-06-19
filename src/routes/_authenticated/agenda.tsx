@@ -12,7 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/agenda")({
-  head: () => ({ meta: [{ title: "Agenda & Prazos — Legion AI" }] }),
+  head: () => ({ meta: [{ title: "Agenda & Prazos — Advora" }] }),
   component: Agenda,
 });
 

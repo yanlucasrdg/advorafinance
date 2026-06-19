@@ -10,7 +10,7 @@ import { askCopilot } from "@/lib/copilot.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/copiloto")({
-  head: () => ({ meta: [{ title: "Copiloto IA — Legion AI" }] }),
+  head: () => ({ meta: [{ title: "Copiloto IA — Advora" }] }),
   component: Copiloto,
 });
 
