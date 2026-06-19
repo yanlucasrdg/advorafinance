@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/components/data-table-shell";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
-  head: () => ({ meta: [{ title: "Dashboard — Legion AI" }] }),
+  head: () => ({ meta: [{ title: "Dashboard — Advora" }] }),
   component: Dashboard,
 });
 

@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/onboarding")({
   ssr: false,
-  head: () => ({ meta: [{ title: "Configurar escritório — Legion AI" }] }),
+  head: () => ({ meta: [{ title: "Configurar escritório — Advora" }] }),
   component: Onboarding,
 });
 
@@ -50,7 +50,7 @@ function Onboarding() {
           <div className="size-9 rounded-lg bg-[image:var(--gradient-brand)] grid place-items-center shadow-[var(--shadow-glow)]">
             <Scale className="size-4 text-primary-foreground" />
           </div>
-          <span className="font-semibold tracking-tight text-lg">Legion <span className="gradient-text">AI</span></span>
+          <span className="font-semibold tracking-tight text-lg">Advora</span>
         </div>
 
         <div className="glass rounded-2xl p-8">

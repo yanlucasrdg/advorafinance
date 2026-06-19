@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/financeiro")({
-  head: () => ({ meta: [{ title: "Financeiro — Legion AI" }] }),
+  head: () => ({ meta: [{ title: "Financeiro — Advora" }] }),
   component: Financeiro,
 });
 

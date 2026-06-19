@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader, Panel, EmptyState } from "@/components/data-table-shell";
 
 export const Route = createFileRoute("/_authenticated/comunicacoes")({
-  head: () => ({ meta: [{ title: "Comunicações — Legion AI" }] }),
+  head: () => ({ meta: [{ title: "Comunicações — Advora" }] }),
   component: () => (
     <div className="p-8 max-w-7xl mx-auto">
       <PageHeader title="Comunicações" subtitle="E-mails, WhatsApp e notificações aos clientes" />

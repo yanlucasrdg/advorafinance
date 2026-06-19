@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/crm")({
-  head: () => ({ meta: [{ title: "CRM — Legion AI" }] }),
+  head: () => ({ meta: [{ title: "CRM — Advora" }] }),
   component: CRM,
 });
 
