@@ -5,6 +5,7 @@ import {
   MessageSquare, Zap, Plug, Settings, LogOut, Search, Bell, Sparkles, Command,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import advoraLogo from "@/assets/advora-logo.png.asset.json";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const nav = [
