@@ -41,9 +41,17 @@ function Processos() {
 
   const create = async () => {
     if (!form.title.trim() || !profile?.tenant_id) return;
-    const payload: Record<string, unknown> = { ...form, tenant_id: profile.tenant_id };
-    if (!payload.client_id) payload.client_id = null;
-    const { error } = await supabase.from("cases").insert(payload);
+    const { error } = await supabase.from("cases").insert({
+      tenant_id: profile.tenant_id,
+      title: form.title,
+      number: form.number || null,
+      court: form.court || null,
+      area: form.area,
+      status: form.status,
+      value_cents: form.value_cents,
+      description: form.description || null,
+      client_id: form.client_id || null,
+    });
     if (error) return toast.error(error.message);
     toast.success("Processo criado");
     setOpen(false);

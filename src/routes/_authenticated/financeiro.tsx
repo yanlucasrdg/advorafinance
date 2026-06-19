@@ -39,12 +39,15 @@ function Financeiro() {
 
   const create = async () => {
     if (!form.description.trim() || !profile?.tenant_id) return;
-    const payload: Record<string, unknown> = {
-      description: form.description, kind: form.kind, amount_cents: form.amount_cents, status: form.status,
-      due_date: form.due_date || null, tenant_id: profile.tenant_id,
-    };
-    if (form.client_id) payload.client_id = form.client_id;
-    const { error } = await supabase.from("financial_entries").insert(payload);
+    const { error } = await supabase.from("financial_entries").insert({
+      tenant_id: profile.tenant_id,
+      description: form.description,
+      kind: form.kind,
+      amount_cents: form.amount_cents,
+      status: form.status,
+      due_date: form.due_date || null,
+      client_id: form.client_id || null,
+    });
     if (error) return toast.error(error.message);
     toast.success("Lançamento criado");
     setOpen(false); setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "" });

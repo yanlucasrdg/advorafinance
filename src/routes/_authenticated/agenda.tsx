@@ -38,9 +38,13 @@ function Agenda() {
 
   const create = async () => {
     if (!form.title.trim() || !form.due_at || !profile?.tenant_id) return;
-    const payload: Record<string, unknown> = { title: form.title, kind: form.kind, due_at: new Date(form.due_at).toISOString(), tenant_id: profile.tenant_id };
-    if (form.case_id) payload.case_id = form.case_id;
-    const { error } = await supabase.from("deadlines").insert(payload);
+    const { error } = await supabase.from("deadlines").insert({
+      tenant_id: profile.tenant_id,
+      title: form.title,
+      kind: form.kind,
+      due_at: new Date(form.due_at).toISOString(),
+      case_id: form.case_id || null,
+    });
     if (error) return toast.error(error.message);
     toast.success("Prazo criado");
     setOpen(false); setForm({ title: "", kind: "prazo", due_at: "", case_id: "" });
