@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Briefcase } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
 import { PageHeader, Panel, EmptyState, formatBRL } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +15,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/processos")({
   head: () => ({ meta: [{ title: "Processos — Legion AI" }] }),
-  component: () => <AppShell><Processos /></AppShell>,
+  component: Processos,
 });
 
 type Case = { id: string; number: string | null; title: string; court: string | null; area: string | null; status: string; value_cents: number; client_id: string | null; clients?: { name: string } | null };

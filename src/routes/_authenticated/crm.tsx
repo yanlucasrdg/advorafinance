@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Plus, Mail, Phone, Trash2 } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
 import { PageHeader, Panel, EmptyState } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +14,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/crm")({
   head: () => ({ meta: [{ title: "CRM — Legion AI" }] }),
-  component: () => <AppShell><CRM /></AppShell>,
+  component: CRM,
 });
 
 type Client = { id: string; name: string; email: string | null; phone: string | null; type: string; status: string; created_at: string };

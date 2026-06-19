@@ -1,11 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowUpRight, Briefcase, Users, DollarSign, Clock, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { AppShell } from "@/components/app-shell";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — Legion AI" }] }),
-  component: () => <AppShell><Dashboard /></AppShell>,
+  component: Dashboard,
 });
 
 const kpis = [
