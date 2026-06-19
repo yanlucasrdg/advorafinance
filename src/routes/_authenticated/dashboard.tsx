@@ -475,14 +475,14 @@ function Dashboard() {
         </div>
         <div className="stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { icon: TrendingUp, color: "emerald", title: "Receita em crescimento", body: stats ? `Sua receita ${revDelta >= 0 ? "cresceu" : "caiu"} ${Math.abs(revDelta).toFixed(1)}% comparado ao mês anterior.` : "Calculando…" },
-            { icon: Clock, color: "amber", title: "Prazos próximos", body: stats ? `Você tem ${stats.deadlines7d} prazos vencendo nos próximos 7 dias.` : "Calculando…" },
-            { icon: Activity, color: "violet", title: "Produtividade", body: stats ? `Você concluiu ${stats.doneLast7} atividades nos últimos 7 dias.` : "Calculando…" },
-            { icon: Target, color: "sky", title: "Clientes ativos", body: stats ? `Você possui ${stats.clients} clientes ativos no sistema.` : "Calculando…" },
+            { icon: TrendingUp, bg: "bg-emerald-500/10", ring: "ring-emerald-500/20", fg: "text-emerald-400", title: "Receita em crescimento", body: stats ? `Sua receita ${revDelta >= 0 ? "cresceu" : "caiu"} ${Math.abs(revDelta).toFixed(1)}% comparado ao mês anterior.` : "Calculando…" },
+            { icon: Clock, bg: "bg-amber-500/10", ring: "ring-amber-500/20", fg: "text-amber-400", title: "Prazos próximos", body: stats ? `Você tem ${stats.deadlines7d} prazos vencendo nos próximos 7 dias.` : "Calculando…" },
+            { icon: Activity, bg: "bg-violet-500/10", ring: "ring-violet-500/20", fg: "text-violet-400", title: "Produtividade", body: stats ? `Você concluiu ${stats.doneLast7} atividades nos últimos 7 dias.` : "Calculando…" },
+            { icon: Target, bg: "bg-sky-500/10", ring: "ring-sky-500/20", fg: "text-sky-400", title: "Clientes ativos", body: stats ? `Você possui ${stats.clients} clientes ativos no sistema.` : "Calculando…" },
           ].map(i => (
             <div key={i.title} className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-b from-white/[0.03] to-white/[0.01] p-5 hover-lift">
-              <div className={`size-9 rounded-lg grid place-items-center mb-3 bg-${i.color}-500/10 ring-1 ring-${i.color}-500/20`}>
-                <i.icon className={`size-4 text-${i.color}-400`} />
+              <div className={`size-9 rounded-lg grid place-items-center mb-3 ring-1 ${i.bg} ${i.ring}`}>
+                <i.icon className={`size-4 ${i.fg}`} />
               </div>
               <div className="text-sm font-semibold tracking-tight">{i.title}</div>
               <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{i.body}</p>
