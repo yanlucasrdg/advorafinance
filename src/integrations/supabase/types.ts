@@ -389,66 +389,6 @@ export type Database = {
           },
         ]
       }
-      whatsapp_logs: {
-        Row: {
-          client_id: string | null
-          created_at: string
-          error: string | null
-          id: string
-          message: string
-          payload: Json | null
-          provider_message_id: string | null
-          status: string
-          tenant_id: string
-          to_phone: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          client_id?: string | null
-          created_at?: string
-          error?: string | null
-          id?: string
-          message: string
-          payload?: Json | null
-          provider_message_id?: string | null
-          status?: string
-          tenant_id: string
-          to_phone: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          client_id?: string | null
-          created_at?: string
-          error?: string | null
-          id?: string
-          message?: string
-          payload?: Json | null
-          provider_message_id?: string | null
-          status?: string
-          tenant_id?: string
-          to_phone?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "whatsapp_logs_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "whatsapp_logs_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
       [_ in never]: never
