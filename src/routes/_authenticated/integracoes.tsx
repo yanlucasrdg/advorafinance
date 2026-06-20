@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -346,34 +346,27 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
 }
 
 function FakeQrCode({ seed }: { seed: string }) {
-  // deterministic pseudo-QR pattern
-  const cells = useMemo(() => {
-    let h = 0;
-    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-    const N = 25;
-    const arr: boolean[] = [];
-    for (let i = 0; i < N * N; i++) {
-      h = (h * 1103515245 + 12345) >>> 0;
-      arr.push((h & 1) === 1);
-    }
-    return arr;
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    import("qrcode").then((QR) =>
+      QR.toDataURL(`advora-wa://pair?token=${seed}`, {
+        margin: 1,
+        width: 256,
+        errorCorrectionLevel: "M",
+        color: { dark: "#000000", light: "#ffffff" },
+      }).then((url) => {
+        if (!cancelled) setDataUrl(url);
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [seed]);
-  return (
-    <div className="grid grid-cols-[repeat(25,1fr)] gap-[2px] h-64 w-64">
-      {cells.map((c, i) => {
-        const row = Math.floor(i / 25);
-        const col = i % 25;
-        const inFinder =
-          (row < 7 && col < 7) || (row < 7 && col > 17) || (row > 17 && col < 7);
-        const on = inFinder
-          ? (row === 0 || row === 6 || col === 0 || col === 6 || (row > 1 && row < 5 && col > 1 && col < 5)) &&
-            !((row > 17 && col > 17))
-          : c;
-        return <div key={i} className={on ? "bg-black" : "bg-white"} />;
-      })}
-    </div>
-  );
+  if (!dataUrl) return <Skeleton className="h-64 w-64" />;
+  return <img src={dataUrl} alt="QR Code de pareamento WhatsApp" className="h-64 w-64" />;
 }
+
 
 // =====================  CONNECTED + CHAT  =====================
 function ConnectedState({ instance, onDisconnect }: { instance: Instance; onDisconnect: () => void }) {
