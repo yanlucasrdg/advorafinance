@@ -389,6 +389,224 @@ export type Database = {
           },
         ]
       }
+      whatsapp_conversations: {
+        Row: {
+          contact_avatar: string | null
+          contact_name: string | null
+          contact_phone: string
+          created_at: string
+          id: string
+          instance_id: string
+          last_message: string | null
+          last_message_at: string | null
+          tenant_id: string
+          unread_count: number
+          updated_at: string
+        }
+        Insert: {
+          contact_avatar?: string | null
+          contact_name?: string | null
+          contact_phone: string
+          created_at?: string
+          id?: string
+          instance_id: string
+          last_message?: string | null
+          last_message_at?: string | null
+          tenant_id: string
+          unread_count?: number
+          updated_at?: string
+        }
+        Update: {
+          contact_avatar?: string | null
+          contact_name?: string | null
+          contact_phone?: string
+          created_at?: string
+          id?: string
+          instance_id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          tenant_id?: string
+          unread_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_conversations_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_instances: {
+        Row: {
+          created_at: string
+          external_instance_id: string | null
+          id: string
+          instance_name: string
+          last_connected_at: string | null
+          metadata: Json | null
+          phone_number: string | null
+          qr_code: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          external_instance_id?: string | null
+          id?: string
+          instance_name: string
+          last_connected_at?: string | null
+          metadata?: Json | null
+          phone_number?: string | null
+          qr_code?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          external_instance_id?: string | null
+          id?: string
+          instance_name?: string
+          last_connected_at?: string | null
+          metadata?: Json | null
+          phone_number?: string | null
+          qr_code?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_logs: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          error: string | null
+          id: string
+          message: string
+          payload: Json | null
+          provider_message_id: string | null
+          status: string
+          tenant_id: string
+          to_phone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          message: string
+          payload?: Json | null
+          provider_message_id?: string | null
+          status?: string
+          tenant_id: string
+          to_phone: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          message?: string
+          payload?: Json | null
+          provider_message_id?: string | null
+          status?: string
+          tenant_id?: string
+          to_phone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_messages: {
+        Row: {
+          body: string
+          conversation_id: string
+          created_at: string
+          direction: string
+          external_message_id: string | null
+          id: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          body: string
+          conversation_id: string
+          created_at?: string
+          direction: string
+          external_message_id?: string | null
+          id?: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          direction?: string
+          external_message_id?: string | null
+          id?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
