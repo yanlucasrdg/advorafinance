@@ -452,7 +452,7 @@ function ChatPanel({ instance }: { instance: Instance }) {
     const { data: prof } = await supabase.auth.getUser();
     const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", prof.user!.id).single();
     const { error } = await supabase.from("whatsapp_messages").insert({
-      tenant_id: profile!.tenant_id,
+      tenant_id: profile!.tenant_id!,
       conversation_id: activeId,
       direction: "outbound",
       body,
