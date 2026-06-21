@@ -5,7 +5,7 @@ import {
   ArrowUpRight, Sparkles, Activity, Target, AlertTriangle, CheckCircle2,
 } from "lucide-react";
 import {
-  LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
+  AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
   PieChart, Pie, Cell, BarChart, Bar,
 } from "recharts";
 import { useAuth } from "@/lib/auth-context";
