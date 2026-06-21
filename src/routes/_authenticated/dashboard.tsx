@@ -200,18 +200,18 @@ function Dashboard() {
   const pieColors = ["#7C5CFF", "#4F7CFF", "#00D26A", "#FFB547", "#FF5C5C"];
 
   return (
-    <div className="p-8 space-y-8 max-w-[1400px] mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1400px] mx-auto">
       {/* Greeting */}
-      <header className="flex items-end justify-between gap-4 animate-fade-up">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-[0.16em]">
+      <header className="flex flex-wrap items-end justify-between gap-4 animate-fade-up">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground uppercase tracking-[0.16em]">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
             Sistema operacional
           </div>
-          <h1 className="text-[28px] leading-tight font-bold tracking-tight mt-2">
+          <h1 className="text-[22px] sm:text-[28px] leading-tight font-bold tracking-tight mt-2 truncate">
             Olá, {firstName} <span className="inline-block animate-fade-in-soft">👋</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             Você está no controle hoje, {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}.
           </p>
         </div>
