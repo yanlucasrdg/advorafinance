@@ -480,7 +480,7 @@ function Dashboard() {
                   cursor={{ fill: "oklch(1 0 0 / 0.04)" }}
                   contentStyle={{ background: "oklch(0.18 0.014 265)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 12, fontSize: 12 }}
                 />
-                <Bar dataKey="count" fill="url(#barGrad)" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="count" fill="url(#barGrad)" radius={[6, 6, 0, 0]} isAnimationActive animationDuration={900} animationEasing="ease-out" />
               </BarChart>
             </ResponsiveContainer>
           </div>
