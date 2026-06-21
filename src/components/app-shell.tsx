@@ -2,11 +2,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, Briefcase, Calendar, DollarSign, BarChart3,
-  MessageSquare, Zap, Plug, Settings, LogOut, Search, Bell, Sparkles, Command, Menu, X,
+  MessageSquare, Zap, Plug, Settings, LogOut, Search, Sparkles, Command, Menu, X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import advoraLogo from "@/assets/advora-logo.png.asset.json";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { NotificationsPopover } from "@/components/notifications-popover";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
