@@ -159,10 +159,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-1.5 ml-auto shrink-0">
-            <button className="size-9 grid place-items-center rounded-lg text-muted-foreground hover:bg-white/[0.04] hover:text-foreground relative" aria-label="Notificações">
-              <Bell className="size-4" />
-              <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive ring-2 ring-background" />
-            </button>
+            <NotificationsPopover />
             <button className="hidden sm:grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-white/[0.04] hover:text-foreground" aria-label="Configurações" onClick={() => navigate({ to: "/config" })}>
               <Settings className="size-4" />
             </button>
