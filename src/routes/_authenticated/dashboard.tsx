@@ -417,7 +417,19 @@ function Dashboard() {
               <div className="h-[180px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={stats.areaDist} dataKey="value" nameKey="name" innerRadius={48} outerRadius={70} paddingAngle={3} stroke="oklch(0.16 0.012 265)" strokeWidth={2}>
+                    <Pie
+                      data={stats.areaDist}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={48}
+                      outerRadius={70}
+                      paddingAngle={3}
+                      stroke="oklch(0.16 0.012 265)"
+                      strokeWidth={2}
+                      isAnimationActive
+                      animationDuration={900}
+                      animationEasing="ease-out"
+                    >
                       {stats.areaDist.map((_, i) => <Cell key={i} fill={pieColors[i % pieColors.length]} />)}
                     </Pie>
                     <Tooltip
