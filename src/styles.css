@@ -180,6 +180,13 @@
 @utility animate-pulse-soft {
   animation: pulse-soft 2.4s ease-in-out infinite;
 }
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+@utility animate-slide-in-left {
+  animation: slide-in-left 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
 
 /* Shimmering skeletons */
 @utility skeleton {

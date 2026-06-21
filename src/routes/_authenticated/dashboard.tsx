@@ -5,7 +5,7 @@ import {
   ArrowUpRight, Sparkles, Activity, Target, AlertTriangle, CheckCircle2,
 } from "lucide-react";
 import {
-  LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
+  AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
   PieChart, Pie, Cell, BarChart, Bar,
 } from "recharts";
 import { useAuth } from "@/lib/auth-context";
@@ -200,25 +200,25 @@ function Dashboard() {
   const pieColors = ["#7C5CFF", "#4F7CFF", "#00D26A", "#FFB547", "#FF5C5C"];
 
   return (
-    <div className="p-8 space-y-8 max-w-[1400px] mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1400px] mx-auto">
       {/* Greeting */}
-      <header className="flex items-end justify-between gap-4 animate-fade-up">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-[0.16em]">
+      <header className="flex flex-wrap items-end justify-between gap-4 animate-fade-up">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground uppercase tracking-[0.16em]">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
             Sistema operacional
           </div>
-          <h1 className="text-[28px] leading-tight font-bold tracking-tight mt-2">
+          <h1 className="text-[22px] sm:text-[28px] leading-tight font-bold tracking-tight mt-2 truncate">
             Olá, {firstName} <span className="inline-block animate-fade-in-soft">👋</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             Você está no controle hoje, {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}.
           </p>
         </div>
       </header>
 
       {/* KPIs */}
-      <section className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <section className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         {kpis.map(k => (
           <div key={k.label} className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-b from-white/[0.03] to-white/[0.01] p-5 hover-lift">
             <div className={`absolute inset-0 bg-gradient-to-br ${k.tint} opacity-50 pointer-events-none`} />
@@ -369,25 +369,37 @@ function Dashboard() {
               <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-primary" /> Receita</span>
             </div>
           </div>
-          <div className="h-[240px] w-full">
+          <div className="h-[220px] sm:h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={stats?.revenue6m ?? []} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
+              <AreaChart data={stats?.revenue6m ?? []} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#7C5CFF" stopOpacity={0.4} />
+                    <stop offset="0%" stopColor="#7C5CFF" stopOpacity={0.55} />
                     <stop offset="100%" stopColor="#7C5CFF" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="oklch(1 0 0 / 0.05)" vertical={false} />
                 <XAxis dataKey="month" stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+                <YAxis stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} width={48} />
                 <Tooltip
                   contentStyle={{ background: "oklch(0.18 0.014 265)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 12, fontSize: 12, padding: "8px 12px" }}
                   labelStyle={{ color: "oklch(0.7 0.02 260)", marginBottom: 4 }}
                   formatter={(v: number) => [new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v), "Receita"]}
+                  cursor={{ stroke: "oklch(0.70 0.18 285 / 0.4)", strokeWidth: 1, strokeDasharray: "3 3" }}
                 />
-                <Line type="monotone" dataKey="value" stroke="#7C5CFF" strokeWidth={2.5} dot={{ r: 3, fill: "#7C5CFF" }} activeDot={{ r: 6, fill: "#7C5CFF", stroke: "oklch(0.18 0.014 265)", strokeWidth: 3 }} fill="url(#revGrad)" />
-              </LineChart>
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#7C5CFF"
+                  strokeWidth={2.5}
+                  fill="url(#revGrad)"
+                  dot={{ r: 3, fill: "#7C5CFF", strokeWidth: 0 }}
+                  activeDot={{ r: 6, fill: "#7C5CFF", stroke: "oklch(0.18 0.014 265)", strokeWidth: 3 }}
+                  isAnimationActive
+                  animationDuration={1100}
+                  animationEasing="ease-out"
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -405,7 +417,19 @@ function Dashboard() {
               <div className="h-[180px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={stats.areaDist} dataKey="value" nameKey="name" innerRadius={48} outerRadius={70} paddingAngle={3} stroke="oklch(0.16 0.012 265)" strokeWidth={2}>
+                    <Pie
+                      data={stats.areaDist}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={48}
+                      outerRadius={70}
+                      paddingAngle={3}
+                      stroke="oklch(0.16 0.012 265)"
+                      strokeWidth={2}
+                      isAnimationActive
+                      animationDuration={900}
+                      animationEasing="ease-out"
+                    >
                       {stats.areaDist.map((_, i) => <Cell key={i} fill={pieColors[i % pieColors.length]} />)}
                     </Pie>
                     <Tooltip
@@ -456,7 +480,7 @@ function Dashboard() {
                   cursor={{ fill: "oklch(1 0 0 / 0.04)" }}
                   contentStyle={{ background: "oklch(0.18 0.014 265)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 12, fontSize: 12 }}
                 />
-                <Bar dataKey="count" fill="url(#barGrad)" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="count" fill="url(#barGrad)" radius={[6, 6, 0, 0]} isAnimationActive animationDuration={900} animationEasing="ease-out" />
               </BarChart>
             </ResponsiveContainer>
           </div>
