@@ -369,25 +369,37 @@ function Dashboard() {
               <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-primary" /> Receita</span>
             </div>
           </div>
-          <div className="h-[240px] w-full">
+          <div className="h-[220px] sm:h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={stats?.revenue6m ?? []} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
+              <AreaChart data={stats?.revenue6m ?? []} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#7C5CFF" stopOpacity={0.4} />
+                    <stop offset="0%" stopColor="#7C5CFF" stopOpacity={0.55} />
                     <stop offset="100%" stopColor="#7C5CFF" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="oklch(1 0 0 / 0.05)" vertical={false} />
                 <XAxis dataKey="month" stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+                <YAxis stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} width={48} />
                 <Tooltip
                   contentStyle={{ background: "oklch(0.18 0.014 265)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 12, fontSize: 12, padding: "8px 12px" }}
                   labelStyle={{ color: "oklch(0.7 0.02 260)", marginBottom: 4 }}
                   formatter={(v: number) => [new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v), "Receita"]}
+                  cursor={{ stroke: "oklch(0.70 0.18 285 / 0.4)", strokeWidth: 1, strokeDasharray: "3 3" }}
                 />
-                <Line type="monotone" dataKey="value" stroke="#7C5CFF" strokeWidth={2.5} dot={{ r: 3, fill: "#7C5CFF" }} activeDot={{ r: 6, fill: "#7C5CFF", stroke: "oklch(0.18 0.014 265)", strokeWidth: 3 }} fill="url(#revGrad)" />
-              </LineChart>
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#7C5CFF"
+                  strokeWidth={2.5}
+                  fill="url(#revGrad)"
+                  dot={{ r: 3, fill: "#7C5CFF", strokeWidth: 0 }}
+                  activeDot={{ r: 6, fill: "#7C5CFF", stroke: "oklch(0.18 0.014 265)", strokeWidth: 3 }}
+                  isAnimationActive
+                  animationDuration={1100}
+                  animationEasing="ease-out"
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
