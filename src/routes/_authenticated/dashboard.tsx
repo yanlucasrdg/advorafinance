@@ -218,7 +218,7 @@ function Dashboard() {
       </header>
 
       {/* KPIs */}
-      <section className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <section className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         {kpis.map(k => (
           <div key={k.label} className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-b from-white/[0.03] to-white/[0.01] p-5 hover-lift">
             <div className={`absolute inset-0 bg-gradient-to-br ${k.tint} opacity-50 pointer-events-none`} />
