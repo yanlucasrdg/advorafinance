@@ -63,6 +63,12 @@ function Processos() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Case | null>(null);
   const [form, setForm] = useState({ number: "", title: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "" });
+  const AREAS_OPT = ["civel", "trabalhista", "tributario", "criminal", "familia", "consumidor", "empresarial"];
+  const [adv, setAdv] = useState<{ areas: string[]; stages: string[]; minValue: string; maxValue: string }>({ areas: [], stages: [], minValue: "", maxValue: "" });
+  const advActive = adv.areas.length + adv.stages.length + (adv.minValue ? 1 : 0) + (adv.maxValue ? 1 : 0);
+  const toggleAdv = (key: "areas" | "stages", v: string) =>
+    setAdv(a => ({ ...a, [key]: a[key].includes(v) ? a[key].filter(x => x !== v) : [...a[key], v] }));
+  const resetAdv = () => setAdv({ areas: [], stages: [], minValue: "", maxValue: "" });
 
   const load = async () => {
     setLoading(true);
