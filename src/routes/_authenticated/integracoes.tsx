@@ -248,6 +248,131 @@ function ConnectorCard({
   );
 }
 
+// =====================  WHATSAPP WEB (oficial)  =====================
+type WebStatus = "disconnected" | "pending" | "connected";
+const WA_WEB_KEY = "advora:wa-web:status";
+const WA_WEB_TS = "advora:wa-web:opened-at";
+
+function WhatsAppWebCard() {
+  const [status, setStatus] = useState<WebStatus>("disconnected");
+
+  // Load persisted status
+  useEffect(() => {
+    try {
+      const s = (localStorage.getItem(WA_WEB_KEY) as WebStatus | null) ?? "disconnected";
+      setStatus(s);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // When the tab regains focus after opening WhatsApp Web, ask the user to confirm.
+  useEffect(() => {
+    function onFocus() {
+      const opened = Number(localStorage.getItem(WA_WEB_TS) ?? 0);
+      const current = (localStorage.getItem(WA_WEB_KEY) as WebStatus | null) ?? "disconnected";
+      if (opened && current === "pending") {
+        // Surface a friendly prompt to confirm authentication
+        toast("Você concluiu o login no WhatsApp Web?", {
+          action: {
+            label: "Sim, conectei",
+            onClick: () => {
+              localStorage.setItem(WA_WEB_KEY, "connected");
+              setStatus("connected");
+              toast.success("WhatsApp Web conectado");
+            },
+          },
+          cancel: { label: "Ainda não", onClick: () => {} },
+          duration: 8000,
+        });
+      }
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
+  function handleConnect() {
+    try {
+      const win = window.open("https://web.whatsapp.com", "_blank", "noopener,noreferrer");
+      if (!win) {
+        toast.error("O navegador bloqueou a nova aba. Permita pop-ups e tente novamente.");
+        return;
+      }
+      localStorage.setItem(WA_WEB_KEY, "pending");
+      localStorage.setItem(WA_WEB_TS, String(Date.now()));
+      setStatus("pending");
+      toast.info("Aguardando autenticação no WhatsApp Web…", {
+        description: "Escaneie o QR Code na aba aberta para concluir o login.",
+      });
+    } catch {
+      toast.error("Não foi possível abrir o WhatsApp Web. Verifique sua conexão.");
+    }
+  }
+
+  function handleDisconnect() {
+    localStorage.setItem(WA_WEB_KEY, "disconnected");
+    localStorage.removeItem(WA_WEB_TS);
+    setStatus("disconnected");
+    toast("Sessão WhatsApp Web removida do Advora", {
+      description: "Para encerrar a sessão no celular, use 'Aparelhos conectados' no WhatsApp.",
+    });
+  }
+
+  const meta =
+    status === "connected"
+      ? { dot: "bg-emerald-500 shadow-[0_0_12px] shadow-emerald-500/60", label: "Conectado" }
+      : status === "pending"
+      ? { dot: "bg-amber-400 animate-pulse", label: "Aguardando autenticação" }
+      : { dot: "bg-muted-foreground/40", label: "Desconectado" };
+
+  return (
+    <div className="relative rounded-xl border border-emerald-500/30 bg-card/40 backdrop-blur p-4 transition hover:bg-card/60 shadow-[0_0_0_1px_hsl(142_70%_45%/0.10)]">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-500 grid place-items-center">
+            <Globe className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="font-medium">WhatsApp Web</div>
+            <div className="text-xs text-muted-foreground">Conexão oficial via web.whatsapp.com</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+          {meta.label}
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-2">
+        {status === "connected" ? (
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={() => window.open("https://web.whatsapp.com", "_blank", "noopener,noreferrer")}
+            >
+              <ExternalLink className="h-3.5 w-3.5" /> Abrir WhatsApp Web
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleDisconnect} className="text-red-400 hover:text-red-300 hover:bg-red-500/10 gap-2">
+              <XCircle className="h-3.5 w-3.5" /> Desconectar
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" onClick={handleConnect} className="gap-2 bg-emerald-600 hover:bg-emerald-600/90 text-white">
+            <PlugZap className="h-3.5 w-3.5" /> Conectar WhatsApp
+          </Button>
+        )}
+      </div>
+
+      <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+        Integração baseada na plataforma oficial do WhatsApp. Em conformidade com os Termos de Serviço da Meta.
+      </p>
+    </div>
+  );
+}
+
+
 function DisconnectedState({ onConnect }: { onConnect: () => void }) {
   return (
     <div className="p-10 grid md:grid-cols-2 gap-8 items-center">
