@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Plus, Mail, Phone, MoreHorizontal, Upload, Download, Users, UserCheck,
+  Plus, Mail, MoreHorizontal, Upload, Download, Users, UserCheck,
   TrendingUp, DollarSign, FileCheck2, Flame, AlertTriangle, Bot, Sparkles,
   X, MessageCircle, PhoneCall, LayoutGrid, List, Filter, ChevronDown,
-  Clock, FileText, CheckCircle2, Calendar,
+  Clock, FileText, CheckCircle2, Calendar, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,57 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
+
+/* ---------- CSV helpers ---------- */
+function parseCSV(text: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let i = 0, field = "", row: string[] = [], inQ = false;
+  while (i < text.length) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i += 2; continue; }
+      if (ch === '"') { inQ = false; i++; continue; }
+      field += ch; i++; continue;
+    }
+    if (ch === '"') { inQ = true; i++; continue; }
+    if (ch === ",") { row.push(field); field = ""; i++; continue; }
+    if (ch === "\n" || ch === "\r") {
+      if (field !== "" || row.length) { row.push(field); rows.push(row); row = []; field = ""; }
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      i++; continue;
+    }
+    field += ch; i++;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => h.trim().toLowerCase());
+  return rows.slice(1).filter(r => r.some(c => c.trim() !== "")).map(r => {
+    const o: Record<string, string> = {};
+    headers.forEach((h, idx) => { o[h] = (r[idx] ?? "").trim(); });
+    return o;
+  });
+}
+function toCSV(rows: Record<string, string | number>[]): string {
+  if (!rows.length) return "";
+  const headers = Object.keys(rows[0]);
+  const esc = (v: string | number) => {
+    const s = String(v ?? "");
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [headers.join(","), ...rows.map(r => headers.map(h => esc(r[h])).join(","))].join("\n");
+}
+function downloadFile(name: string, content: string, mime = "text/csv;charset=utf-8") {
+  const blob = new Blob(["\ufeff" + content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+}
 
 export const Route = createFileRoute("/_authenticated/crm")({
   head: () => ({ meta: [{ title: "CRM Jurídico — Advora" }] }),
