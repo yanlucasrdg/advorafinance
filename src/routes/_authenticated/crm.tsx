@@ -143,15 +143,25 @@ function CRM() {
   useEffect(() => { if (profile?.tenant_id) load(); }, [profile?.tenant_id]);
 
   const filtered = useMemo(() => {
+    const min = adv.minValue ? Number(adv.minValue) : -Infinity;
+    const max = adv.maxValue ? Number(adv.maxValue) : Infinity;
+    const q = adv.search.trim().toLowerCase();
     return clients.filter(c => {
-      if (filter === "PF") return c.type === "PF";
-      if (filter === "PJ") return c.type === "PJ";
-      if (filter === "leads") return c.status === "lead" || c.status === "qualificacao";
-      if (filter === "ativos") return c.status === "fechado" || c.status === "ativo";
-      if (filter === "inativos") return c.status === "perdido" || c.status === "inativo";
+      if (filter === "PF" && c.type !== "PF") return false;
+      if (filter === "PJ" && c.type !== "PJ") return false;
+      if (filter === "leads" && !(c.status === "lead" || c.status === "qualificacao")) return false;
+      if (filter === "ativos" && !(c.status === "fechado" || c.status === "ativo")) return false;
+      if (filter === "inativos" && !(c.status === "perdido" || c.status === "inativo")) return false;
+      const m = getMeta(c);
+      if (adv.areas.length && !adv.areas.includes(m.area)) return false;
+      if (adv.stages.length && !adv.stages.includes(c.status)) return false;
+      if (m.value < min || m.value > max) return false;
+      if (adv.hotOnly && !m.hot) return false;
+      if (q && !(c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.doc ?? "").toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [clients, filter]);
+  }, [clients, filter, adv]);
+  const advActive = adv.areas.length + adv.stages.length + (adv.minValue ? 1 : 0) + (adv.maxValue ? 1 : 0) + (adv.hotOnly ? 1 : 0) + (adv.search ? 1 : 0);
 
   const grouped = useMemo(
     () => STAGES.map(s => ({
