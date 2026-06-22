@@ -297,10 +297,21 @@ function CRM() {
               <p className="text-sm text-muted-foreground mt-1.5">Gestão completa de clientes, leads e oportunidades do escritório.</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="h-9 border-border/60 bg-white/[0.02] hover:bg-white/[0.05]">
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) onImportCSV(f);
+                  e.target.value = "";
+                }}
+              />
+              <Button onClick={() => fileRef.current?.click()} variant="outline" size="sm" className="h-9 border-border/60 bg-white/[0.02] hover:bg-white/[0.05]">
                 <Upload className="size-3.5 mr-1.5" /> Importar CSV
               </Button>
-              <Button variant="outline" size="sm" className="h-9 border-border/60 bg-white/[0.02] hover:bg-white/[0.05]">
+              <Button onClick={exportReport} variant="outline" size="sm" className="h-9 border-border/60 bg-white/[0.02] hover:bg-white/[0.05]">
                 <Download className="size-3.5 mr-1.5" /> Exportar Relatório
               </Button>
               <Dialog open={open} onOpenChange={setOpen}>
