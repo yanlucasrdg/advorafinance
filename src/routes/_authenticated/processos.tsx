@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Plus, Trash2, Briefcase, Clock, TrendingUp, AlertTriangle, Target,
   DollarSign, Activity, Sparkles, Search, Filter, LayoutGrid, List as ListIcon,
-  GitBranch, X, FileText, Users, MessageSquare, ChevronRight, Calendar, Brain,
+  GitBranch, X, FileText, Users, MessageSquare, ChevronRight, Calendar, Brain, RotateCcw,
 } from "lucide-react";
 import { PageHeader, formatBRL } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
