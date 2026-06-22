@@ -87,14 +87,22 @@ function Processos() {
   useEffect(() => { if (profile?.tenant_id) load(); }, [profile?.tenant_id]);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return cases;
-    const q = query.toLowerCase();
-    return cases.filter(c =>
-      c.title.toLowerCase().includes(q) ||
-      (c.number ?? "").toLowerCase().includes(q) ||
-      (c.clients?.name ?? "").toLowerCase().includes(q),
-    );
-  }, [cases, query]);
+    const q = query.trim().toLowerCase();
+    const min = adv.minValue ? Number(adv.minValue) * 100 : -Infinity;
+    const max = adv.maxValue ? Number(adv.maxValue) * 100 : Infinity;
+    return cases.filter(c => {
+      if (q && !(
+        c.title.toLowerCase().includes(q) ||
+        (c.number ?? "").toLowerCase().includes(q) ||
+        (c.clients?.name ?? "").toLowerCase().includes(q)
+      )) return false;
+      if (adv.areas.length && !adv.areas.includes(c.area ?? "")) return false;
+      if (adv.stages.length && !adv.stages.includes(c.status)) return false;
+      const v = c.value_cents ?? 0;
+      if (v < min || v > max) return false;
+      return true;
+    });
+  }, [cases, query, adv]);
 
   const byStage = useMemo(() => {
     const m = new Map<string, Case[]>();
