@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Plus, Trash2, Briefcase, Clock, TrendingUp, AlertTriangle, Target,
   DollarSign, Activity, Sparkles, Search, Filter, LayoutGrid, List as ListIcon,
-  GitBranch, X, FileText, Users, MessageSquare, ChevronRight, Calendar, Brain,
+  GitBranch, X, FileText, Users, MessageSquare, ChevronRight, Calendar, Brain, RotateCcw,
 } from "lucide-react";
 import { PageHeader, formatBRL } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +63,12 @@ function Processos() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Case | null>(null);
   const [form, setForm] = useState({ number: "", title: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "" });
+  const AREAS_OPT = ["civel", "trabalhista", "tributario", "criminal", "familia", "consumidor", "empresarial"];
+  const [adv, setAdv] = useState<{ areas: string[]; stages: string[]; minValue: string; maxValue: string }>({ areas: [], stages: [], minValue: "", maxValue: "" });
+  const advActive = adv.areas.length + adv.stages.length + (adv.minValue ? 1 : 0) + (adv.maxValue ? 1 : 0);
+  const toggleAdv = (key: "areas" | "stages", v: string) =>
+    setAdv(a => ({ ...a, [key]: a[key].includes(v) ? a[key].filter(x => x !== v) : [...a[key], v] }));
+  const resetAdv = () => setAdv({ areas: [], stages: [], minValue: "", maxValue: "" });
 
   const load = async () => {
     setLoading(true);
@@ -79,14 +87,22 @@ function Processos() {
   useEffect(() => { if (profile?.tenant_id) load(); }, [profile?.tenant_id]);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return cases;
-    const q = query.toLowerCase();
-    return cases.filter(c =>
-      c.title.toLowerCase().includes(q) ||
-      (c.number ?? "").toLowerCase().includes(q) ||
-      (c.clients?.name ?? "").toLowerCase().includes(q),
-    );
-  }, [cases, query]);
+    const q = query.trim().toLowerCase();
+    const min = adv.minValue ? Number(adv.minValue) * 100 : -Infinity;
+    const max = adv.maxValue ? Number(adv.maxValue) * 100 : Infinity;
+    return cases.filter(c => {
+      if (q && !(
+        c.title.toLowerCase().includes(q) ||
+        (c.number ?? "").toLowerCase().includes(q) ||
+        (c.clients?.name ?? "").toLowerCase().includes(q)
+      )) return false;
+      if (adv.areas.length && !adv.areas.includes(c.area ?? "")) return false;
+      if (adv.stages.length && !adv.stages.includes(c.status)) return false;
+      const v = c.value_cents ?? 0;
+      if (v < min || v > max) return false;
+      return true;
+    });
+  }, [cases, query, adv]);
 
   const byStage = useMemo(() => {
     const m = new Map<string, Case[]>();
@@ -181,7 +197,54 @@ function Processos() {
               <button onClick={() => setView("lista")} className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 ${view === "lista" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}><ListIcon className="size-3.5" /> Lista</button>
               <button onClick={() => setView("timeline")} className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 ${view === "timeline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}><GitBranch className="size-3.5" /> Timeline</button>
             </div>
-            <Button variant="outline" size="sm" className="glass"><Filter className="size-4 mr-1.5" /> Filtros</Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="glass">
+                  <Filter className="size-4 mr-1.5" /> Filtros
+                  {advActive > 0 && <span className="ml-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary/20 text-primary text-[9px] font-bold">{advActive}</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[340px] glass p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider">Filtros avançados</h4>
+                  <button onClick={resetAdv} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
+                    <RotateCcw className="size-3" /> Limpar
+                  </button>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Área</Label>
+                  <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                    {AREAS_OPT.map(a => (
+                      <label key={a} className="flex items-center gap-2 text-xs cursor-pointer text-muted-foreground hover:text-foreground capitalize">
+                        <Checkbox checked={adv.areas.includes(a)} onCheckedChange={() => toggleAdv("areas", a)} />
+                        <span className="truncate">{a}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</Label>
+                  <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                    {STAGES.map(s => (
+                      <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer text-muted-foreground hover:text-foreground">
+                        <Checkbox checked={adv.stages.includes(s.id)} onCheckedChange={() => toggleAdv("stages", s.id)} />
+                        <span className="truncate">{s.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor em causa (R$)</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <Input type="number" placeholder="Mín" value={adv.minValue} onChange={e => setAdv({ ...adv, minValue: e.target.value })} className="h-8 text-xs" />
+                    <Input type="number" placeholder="Máx" value={adv.maxValue} onChange={e => setAdv({ ...adv, maxValue: e.target.value })} className="h-8 text-xs" />
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-border/40 text-[10px] text-muted-foreground">
+                  Exibindo <span className="text-foreground font-semibold">{filtered.length}</span> de {cases.length} processos
+                </div>
+              </PopoverContent>
+            </Popover>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild><Button className="bg-[image:var(--gradient-brand)] hover-lift"><Plus className="size-4 mr-1" /> Novo processo</Button></DialogTrigger>
               <DialogContent className="glass max-w-lg">

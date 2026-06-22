@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Plus, Mail, Phone, MoreHorizontal, Upload, Download, Users, UserCheck,
+  Plus, Mail, MoreHorizontal, Upload, Download, Users, UserCheck,
   TrendingUp, DollarSign, FileCheck2, Flame, AlertTriangle, Bot, Sparkles,
   X, MessageCircle, PhoneCall, LayoutGrid, List, Filter, ChevronDown,
-  Clock, FileText, CheckCircle2, Calendar,
+  Clock, FileText, CheckCircle2, Calendar, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,57 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
+
+/* ---------- CSV helpers ---------- */
+function parseCSV(text: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let i = 0, field = "", row: string[] = [], inQ = false;
+  while (i < text.length) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i += 2; continue; }
+      if (ch === '"') { inQ = false; i++; continue; }
+      field += ch; i++; continue;
+    }
+    if (ch === '"') { inQ = true; i++; continue; }
+    if (ch === ",") { row.push(field); field = ""; i++; continue; }
+    if (ch === "\n" || ch === "\r") {
+      if (field !== "" || row.length) { row.push(field); rows.push(row); row = []; field = ""; }
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      i++; continue;
+    }
+    field += ch; i++;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => h.trim().toLowerCase());
+  return rows.slice(1).filter(r => r.some(c => c.trim() !== "")).map(r => {
+    const o: Record<string, string> = {};
+    headers.forEach((h, idx) => { o[h] = (r[idx] ?? "").trim(); });
+    return o;
+  });
+}
+function toCSV(rows: Record<string, string | number>[]): string {
+  if (!rows.length) return "";
+  const headers = Object.keys(rows[0]);
+  const esc = (v: string | number) => {
+    const s = String(v ?? "");
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [headers.join(","), ...rows.map(r => headers.map(h => esc(r[h])).join(","))].join("\n");
+}
+function downloadFile(name: string, content: string, mime = "text/csv;charset=utf-8") {
+  const blob = new Blob(["\ufeff" + content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+}
 
 export const Route = createFileRoute("/_authenticated/crm")({
   head: () => ({ meta: [{ title: "CRM Jurídico — Advora" }] }),
@@ -80,6 +128,10 @@ function CRM() {
   const [view, setView] = useState<"funil" | "lista">("funil");
   const [selected, setSelected] = useState<Client | null>(null);
   const [tab, setTab] = useState<"resumo" | "historico" | "processos" | "financeiro" | "ia">("resumo");
+  const [adv, setAdv] = useState<{ areas: string[]; stages: string[]; minValue: string; maxValue: string; hotOnly: boolean; search: string }>({
+    areas: [], stages: [], minValue: "", maxValue: "", hotOnly: false, search: "",
+  });
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -91,15 +143,25 @@ function CRM() {
   useEffect(() => { if (profile?.tenant_id) load(); }, [profile?.tenant_id]);
 
   const filtered = useMemo(() => {
+    const min = adv.minValue ? Number(adv.minValue) : -Infinity;
+    const max = adv.maxValue ? Number(adv.maxValue) : Infinity;
+    const q = adv.search.trim().toLowerCase();
     return clients.filter(c => {
-      if (filter === "PF") return c.type === "PF";
-      if (filter === "PJ") return c.type === "PJ";
-      if (filter === "leads") return c.status === "lead" || c.status === "qualificacao";
-      if (filter === "ativos") return c.status === "fechado" || c.status === "ativo";
-      if (filter === "inativos") return c.status === "perdido" || c.status === "inativo";
+      if (filter === "PF" && c.type !== "PF") return false;
+      if (filter === "PJ" && c.type !== "PJ") return false;
+      if (filter === "leads" && !(c.status === "lead" || c.status === "qualificacao")) return false;
+      if (filter === "ativos" && !(c.status === "fechado" || c.status === "ativo")) return false;
+      if (filter === "inativos" && !(c.status === "perdido" || c.status === "inativo")) return false;
+      const m = getMeta(c);
+      if (adv.areas.length && !adv.areas.includes(m.area)) return false;
+      if (adv.stages.length && !adv.stages.includes(c.status)) return false;
+      if (m.value < min || m.value > max) return false;
+      if (adv.hotOnly && !m.hot) return false;
+      if (q && !(c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.doc ?? "").toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [clients, filter]);
+  }, [clients, filter, adv]);
+  const advActive = adv.areas.length + adv.stages.length + (adv.minValue ? 1 : 0) + (adv.maxValue ? 1 : 0) + (adv.hotOnly ? 1 : 0) + (adv.search ? 1 : 0);
 
   const grouped = useMemo(
     () => STAGES.map(s => ({
@@ -155,6 +217,68 @@ function CRM() {
     load();
   };
 
+  const onImportCSV = async (file: File) => {
+    if (!profile?.tenant_id) return;
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+      if (!rows.length) return toast.error("CSV vazio");
+      const valid = STAGES.map(s => s.id) as readonly string[];
+      const payload = rows.map(r => {
+        const name = r.name || r.nome || "";
+        const type = (r.type || r.tipo || "PF").toUpperCase() === "PJ" ? "PJ" : "PF";
+        const status = valid.includes((r.status || "lead").toLowerCase()) ? (r.status || "lead").toLowerCase() : "lead";
+        const area = r.area || "Cível";
+        const value = Number(r.value || r.valor || 0) || 10000;
+        return {
+          tenant_id: profile.tenant_id!,
+          created_by: profile.id,
+          name,
+          email: r.email || null,
+          phone: r.phone || r.telefone || null,
+          doc: r.doc || r.cpf || r.cnpj || null,
+          type, status,
+          notes: JSON.stringify({ area, value, owner: profile.full_name || "Dr. Yan" }),
+        };
+      }).filter(p => p.name.trim() !== "");
+      if (!payload.length) return toast.error("Nenhuma linha válida (coluna 'name' obrigatória)");
+      const { error } = await supabase.from("clients").insert(payload);
+      if (error) return toast.error(error.message);
+      toast.success(`${payload.length} cliente(s) importado(s)`);
+      load();
+    } catch (e) {
+      toast.error("Falha ao ler CSV");
+    }
+  };
+
+  const exportReport = () => {
+    if (!filtered.length) return toast.error("Nenhum cliente para exportar");
+    const rows = filtered.map(c => {
+      const m = getMeta(c);
+      const stage = STAGES.find(s => s.id === c.status)?.label ?? c.status;
+      return {
+        name: c.name,
+        email: c.email ?? "",
+        phone: c.phone ?? "",
+        doc: c.doc ?? "",
+        type: c.type,
+        status: stage,
+        area: m.area,
+        value: m.value,
+        owner: m.owner,
+        created_at: new Date(c.created_at).toLocaleDateString("pt-BR"),
+        updated_at: new Date(c.updated_at).toLocaleDateString("pt-BR"),
+      };
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadFile(`advora-crm-${stamp}.csv`, toCSV(rows));
+    toast.success(`Relatório exportado (${rows.length} registros)`);
+  };
+
+  const resetAdv = () => setAdv({ areas: [], stages: [], minValue: "", maxValue: "", hotOnly: false, search: "" });
+  const toggle = (key: "areas" | "stages", v: string) =>
+    setAdv(a => ({ ...a, [key]: a[key].includes(v) ? a[key].filter(x => x !== v) : [...a[key], v] }));
+
   return (
     <div className="relative">
       {/* Background glow */}
@@ -173,10 +297,21 @@ function CRM() {
               <p className="text-sm text-muted-foreground mt-1.5">Gestão completa de clientes, leads e oportunidades do escritório.</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="h-9 border-border/60 bg-white/[0.02] hover:bg-white/[0.05]">
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) onImportCSV(f);
+                  e.target.value = "";
+                }}
+              />
+              <Button onClick={() => fileRef.current?.click()} variant="outline" size="sm" className="h-9 border-border/60 bg-white/[0.02] hover:bg-white/[0.05]">
                 <Upload className="size-3.5 mr-1.5" /> Importar CSV
               </Button>
-              <Button variant="outline" size="sm" className="h-9 border-border/60 bg-white/[0.02] hover:bg-white/[0.05]">
+              <Button onClick={exportReport} variant="outline" size="sm" className="h-9 border-border/60 bg-white/[0.02] hover:bg-white/[0.05]">
                 <Download className="size-3.5 mr-1.5" /> Exportar Relatório
               </Button>
               <Dialog open={open} onOpenChange={setOpen}>
@@ -254,7 +389,63 @@ function CRM() {
                 <button onClick={() => setView("funil")} className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium ${view === "funil" ? "bg-white/[0.06] text-foreground" : "text-muted-foreground"}`}><LayoutGrid className="size-3.5" />Funil</button>
                 <button onClick={() => setView("lista")} className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium ${view === "lista" ? "bg-white/[0.06] text-foreground" : "text-muted-foreground"}`}><List className="size-3.5" />Lista</button>
               </div>
-              <Button variant="outline" size="sm" className="h-8 border-border/60 bg-white/[0.02] text-xs"><Filter className="size-3.5 mr-1.5" />Filtros<ChevronDown className="size-3 ml-1" /></Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 border-border/60 bg-white/[0.02] text-xs">
+                    <Filter className="size-3.5 mr-1.5" />Filtros
+                    {advActive > 0 && <span className="ml-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary/20 text-primary text-[9px] font-bold">{advActive}</span>}
+                    <ChevronDown className="size-3 ml-1" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-[340px] glass p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider">Filtros avançados</h4>
+                    <button onClick={resetAdv} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
+                      <RotateCcw className="size-3" /> Limpar
+                    </button>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Busca</Label>
+                    <Input value={adv.search} onChange={e => setAdv({ ...adv, search: e.target.value })} placeholder="Nome, email, CPF/CNPJ..." className="h-8 mt-1 text-xs" />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Área Jurídica</Label>
+                    <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                      {AREAS.map(a => (
+                        <label key={a} className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground text-muted-foreground">
+                          <Checkbox checked={adv.areas.includes(a)} onCheckedChange={() => toggle("areas", a)} />
+                          <span className="truncate">{a}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Etapa</Label>
+                    <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                      {STAGES.map(s => (
+                        <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground text-muted-foreground">
+                          <Checkbox checked={adv.stages.includes(s.id)} onCheckedChange={() => toggle("stages", s.id)} />
+                          <span className="truncate">{s.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor (R$)</Label>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <Input type="number" placeholder="Mín" value={adv.minValue} onChange={e => setAdv({ ...adv, minValue: e.target.value })} className="h-8 text-xs" />
+                      <Input type="number" placeholder="Máx" value={adv.maxValue} onChange={e => setAdv({ ...adv, maxValue: e.target.value })} className="h-8 text-xs" />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <Checkbox checked={adv.hotOnly} onCheckedChange={v => setAdv({ ...adv, hotOnly: !!v })} />
+                    <Flame className="size-3.5 text-rose-300" /> Somente leads quentes
+                  </label>
+                  <div className="pt-2 border-t border-border/40 text-[10px] text-muted-foreground">
+                    Exibindo <span className="text-foreground font-semibold">{filtered.length}</span> de {clients.length} clientes
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
