@@ -16,6 +16,8 @@ import {
   MessageSquare,
   ShieldCheck,
   Sparkles,
+  Globe,
+  ExternalLink,
 } from "lucide-react";
 import { PageHeader, Panel } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
