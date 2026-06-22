@@ -389,7 +389,63 @@ function CRM() {
                 <button onClick={() => setView("funil")} className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium ${view === "funil" ? "bg-white/[0.06] text-foreground" : "text-muted-foreground"}`}><LayoutGrid className="size-3.5" />Funil</button>
                 <button onClick={() => setView("lista")} className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium ${view === "lista" ? "bg-white/[0.06] text-foreground" : "text-muted-foreground"}`}><List className="size-3.5" />Lista</button>
               </div>
-              <Button variant="outline" size="sm" className="h-8 border-border/60 bg-white/[0.02] text-xs"><Filter className="size-3.5 mr-1.5" />Filtros<ChevronDown className="size-3 ml-1" /></Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 border-border/60 bg-white/[0.02] text-xs">
+                    <Filter className="size-3.5 mr-1.5" />Filtros
+                    {advActive > 0 && <span className="ml-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary/20 text-primary text-[9px] font-bold">{advActive}</span>}
+                    <ChevronDown className="size-3 ml-1" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-[340px] glass p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider">Filtros avançados</h4>
+                    <button onClick={resetAdv} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground">
+                      <RotateCcw className="size-3" /> Limpar
+                    </button>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Busca</Label>
+                    <Input value={adv.search} onChange={e => setAdv({ ...adv, search: e.target.value })} placeholder="Nome, email, CPF/CNPJ..." className="h-8 mt-1 text-xs" />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Área Jurídica</Label>
+                    <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                      {AREAS.map(a => (
+                        <label key={a} className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground text-muted-foreground">
+                          <Checkbox checked={adv.areas.includes(a)} onCheckedChange={() => toggle("areas", a)} />
+                          <span className="truncate">{a}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Etapa</Label>
+                    <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                      {STAGES.map(s => (
+                        <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground text-muted-foreground">
+                          <Checkbox checked={adv.stages.includes(s.id)} onCheckedChange={() => toggle("stages", s.id)} />
+                          <span className="truncate">{s.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor (R$)</Label>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <Input type="number" placeholder="Mín" value={adv.minValue} onChange={e => setAdv({ ...adv, minValue: e.target.value })} className="h-8 text-xs" />
+                      <Input type="number" placeholder="Máx" value={adv.maxValue} onChange={e => setAdv({ ...adv, maxValue: e.target.value })} className="h-8 text-xs" />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <Checkbox checked={adv.hotOnly} onCheckedChange={v => setAdv({ ...adv, hotOnly: !!v })} />
+                    <Flame className="size-3.5 text-rose-300" /> Somente leads quentes
+                  </label>
+                  <div className="pt-2 border-t border-border/40 text-[10px] text-muted-foreground">
+                    Exibindo <span className="text-foreground font-semibold">{filtered.length}</span> de {clients.length} clientes
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
