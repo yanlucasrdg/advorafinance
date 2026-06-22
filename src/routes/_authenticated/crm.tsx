@@ -217,6 +217,68 @@ function CRM() {
     load();
   };
 
+  const onImportCSV = async (file: File) => {
+    if (!profile?.tenant_id) return;
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+      if (!rows.length) return toast.error("CSV vazio");
+      const valid = STAGES.map(s => s.id) as readonly string[];
+      const payload = rows.map(r => {
+        const name = r.name || r.nome || "";
+        const type = (r.type || r.tipo || "PF").toUpperCase() === "PJ" ? "PJ" : "PF";
+        const status = valid.includes((r.status || "lead").toLowerCase()) ? (r.status || "lead").toLowerCase() : "lead";
+        const area = r.area || "Cível";
+        const value = Number(r.value || r.valor || 0) || 10000;
+        return {
+          tenant_id: profile.tenant_id!,
+          created_by: profile.id,
+          name,
+          email: r.email || null,
+          phone: r.phone || r.telefone || null,
+          doc: r.doc || r.cpf || r.cnpj || null,
+          type, status,
+          notes: JSON.stringify({ area, value, owner: profile.full_name || "Dr. Yan" }),
+        };
+      }).filter(p => p.name.trim() !== "");
+      if (!payload.length) return toast.error("Nenhuma linha válida (coluna 'name' obrigatória)");
+      const { error } = await supabase.from("clients").insert(payload);
+      if (error) return toast.error(error.message);
+      toast.success(`${payload.length} cliente(s) importado(s)`);
+      load();
+    } catch (e) {
+      toast.error("Falha ao ler CSV");
+    }
+  };
+
+  const exportReport = () => {
+    if (!filtered.length) return toast.error("Nenhum cliente para exportar");
+    const rows = filtered.map(c => {
+      const m = getMeta(c);
+      const stage = STAGES.find(s => s.id === c.status)?.label ?? c.status;
+      return {
+        name: c.name,
+        email: c.email ?? "",
+        phone: c.phone ?? "",
+        doc: c.doc ?? "",
+        type: c.type,
+        status: stage,
+        area: m.area,
+        value: m.value,
+        owner: m.owner,
+        created_at: new Date(c.created_at).toLocaleDateString("pt-BR"),
+        updated_at: new Date(c.updated_at).toLocaleDateString("pt-BR"),
+      };
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadFile(`advora-crm-${stamp}.csv`, toCSV(rows));
+    toast.success(`Relatório exportado (${rows.length} registros)`);
+  };
+
+  const resetAdv = () => setAdv({ areas: [], stages: [], minValue: "", maxValue: "", hotOnly: false, search: "" });
+  const toggle = (key: "areas" | "stages", v: string) =>
+    setAdv(a => ({ ...a, [key]: a[key].includes(v) ? a[key].filter(x => x !== v) : [...a[key], v] }));
+
   return (
     <div className="relative">
       {/* Background glow */}
