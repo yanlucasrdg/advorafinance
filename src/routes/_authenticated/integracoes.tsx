@@ -139,7 +139,7 @@ function IntegracoesPage() {
       <PageHeader title="Integrações" subtitle="Conecte WhatsApp, tribunais e ferramentas externas" />
 
       {/* Connector cards row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <ConnectorCard
           active
           icon={<MessageSquare className="h-5 w-5" />}
@@ -147,6 +147,7 @@ function IntegracoesPage() {
           desc="Multi-instância via QR Code (Evolution / Z-API)"
           status={instance?.status ?? "disconnected"}
         />
+        <WhatsAppWebCard />
         <ConnectorCard icon={<ShieldCheck className="h-5 w-5" />} title="PJe / Projudi" desc="Sincronização de processos" status="disconnected" soon />
         <ConnectorCard icon={<Sparkles className="h-5 w-5" />} title="API Pública" desc="Webhooks e conectores oficiais" status="disconnected" soon />
       </div>
