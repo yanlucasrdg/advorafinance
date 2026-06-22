@@ -128,6 +128,10 @@ function CRM() {
   const [view, setView] = useState<"funil" | "lista">("funil");
   const [selected, setSelected] = useState<Client | null>(null);
   const [tab, setTab] = useState<"resumo" | "historico" | "processos" | "financeiro" | "ia">("resumo");
+  const [adv, setAdv] = useState<{ areas: string[]; stages: string[]; minValue: string; maxValue: string; hotOnly: boolean; search: string }>({
+    areas: [], stages: [], minValue: "", maxValue: "", hotOnly: false, search: "",
+  });
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     setLoading(true);
