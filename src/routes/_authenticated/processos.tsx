@@ -191,6 +191,74 @@ function Processos() {
     load();
   };
 
+  // ---- DataJud ----
+  const lookupFn = useServerFn(lookupDatajud);
+  const syncFn = useServerFn(syncCaseMovements);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [movements, setMovements] = useState<Movement[]>([]);
+
+  async function importFromCNJ() {
+    if (!form.number.trim()) return toast.error("Informe o número CNJ.");
+    setLookupLoading(true);
+    try {
+      const r = await lookupFn({ data: { numero: form.number } });
+      setForm(f => ({
+        ...f,
+        number: r.number,
+        title: r.className ? `${r.className} — ${r.tribunal}` : f.title || `Processo ${r.tribunal}`,
+        court: r.court ?? f.court,
+      }));
+      toast.success(`Encontrado em ${r.tribunal}`, {
+        description: `${r.movements.length} movimentações disponíveis. As partes/timeline serão importadas ao salvar.`,
+      });
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Falha ao consultar DataJud");
+    } finally {
+      setLookupLoading(false);
+    }
+  }
+
+  // Após criar processo com número, busca movimentações
+  async function postCreateSync(caseId: string) {
+    try { await syncFn({ data: { caseId } }); } catch { /* silencioso */ }
+  }
+
+  // Carrega movimentações ao abrir o drawer
+  useEffect(() => {
+    if (!selected) { setMovements([]); return; }
+    supabase
+      .from("case_movements")
+      .select("id, case_id, occurred_at, name, code, complement")
+      .eq("case_id", selected.id)
+      .order("occurred_at", { ascending: false })
+      .limit(100)
+      .then(({ data }) => setMovements((data ?? []) as Movement[]));
+  }, [selected?.id]);
+
+  async function syncSelected() {
+    if (!selected) return;
+    if (!selected.number) return toast.error("Cadastre o número CNJ antes de sincronizar.");
+    setSyncing(true);
+    try {
+      const r = await syncFn({ data: { caseId: selected.id } });
+      toast.success("Movimentações sincronizadas", { description: `${r.inserted} eventos do DataJud.` });
+      const { data } = await supabase
+        .from("case_movements")
+        .select("id, case_id, occurred_at, name, code, complement")
+        .eq("case_id", selected.id)
+        .order("occurred_at", { ascending: false })
+        .limit(100);
+      setMovements((data ?? []) as Movement[]);
+      load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Falha ao sincronizar");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
       <PageHeader
