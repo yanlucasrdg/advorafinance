@@ -612,21 +612,36 @@ function Processos() {
                     </Button>
                   </TabsContent>
 
-                  <TabsContent value="timeline" className="mt-4">
-                    <div className="relative pl-5 space-y-3 before:absolute before:left-1.5 before:top-1 before:bottom-1 before:w-px before:bg-border">
-                      {[
-                        { d: "18/06/2026", t: "Manifestação da parte contrária" },
-                        { d: "10/06/2026", t: "Despacho saneador" },
-                        { d: "02/06/2026", t: "Audiência de instrução" },
-                        { d: selected.created_at.slice(0, 10), t: "Distribuição do processo" },
-                      ].map((ev, i) => (
-                        <div key={i} className="relative">
-                          <span className="absolute -left-[14px] top-1.5 size-2 rounded-full bg-primary" />
-                          <p className="text-[11px] text-muted-foreground">{ev.d}</p>
-                          <p className="text-xs">{ev.t}</p>
-                        </div>
-                      ))}
+                  <TabsContent value="timeline" className="mt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {selected.datajud_synced_at
+                          ? `Última sync: ${new Date(selected.datajud_synced_at).toLocaleString("pt-BR")}`
+                          : "Nunca sincronizado com DataJud"}
+                      </div>
+                      <Button size="sm" variant="outline" className="h-7 gap-1.5" onClick={syncSelected} disabled={syncing || !selected.number}>
+                        {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                        Sincronizar
+                      </Button>
                     </div>
+                    {movements.length === 0 ? (
+                      <div className="text-[11px] text-muted-foreground text-center py-8 border border-dashed border-border/40 rounded-xl">
+                        {selected.number ? "Sem movimentações. Clique em Sincronizar para buscar no DataJud." : "Cadastre o número CNJ para importar movimentações."}
+                      </div>
+                    ) : (
+                      <div className="relative pl-5 space-y-3 before:absolute before:left-1.5 before:top-1 before:bottom-1 before:w-px before:bg-border">
+                        {movements.map(m => (
+                          <div key={m.id} className="relative">
+                            <span className="absolute -left-[14px] top-1.5 size-2 rounded-full bg-primary" />
+                            <p className="text-[11px] text-muted-foreground tabular-nums">
+                              {new Date(m.occurred_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                            </p>
+                            <p className="text-xs font-medium">{m.name}</p>
+                            {m.complement && <p className="text-[11px] text-muted-foreground mt-0.5">{m.complement}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </TabsContent>
 
                   <TabsContent value="docs" className="mt-4 space-y-2">
