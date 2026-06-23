@@ -4,6 +4,7 @@ import {
   Plus, Trash2, Briefcase, Clock, TrendingUp, AlertTriangle, Target,
   DollarSign, Activity, Sparkles, Search, Filter, LayoutGrid, List as ListIcon,
   GitBranch, X, FileText, Users, MessageSquare, ChevronRight, Calendar, Brain, RotateCcw,
+  Download, RefreshCw, Loader2,
 } from "lucide-react";
 import { PageHeader, formatBRL } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
