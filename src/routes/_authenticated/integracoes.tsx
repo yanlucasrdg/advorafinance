@@ -360,7 +360,7 @@ function WhatsAppWebCard() {
               size="sm"
               variant="outline"
               className="gap-2"
-              onClick={() => window.open("https://web.whatsapp.com", "_blank", "noopener,noreferrer")}
+              onClick={() => window.open("https://web.whatsapp.com", "_blank")}
             >
               <ExternalLink className="h-3.5 w-3.5" /> Abrir WhatsApp Web
             </Button>
