@@ -34,11 +34,14 @@ type Case = {
   area: string | null; status: string; value_cents: number | null;
   client_id: string | null; responsible: string | null; description: string | null;
   updated_at: string; created_at: string;
+  tribunal?: string | null; class_name?: string | null;
+  last_movement_at?: string | null; datajud_synced_at?: string | null;
   clients?: { name: string } | null;
 };
 type Client = { id: string; name: string };
 type Deadline = { id: string; case_id: string | null; title: string; due_at: string; done: boolean; kind: string };
 type Entry = { id: string; case_id: string | null; amount_cents: number; status: string; kind: string };
+type Movement = { id: string; case_id: string; occurred_at: string; name: string; code: string | null; complement: string | null };
 
 const STAGES = [
   { id: "ativo", label: "Em andamento", glow: "shadow-[0_0_24px_-8px_oklch(0.70_0.18_285/0.6)]", bar: "bg-violet-500", text: "text-violet-300", ring: "ring-violet-500/30" },
