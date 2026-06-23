@@ -327,7 +327,15 @@ function Processos() {
                 <div className="grid gap-3">
                   <div><Label>Título*</Label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Número CNJ</Label><Input value={form.number} onChange={e => setForm({ ...form, number: e.target.value })} /></div>
+                    <div>
+                      <Label>Número CNJ</Label>
+                      <div className="flex gap-1.5">
+                        <Input value={form.number} onChange={e => setForm({ ...form, number: e.target.value })} placeholder="0000000-00.0000.0.00.0000" />
+                        <Button type="button" variant="outline" size="icon" className="shrink-0" title="Buscar no DataJud (CNJ)" onClick={importFromCNJ} disabled={lookupLoading}>
+                          {lookupLoading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                        </Button>
+                      </div>
+                    </div>
                     <div><Label>Vara / Tribunal</Label><Input value={form.court} onChange={e => setForm({ ...form, court: e.target.value })} /></div>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
