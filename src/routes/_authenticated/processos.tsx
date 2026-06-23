@@ -4,6 +4,7 @@ import {
   Plus, Trash2, Briefcase, Clock, TrendingUp, AlertTriangle, Target,
   DollarSign, Activity, Sparkles, Search, Filter, LayoutGrid, List as ListIcon,
   GitBranch, X, FileText, Users, MessageSquare, ChevronRight, Calendar, Brain, RotateCcw,
+  Download, RefreshCw, Loader2,
 } from "lucide-react";
 import { PageHeader, formatBRL } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
+import { lookupDatajud, syncCaseMovements } from "@/lib/datajud.functions";
 
 export const Route = createFileRoute("/_authenticated/processos")({
   head: () => ({ meta: [{ title: "Gestão Processual — Advora" }] }),
@@ -31,11 +34,14 @@ type Case = {
   area: string | null; status: string; value_cents: number | null;
   client_id: string | null; responsible: string | null; description: string | null;
   updated_at: string; created_at: string;
+  tribunal?: string | null; class_name?: string | null;
+  last_movement_at?: string | null; datajud_synced_at?: string | null;
   clients?: { name: string } | null;
 };
 type Client = { id: string; name: string };
 type Deadline = { id: string; case_id: string | null; title: string; due_at: string; done: boolean; kind: string };
 type Entry = { id: string; case_id: string | null; amount_cents: number; status: string; kind: string };
+type Movement = { id: string; case_id: string; occurred_at: string; name: string; code: string | null; complement: string | null };
 
 const STAGES = [
   { id: "ativo", label: "Em andamento", glow: "shadow-[0_0_24px_-8px_oklch(0.70_0.18_285/0.6)]", bar: "bg-violet-500", text: "text-violet-300", ring: "ring-violet-500/30" },
@@ -166,15 +172,16 @@ function Processos() {
 
   const create = async () => {
     if (!form.title.trim() || !profile?.tenant_id) return;
-    const { error } = await supabase.from("cases").insert({
+    const { data: ins, error } = await supabase.from("cases").insert({
       tenant_id: profile.tenant_id, title: form.title, number: form.number || null,
       court: form.court || null, area: form.area, status: form.status,
       value_cents: form.value_cents, description: form.description || null,
       client_id: form.client_id || null,
-    });
+    }).select("id").maybeSingle();
     if (error) return toast.error(error.message);
     toast.success("Processo criado");
     setOpen(false);
+    if (ins?.id && form.number) postCreateSync(ins.id);
     setForm({ number: "", title: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "" });
     load();
   };
@@ -184,6 +191,74 @@ function Processos() {
     if (error) return toast.error(error.message);
     load();
   };
+
+  // ---- DataJud ----
+  const lookupFn = useServerFn(lookupDatajud);
+  const syncFn = useServerFn(syncCaseMovements);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [movements, setMovements] = useState<Movement[]>([]);
+
+  async function importFromCNJ() {
+    if (!form.number.trim()) return toast.error("Informe o número CNJ.");
+    setLookupLoading(true);
+    try {
+      const r = await lookupFn({ data: { numero: form.number } });
+      setForm(f => ({
+        ...f,
+        number: r.number,
+        title: r.className ? `${r.className} — ${r.tribunal}` : f.title || `Processo ${r.tribunal}`,
+        court: r.court ?? f.court,
+      }));
+      toast.success(`Encontrado em ${r.tribunal}`, {
+        description: `${r.movements.length} movimentações disponíveis. As partes/timeline serão importadas ao salvar.`,
+      });
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Falha ao consultar DataJud");
+    } finally {
+      setLookupLoading(false);
+    }
+  }
+
+  // Após criar processo com número, busca movimentações
+  async function postCreateSync(caseId: string) {
+    try { await syncFn({ data: { caseId } }); } catch { /* silencioso */ }
+  }
+
+  // Carrega movimentações ao abrir o drawer
+  useEffect(() => {
+    if (!selected) { setMovements([]); return; }
+    supabase
+      .from("case_movements")
+      .select("id, case_id, occurred_at, name, code, complement")
+      .eq("case_id", selected.id)
+      .order("occurred_at", { ascending: false })
+      .limit(100)
+      .then(({ data }) => setMovements((data ?? []) as Movement[]));
+  }, [selected?.id]);
+
+  async function syncSelected() {
+    if (!selected) return;
+    if (!selected.number) return toast.error("Cadastre o número CNJ antes de sincronizar.");
+    setSyncing(true);
+    try {
+      const r = await syncFn({ data: { caseId: selected.id } });
+      toast.success("Movimentações sincronizadas", { description: `${r.inserted} eventos do DataJud.` });
+      const { data } = await supabase
+        .from("case_movements")
+        .select("id, case_id, occurred_at, name, code, complement")
+        .eq("case_id", selected.id)
+        .order("occurred_at", { ascending: false })
+        .limit(100);
+      setMovements((data ?? []) as Movement[]);
+      load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Falha ao sincronizar");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
@@ -252,7 +327,15 @@ function Processos() {
                 <div className="grid gap-3">
                   <div><Label>Título*</Label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Número CNJ</Label><Input value={form.number} onChange={e => setForm({ ...form, number: e.target.value })} /></div>
+                    <div>
+                      <Label>Número CNJ</Label>
+                      <div className="flex gap-1.5">
+                        <Input value={form.number} onChange={e => setForm({ ...form, number: e.target.value })} placeholder="0000000-00.0000.0.00.0000" />
+                        <Button type="button" variant="outline" size="icon" className="shrink-0" title="Buscar no DataJud (CNJ)" onClick={importFromCNJ} disabled={lookupLoading}>
+                          {lookupLoading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                        </Button>
+                      </div>
+                    </div>
                     <div><Label>Vara / Tribunal</Label><Input value={form.court} onChange={e => setForm({ ...form, court: e.target.value })} /></div>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
@@ -529,21 +612,36 @@ function Processos() {
                     </Button>
                   </TabsContent>
 
-                  <TabsContent value="timeline" className="mt-4">
-                    <div className="relative pl-5 space-y-3 before:absolute before:left-1.5 before:top-1 before:bottom-1 before:w-px before:bg-border">
-                      {[
-                        { d: "18/06/2026", t: "Manifestação da parte contrária" },
-                        { d: "10/06/2026", t: "Despacho saneador" },
-                        { d: "02/06/2026", t: "Audiência de instrução" },
-                        { d: selected.created_at.slice(0, 10), t: "Distribuição do processo" },
-                      ].map((ev, i) => (
-                        <div key={i} className="relative">
-                          <span className="absolute -left-[14px] top-1.5 size-2 rounded-full bg-primary" />
-                          <p className="text-[11px] text-muted-foreground">{ev.d}</p>
-                          <p className="text-xs">{ev.t}</p>
-                        </div>
-                      ))}
+                  <TabsContent value="timeline" className="mt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {selected.datajud_synced_at
+                          ? `Última sync: ${new Date(selected.datajud_synced_at).toLocaleString("pt-BR")}`
+                          : "Nunca sincronizado com DataJud"}
+                      </div>
+                      <Button size="sm" variant="outline" className="h-7 gap-1.5" onClick={syncSelected} disabled={syncing || !selected.number}>
+                        {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                        Sincronizar
+                      </Button>
                     </div>
+                    {movements.length === 0 ? (
+                      <div className="text-[11px] text-muted-foreground text-center py-8 border border-dashed border-border/40 rounded-xl">
+                        {selected.number ? "Sem movimentações. Clique em Sincronizar para buscar no DataJud." : "Cadastre o número CNJ para importar movimentações."}
+                      </div>
+                    ) : (
+                      <div className="relative pl-5 space-y-3 before:absolute before:left-1.5 before:top-1 before:bottom-1 before:w-px before:bg-border">
+                        {movements.map(m => (
+                          <div key={m.id} className="relative">
+                            <span className="absolute -left-[14px] top-1.5 size-2 rounded-full bg-primary" />
+                            <p className="text-[11px] text-muted-foreground tabular-nums">
+                              {new Date(m.occurred_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                            </p>
+                            <p className="text-xs font-medium">{m.name}</p>
+                            {m.complement && <p className="text-[11px] text-muted-foreground mt-0.5">{m.complement}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </TabsContent>
 
                   <TabsContent value="docs" className="mt-4 space-y-2">

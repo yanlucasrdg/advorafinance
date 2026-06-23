@@ -292,21 +292,31 @@ function WhatsAppWebCard() {
   }, []);
 
   function handleConnect() {
-    try {
-      const win = window.open("https://web.whatsapp.com", "_blank", "noopener,noreferrer");
-      if (!win) {
-        toast.error("O navegador bloqueou a nova aba. Permita pop-ups e tente novamente.");
-        return;
-      }
-      localStorage.setItem(WA_WEB_KEY, "pending");
-      localStorage.setItem(WA_WEB_TS, String(Date.now()));
-      setStatus("pending");
-      toast.info("Aguardando autenticação no WhatsApp Web…", {
-        description: "Escaneie o QR Code na aba aberta para concluir o login.",
+    const url = "https://web.whatsapp.com";
+    // Sem feature string: navegadores tratam como navegação normal de aba (não popup),
+    // reduzindo bloqueio. Mantemos rel=noopener via <a> de fallback abaixo.
+    const win = window.open(url, "_blank");
+    if (!win || win.closed || typeof win.closed === "undefined") {
+      toast.error("Seu navegador bloqueou a nova aba.", {
+        description: "Permita pop-ups para advora.com.br ou abra manualmente.",
+        action: {
+          label: "Abrir agora",
+          onClick: () => {
+            const a = document.createElement("a");
+            a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+            document.body.appendChild(a); a.click(); a.remove();
+          },
+        },
+        duration: 10000,
       });
-    } catch {
-      toast.error("Não foi possível abrir o WhatsApp Web. Verifique sua conexão.");
+      return;
     }
+    localStorage.setItem(WA_WEB_KEY, "pending");
+    localStorage.setItem(WA_WEB_TS, String(Date.now()));
+    setStatus("pending");
+    toast.info("Aguardando autenticação no WhatsApp Web…", {
+      description: "Escaneie o QR Code na aba aberta para concluir o login.",
+    });
   }
 
   function handleDisconnect() {
@@ -350,7 +360,7 @@ function WhatsAppWebCard() {
               size="sm"
               variant="outline"
               className="gap-2"
-              onClick={() => window.open("https://web.whatsapp.com", "_blank", "noopener,noreferrer")}
+              onClick={() => window.open("https://web.whatsapp.com", "_blank")}
             >
               <ExternalLink className="h-3.5 w-3.5" /> Abrir WhatsApp Web
             </Button>

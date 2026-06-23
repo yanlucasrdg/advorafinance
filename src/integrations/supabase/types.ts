@@ -49,49 +49,124 @@ export type Database = {
           },
         ]
       }
+      case_movements: {
+        Row: {
+          case_id: string
+          code: string | null
+          complement: string | null
+          created_at: string
+          id: string
+          name: string
+          occurred_at: string
+          raw: Json | null
+          tenant_id: string
+        }
+        Insert: {
+          case_id: string
+          code?: string | null
+          complement?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          occurred_at: string
+          raw?: Json | null
+          tenant_id: string
+        }
+        Update: {
+          case_id?: string
+          code?: string | null
+          complement?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          occurred_at?: string
+          raw?: Json | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_movements_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_movements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cases: {
         Row: {
           area: string | null
+          class_name: string | null
           client_id: string | null
           court: string | null
           created_at: string
+          datajud_synced_at: string | null
           description: string | null
+          distribution_date: string | null
           id: string
+          instance: string | null
+          last_movement_at: string | null
           number: string | null
+          parties: Json | null
           responsible: string | null
           status: string
+          subjects: Json | null
           tenant_id: string
           title: string
+          tribunal: string | null
           updated_at: string
           value_cents: number | null
         }
         Insert: {
           area?: string | null
+          class_name?: string | null
           client_id?: string | null
           court?: string | null
           created_at?: string
+          datajud_synced_at?: string | null
           description?: string | null
+          distribution_date?: string | null
           id?: string
+          instance?: string | null
+          last_movement_at?: string | null
           number?: string | null
+          parties?: Json | null
           responsible?: string | null
           status?: string
+          subjects?: Json | null
           tenant_id: string
           title: string
+          tribunal?: string | null
           updated_at?: string
           value_cents?: number | null
         }
         Update: {
           area?: string | null
+          class_name?: string | null
           client_id?: string | null
           court?: string | null
           created_at?: string
+          datajud_synced_at?: string | null
           description?: string | null
+          distribution_date?: string | null
           id?: string
+          instance?: string | null
+          last_movement_at?: string | null
           number?: string | null
+          parties?: Json | null
           responsible?: string | null
           status?: string
+          subjects?: Json | null
           tenant_id?: string
           title?: string
+          tribunal?: string | null
           updated_at?: string
           value_cents?: number | null
         }
