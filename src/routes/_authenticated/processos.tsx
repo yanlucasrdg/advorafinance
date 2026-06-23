@@ -172,15 +172,16 @@ function Processos() {
 
   const create = async () => {
     if (!form.title.trim() || !profile?.tenant_id) return;
-    const { error } = await supabase.from("cases").insert({
+    const { data: ins, error } = await supabase.from("cases").insert({
       tenant_id: profile.tenant_id, title: form.title, number: form.number || null,
       court: form.court || null, area: form.area, status: form.status,
       value_cents: form.value_cents, description: form.description || null,
       client_id: form.client_id || null,
-    });
+    }).select("id").maybeSingle();
     if (error) return toast.error(error.message);
     toast.success("Processo criado");
     setOpen(false);
+    if (ins?.id && form.number) postCreateSync(ins.id);
     setForm({ number: "", title: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "" });
     load();
   };
