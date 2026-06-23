@@ -168,7 +168,7 @@ export const syncCaseMovements = createServerFn({ method: "POST" })
         code: m.code,
         name: m.name,
         complement: m.complement,
-        raw: m as unknown as Record<string, unknown>,
+        raw: m as unknown as never,
       }));
       // upsert ignorando duplicatas pelo unique (case_id, occurred_at, code, name)
       const { error: insErr } = await supabase
