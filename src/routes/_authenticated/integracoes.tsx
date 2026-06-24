@@ -159,9 +159,11 @@ function IntegracoesPage() {
           status={instance?.status ?? "disconnected"}
         />
         <WhatsAppWebCard />
+        <ZApiCard />
         <ConnectorCard icon={<ShieldCheck className="h-5 w-5" />} title="PJe / Projudi" desc="Sincronização de processos" status="disconnected" soon />
-        <ConnectorCard icon={<Sparkles className="h-5 w-5" />} title="API Pública" desc="Webhooks e conectores oficiais" status="disconnected" soon />
       </div>
+
+      <ZApiPanel />
 
       {/* WhatsApp panel */}
       <Panel className="overflow-hidden">
