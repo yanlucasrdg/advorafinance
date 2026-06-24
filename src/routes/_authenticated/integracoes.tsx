@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
   QrCode,
@@ -18,6 +19,8 @@ import {
   Sparkles,
   Globe,
   ExternalLink,
+  Zap,
+  Power,
 } from "lucide-react";
 import { PageHeader, Panel } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
@@ -28,6 +31,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  zapiStatus,
+  zapiQrCode,
+  zapiDevice,
+  zapiDisconnect,
+  zapiRestart,
+  zapiSendText,
+} from "@/lib/zapi.functions";
 
 export const Route = createFileRoute("/_authenticated/integracoes")({
   head: () => ({ meta: [{ title: "Integrações — Advora" }] }),
