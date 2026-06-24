@@ -359,7 +359,7 @@ function Processos() {
                     <div>
                       <Label>Número CNJ</Label>
                       <div className="flex gap-1.5">
-                        <Input value={form.number} onChange={e => setForm({ ...form, number: e.target.value })} placeholder="0000000-00.0000.0.00.0000" />
+                        <Input value={form.number} onChange={e => setForm({ ...form, number: maskCNJ(e.target.value) })} placeholder="0000000-00.0000.0.00.0000" inputMode="numeric" maxLength={25} />
                         <Button type="button" variant="outline" size="icon" className="shrink-0" title="Buscar no DataJud (CNJ)" onClick={importFromCNJ} disabled={lookupLoading}>
                           {lookupLoading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
                         </Button>
