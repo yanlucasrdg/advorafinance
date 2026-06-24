@@ -22,7 +22,26 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
-import { lookupDatajud, syncCaseMovements } from "@/lib/datajud.functions";
+import { lookupDatajud, syncCaseMovements, validateCNJ } from "@/lib/datajud.functions";
+
+function maskCNJ(raw: string): string {
+  const d = (raw ?? "").replace(/\D/g, "").slice(0, 20);
+  const p = [
+    d.slice(0, 7),
+    d.slice(7, 9),
+    d.slice(9, 13),
+    d.slice(13, 14),
+    d.slice(14, 16),
+    d.slice(16, 20),
+  ];
+  let out = p[0];
+  if (d.length > 7) out += "-" + p[1];
+  if (d.length > 9) out += "." + p[2];
+  if (d.length > 13) out += "." + p[3];
+  if (d.length > 14) out += "." + p[4];
+  if (d.length > 16) out += "." + p[5];
+  return out;
+}
 
 export const Route = createFileRoute("/_authenticated/processos")({
   head: () => ({ meta: [{ title: "Gestão Processual — Advora" }] }),
