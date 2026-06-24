@@ -16,7 +16,6 @@ import {
   Loader2,
   MessageSquare,
   ShieldCheck,
-  Sparkles,
   Globe,
   ExternalLink,
   Zap,
