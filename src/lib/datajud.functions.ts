@@ -41,13 +41,69 @@ function tribunalAlias(segmento: string, tribunal: string): string | null {
   return null;
 }
 
-function parseCNJ(raw: string): { clean: string; segmento: string; tribunal: string } | null {
-  const clean = raw.replace(/\D/g, "");
-  if (clean.length !== 20) return null;
+export type CNJValidation =
+  | { ok: true; clean: string; formatted: string; segmento: string; tribunal: string; ano: string }
+  | { ok: false; reason: "EMPTY" | "LENGTH" | "YEAR" | "SEGMENT" | "DV"; message: string };
+
+export function validateCNJ(raw: string): CNJValidation {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return { ok: false, reason: "EMPTY", message: "Informe o número CNJ do processo." };
+  const clean = trimmed.replace(/\D/g, "");
+  if (clean.length !== 20) {
+    return {
+      ok: false,
+      reason: "LENGTH",
+      message: `Número CNJ deve ter 20 dígitos (recebi ${clean.length}). Formato: NNNNNNN-DD.AAAA.J.TT.OOOO`,
+    };
+  }
   // NNNNNNN DD AAAA J TT OOOO
+  const numero = clean.slice(0, 7);
+  const dv = clean.slice(7, 9);
+  const ano = clean.slice(9, 13);
   const segmento = clean.slice(13, 14);
   const tribunal = clean.slice(14, 16);
-  return { clean, segmento, tribunal };
+  const origem = clean.slice(16, 20);
+
+  const anoNum = Number(ano);
+  const yearNow = new Date().getFullYear();
+  if (anoNum < 1900 || anoNum > yearNow + 1) {
+    return { ok: false, reason: "YEAR", message: `Ano do processo inválido (${ano}).` };
+  }
+  if (!"1234567 8 9".includes(segmento) || segmento === "0" || segmento === " ") {
+    // segmento válido: 1..9 (oficialmente 1..8, 9 reservado)
+  }
+  if (!/^[1-9]$/.test(segmento)) {
+    return { ok: false, reason: "SEGMENT", message: `Segmento do Judiciário inválido (${segmento}).` };
+  }
+
+  // Verificador DV (módulo 97 base 10) — Resolução CNJ nº 65/2008
+  // N = NNNNNNN AAAA J TT OOOO  ; DV = 98 - (N * 100 mod 97)
+  try {
+    const concat = `${numero}${ano}${segmento}${tribunal}${origem}`;
+    // Big int mod 97 sem BigInt para compatibilidade ampla:
+    let mod = 0;
+    for (const ch of concat) mod = (mod * 10 + (ch.charCodeAt(0) - 48)) % 97;
+    mod = (mod * 100) % 97;
+    const expected = 98 - mod;
+    if (expected !== Number(dv)) {
+      return {
+        ok: false,
+        reason: "DV",
+        message: `Dígitos verificadores não conferem. Confira a digitação do número CNJ.`,
+      };
+    }
+  } catch {
+    // se algo der errado no cálculo, segue sem bloquear
+  }
+
+  const formatted = `${numero}-${dv}.${ano}.${segmento}.${tribunal}.${origem}`;
+  return { ok: true, clean, formatted, segmento, tribunal, ano };
+}
+
+function parseCNJ(raw: string): { clean: string; segmento: string; tribunal: string } | null {
+  const v = validateCNJ(raw);
+  if (!v.ok) return null;
+  return { clean: v.clean, segmento: v.segmento, tribunal: v.tribunal };
 }
 
 export type DataJudMovimento = {
