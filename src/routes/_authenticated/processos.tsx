@@ -219,10 +219,16 @@ function Processos() {
   const [movements, setMovements] = useState<Movement[]>([]);
 
   async function importFromCNJ() {
-    if (!form.number.trim()) return toast.error("Informe o número CNJ.");
+    const v = validateCNJ(form.number);
+    if (!v.ok) {
+      toast.error("Número CNJ inválido", { description: v.message });
+      return;
+    }
+    // normaliza visualmente
+    setForm(f => ({ ...f, number: v.formatted }));
     setLookupLoading(true);
     try {
-      const r = await lookupFn({ data: { numero: form.number } });
+      const r = await lookupFn({ data: { numero: v.clean } });
       setForm(f => ({
         ...f,
         number: r.number,
@@ -230,10 +236,14 @@ function Processos() {
         court: r.court ?? f.court,
       }));
       toast.success(`Encontrado em ${r.tribunal}`, {
-        description: `${r.movements.length} movimentações disponíveis. As partes/timeline serão importadas ao salvar.`,
+        description: `${r.movements.length} movimentações disponíveis. Serão importadas ao salvar.`,
       });
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Falha ao consultar DataJud");
+      const msg = e instanceof Error ? e.message : "Falha ao consultar DataJud";
+      const notFound = /n[aã]o encontrado/i.test(msg);
+      toast.error(notFound ? "Processo não encontrado" : "Não foi possível consultar o DataJud", {
+        description: msg,
+      });
     } finally {
       setLookupLoading(false);
     }
