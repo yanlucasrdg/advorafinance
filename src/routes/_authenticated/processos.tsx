@@ -22,7 +22,26 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
-import { lookupDatajud, syncCaseMovements } from "@/lib/datajud.functions";
+import { lookupDatajud, syncCaseMovements, validateCNJ } from "@/lib/datajud.functions";
+
+function maskCNJ(raw: string): string {
+  const d = (raw ?? "").replace(/\D/g, "").slice(0, 20);
+  const p = [
+    d.slice(0, 7),
+    d.slice(7, 9),
+    d.slice(9, 13),
+    d.slice(13, 14),
+    d.slice(14, 16),
+    d.slice(16, 20),
+  ];
+  let out = p[0];
+  if (d.length > 7) out += "-" + p[1];
+  if (d.length > 9) out += "." + p[2];
+  if (d.length > 13) out += "." + p[3];
+  if (d.length > 14) out += "." + p[4];
+  if (d.length > 16) out += "." + p[5];
+  return out;
+}
 
 export const Route = createFileRoute("/_authenticated/processos")({
   head: () => ({ meta: [{ title: "Gestão Processual — Advora" }] }),
@@ -200,10 +219,16 @@ function Processos() {
   const [movements, setMovements] = useState<Movement[]>([]);
 
   async function importFromCNJ() {
-    if (!form.number.trim()) return toast.error("Informe o número CNJ.");
+    const v = validateCNJ(form.number);
+    if (!v.ok) {
+      toast.error("Número CNJ inválido", { description: v.message });
+      return;
+    }
+    // normaliza visualmente
+    setForm(f => ({ ...f, number: v.formatted }));
     setLookupLoading(true);
     try {
-      const r = await lookupFn({ data: { numero: form.number } });
+      const r = await lookupFn({ data: { numero: v.clean } });
       setForm(f => ({
         ...f,
         number: r.number,
@@ -211,10 +236,14 @@ function Processos() {
         court: r.court ?? f.court,
       }));
       toast.success(`Encontrado em ${r.tribunal}`, {
-        description: `${r.movements.length} movimentações disponíveis. As partes/timeline serão importadas ao salvar.`,
+        description: `${r.movements.length} movimentações disponíveis. Serão importadas ao salvar.`,
       });
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Falha ao consultar DataJud");
+      const msg = e instanceof Error ? e.message : "Falha ao consultar DataJud";
+      const notFound = /n[aã]o encontrado/i.test(msg);
+      toast.error(notFound ? "Processo não encontrado" : "Não foi possível consultar o DataJud", {
+        description: msg,
+      });
     } finally {
       setLookupLoading(false);
     }
@@ -330,7 +359,7 @@ function Processos() {
                     <div>
                       <Label>Número CNJ</Label>
                       <div className="flex gap-1.5">
-                        <Input value={form.number} onChange={e => setForm({ ...form, number: e.target.value })} placeholder="0000000-00.0000.0.00.0000" />
+                        <Input value={form.number} onChange={e => setForm({ ...form, number: maskCNJ(e.target.value) })} placeholder="0000000-00.0000.0.00.0000" inputMode="numeric" maxLength={25} />
                         <Button type="button" variant="outline" size="icon" className="shrink-0" title="Buscar no DataJud (CNJ)" onClick={importFromCNJ} disabled={lookupLoading}>
                           {lookupLoading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
                         </Button>

@@ -41,13 +41,69 @@ function tribunalAlias(segmento: string, tribunal: string): string | null {
   return null;
 }
 
-function parseCNJ(raw: string): { clean: string; segmento: string; tribunal: string } | null {
-  const clean = raw.replace(/\D/g, "");
-  if (clean.length !== 20) return null;
+export type CNJValidation =
+  | { ok: true; clean: string; formatted: string; segmento: string; tribunal: string; ano: string }
+  | { ok: false; reason: "EMPTY" | "LENGTH" | "YEAR" | "SEGMENT" | "DV"; message: string };
+
+export function validateCNJ(raw: string): CNJValidation {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return { ok: false, reason: "EMPTY", message: "Informe o número CNJ do processo." };
+  const clean = trimmed.replace(/\D/g, "");
+  if (clean.length !== 20) {
+    return {
+      ok: false,
+      reason: "LENGTH",
+      message: `Número CNJ deve ter 20 dígitos (recebi ${clean.length}). Formato: NNNNNNN-DD.AAAA.J.TT.OOOO`,
+    };
+  }
   // NNNNNNN DD AAAA J TT OOOO
+  const numero = clean.slice(0, 7);
+  const dv = clean.slice(7, 9);
+  const ano = clean.slice(9, 13);
   const segmento = clean.slice(13, 14);
   const tribunal = clean.slice(14, 16);
-  return { clean, segmento, tribunal };
+  const origem = clean.slice(16, 20);
+
+  const anoNum = Number(ano);
+  const yearNow = new Date().getFullYear();
+  if (anoNum < 1900 || anoNum > yearNow + 1) {
+    return { ok: false, reason: "YEAR", message: `Ano do processo inválido (${ano}).` };
+  }
+  if (!"1234567 8 9".includes(segmento) || segmento === "0" || segmento === " ") {
+    // segmento válido: 1..9 (oficialmente 1..8, 9 reservado)
+  }
+  if (!/^[1-9]$/.test(segmento)) {
+    return { ok: false, reason: "SEGMENT", message: `Segmento do Judiciário inválido (${segmento}).` };
+  }
+
+  // Verificador DV (módulo 97 base 10) — Resolução CNJ nº 65/2008
+  // N = NNNNNNN AAAA J TT OOOO  ; DV = 98 - (N * 100 mod 97)
+  try {
+    const concat = `${numero}${ano}${segmento}${tribunal}${origem}`;
+    // Big int mod 97 sem BigInt para compatibilidade ampla:
+    let mod = 0;
+    for (const ch of concat) mod = (mod * 10 + (ch.charCodeAt(0) - 48)) % 97;
+    mod = (mod * 100) % 97;
+    const expected = 98 - mod;
+    if (expected !== Number(dv)) {
+      return {
+        ok: false,
+        reason: "DV",
+        message: `Dígitos verificadores não conferem. Confira a digitação do número CNJ.`,
+      };
+    }
+  } catch {
+    // se algo der errado no cálculo, segue sem bloquear
+  }
+
+  const formatted = `${numero}-${dv}.${ano}.${segmento}.${tribunal}.${origem}`;
+  return { ok: true, clean, formatted, segmento, tribunal, ano };
+}
+
+function parseCNJ(raw: string): { clean: string; segmento: string; tribunal: string } | null {
+  const v = validateCNJ(raw);
+  if (!v.ok) return null;
+  return { clean: v.clean, segmento: v.segmento, tribunal: v.tribunal };
 }
 
 export type DataJudMovimento = {
@@ -71,27 +127,54 @@ export type DataJudResult = {
 };
 
 async function fetchFromDataJud(numero: string): Promise<DataJudResult> {
-  const parsed = parseCNJ(numero);
-  if (!parsed) throw new Error("Número CNJ inválido. Use o formato NNNNNNN-DD.AAAA.J.TT.OOOO.");
-  const alias = tribunalAlias(parsed.segmento, parsed.tribunal);
-  if (!alias) throw new Error("Tribunal não suportado pelo DataJud público para este número.");
-
-  const res = await fetch(`${DATAJUD_BASE}/${alias}/_search`, {
-    method: "POST",
-    headers: {
-      "Authorization": `APIKey ${DATAJUD_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query: { match: { numeroProcesso: parsed.clean } } }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Falha DataJud (${res.status}). ${text.slice(0, 120)}`);
+  const v = validateCNJ(numero);
+  if (!v.ok) throw new Error(v.message);
+  const alias = tribunalAlias(v.segmento, v.tribunal);
+  if (!alias) {
+    throw new Error(
+      `Tribunal não suportado pelo DataJud público (segmento ${v.segmento}, tribunal ${v.tribunal}). ` +
+      `Verifique se o número está correto.`
+    );
   }
-  const json = (await res.json()) as any;
+
+  let res: Response;
+  try {
+    res = await fetch(`${DATAJUD_BASE}/${alias}/_search`, {
+      method: "POST",
+      headers: {
+        "Authorization": `APIKey ${DATAJUD_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query: { match: { numeroProcesso: v.clean } } }),
+    });
+  } catch {
+    throw new Error("Não foi possível conectar ao DataJud (CNJ). Tente novamente em instantes.");
+  }
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error("DataJud recusou a autenticação. A chave pública pode estar temporariamente indisponível.");
+  }
+  if (res.status === 429) {
+    throw new Error("Muitas consultas ao DataJud em pouco tempo. Aguarde alguns segundos e tente de novo.");
+  }
+  if (res.status >= 500) {
+    throw new Error(`O DataJud está instável no momento (HTTP ${res.status}). Tente novamente em alguns minutos.`);
+  }
+  if (!res.ok) {
+    throw new Error(`Falha ao consultar o DataJud (HTTP ${res.status}).`);
+  }
+
+  let json: any;
+  try { json = await res.json(); }
+  catch { throw new Error("Resposta inválida do DataJud. Tente novamente."); }
+
   const hit = json?.hits?.hits?.[0]?._source;
-  if (!hit) throw new Error("Processo não encontrado no DataJud.");
+  if (!hit) {
+    throw new Error(
+      `Processo ${v.formatted} não encontrado no tribunal correspondente. ` +
+      `Confira o número, o tribunal pode ainda não tê-lo publicado no DataJud.`
+    );
+  }
 
   const movimentos: DataJudMovimento[] = Array.isArray(hit.movimentos)
     ? hit.movimentos.map((m: any) => ({
@@ -106,7 +189,7 @@ async function fetchFromDataJud(numero: string): Promise<DataJudResult> {
   movimentos.sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
 
   return {
-    number: parsed.clean,
+    number: v.clean,
     tribunal: hit.tribunal ?? alias.replace("api_publica_", "").toUpperCase(),
     alias,
     court: hit.orgaoJulgador?.nome ?? null,
