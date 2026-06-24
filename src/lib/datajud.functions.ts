@@ -189,7 +189,7 @@ async function fetchFromDataJud(numero: string): Promise<DataJudResult> {
   movimentos.sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
 
   return {
-    number: parsed.clean,
+    number: v.clean,
     tribunal: hit.tribunal ?? alias.replace("api_publica_", "").toUpperCase(),
     alias,
     court: hit.orgaoJulgador?.nome ?? null,
