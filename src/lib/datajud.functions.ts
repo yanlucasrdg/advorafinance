@@ -127,27 +127,54 @@ export type DataJudResult = {
 };
 
 async function fetchFromDataJud(numero: string): Promise<DataJudResult> {
-  const parsed = parseCNJ(numero);
-  if (!parsed) throw new Error("Número CNJ inválido. Use o formato NNNNNNN-DD.AAAA.J.TT.OOOO.");
-  const alias = tribunalAlias(parsed.segmento, parsed.tribunal);
-  if (!alias) throw new Error("Tribunal não suportado pelo DataJud público para este número.");
-
-  const res = await fetch(`${DATAJUD_BASE}/${alias}/_search`, {
-    method: "POST",
-    headers: {
-      "Authorization": `APIKey ${DATAJUD_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query: { match: { numeroProcesso: parsed.clean } } }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Falha DataJud (${res.status}). ${text.slice(0, 120)}`);
+  const v = validateCNJ(numero);
+  if (!v.ok) throw new Error(v.message);
+  const alias = tribunalAlias(v.segmento, v.tribunal);
+  if (!alias) {
+    throw new Error(
+      `Tribunal não suportado pelo DataJud público (segmento ${v.segmento}, tribunal ${v.tribunal}). ` +
+      `Verifique se o número está correto.`
+    );
   }
-  const json = (await res.json()) as any;
+
+  let res: Response;
+  try {
+    res = await fetch(`${DATAJUD_BASE}/${alias}/_search`, {
+      method: "POST",
+      headers: {
+        "Authorization": `APIKey ${DATAJUD_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query: { match: { numeroProcesso: v.clean } } }),
+    });
+  } catch {
+    throw new Error("Não foi possível conectar ao DataJud (CNJ). Tente novamente em instantes.");
+  }
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error("DataJud recusou a autenticação. A chave pública pode estar temporariamente indisponível.");
+  }
+  if (res.status === 429) {
+    throw new Error("Muitas consultas ao DataJud em pouco tempo. Aguarde alguns segundos e tente de novo.");
+  }
+  if (res.status >= 500) {
+    throw new Error(`O DataJud está instável no momento (HTTP ${res.status}). Tente novamente em alguns minutos.`);
+  }
+  if (!res.ok) {
+    throw new Error(`Falha ao consultar o DataJud (HTTP ${res.status}).`);
+  }
+
+  let json: any;
+  try { json = await res.json(); }
+  catch { throw new Error("Resposta inválida do DataJud. Tente novamente."); }
+
   const hit = json?.hits?.hits?.[0]?._source;
-  if (!hit) throw new Error("Processo não encontrado no DataJud.");
+  if (!hit) {
+    throw new Error(
+      `Processo ${v.formatted} não encontrado no tribunal correspondente. ` +
+      `Confira o número, o tribunal pode ainda não tê-lo publicado no DataJud.`
+    );
+  }
 
   const movimentos: DataJudMovimento[] = Array.isArray(hit.movimentos)
     ? hit.movimentos.map((m: any) => ({
