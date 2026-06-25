@@ -200,41 +200,44 @@ function Dashboard() {
   const pieColors = ["#7C5CFF", "#4F7CFF", "#00D26A", "#FFB547", "#FF5C5C"];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1400px] mx-auto">
-      {/* Greeting */}
-      <header className="flex flex-wrap items-end justify-between gap-4 animate-fade-up">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1440px] mx-auto">
+      {/* Hero */}
+      <header className="flex flex-wrap items-end justify-between gap-6 animate-fade-up">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground uppercase tracking-[0.16em]">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
-            Sistema operacional
+          <div className="inline-flex items-center gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em]">
+            <span className="size-1.5 rounded-full bg-success animate-pulse-soft" />
+            Sistema operacional · {firstName}
           </div>
-          <h1 className="text-[22px] sm:text-[28px] leading-tight font-bold tracking-tight mt-2 truncate">
-            Olá, {firstName} <span className="inline-block animate-fade-in-soft">👋</span>
+          <h1 className="text-[28px] sm:text-[32px] leading-[1.1] font-bold tracking-tight mt-2 text-foreground">
+            Centro de Operações
           </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Você está no controle hoje, {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}.
+          <p className="text-sm text-muted-foreground mt-1.5 max-w-xl">
+            Visão consolidada da operação jurídica · {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
           </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card">
+            <span className="size-1.5 rounded-full bg-success" /> Operacional
+          </span>
         </div>
       </header>
 
       {/* KPIs */}
-      <section className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+      <section className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {kpis.map(k => (
-          <div key={k.label} className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-b from-white/[0.03] to-white/[0.01] p-5 hover-lift">
-            <div className={`absolute inset-0 bg-gradient-to-br ${k.tint} opacity-50 pointer-events-none`} />
-            <div className="absolute -top-12 -right-12 size-32 rounded-full bg-primary/5 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <div key={k.label} className="group relative overflow-hidden rounded-2xl border border-border bg-card p-5 hover-lift min-h-[120px]">
             <div className="relative flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">{k.label}</p>
+              <div className="min-w-0 flex-1 space-y-2">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">{k.label}</p>
                 {k.value === null ? (
                   <div className="h-7 w-28 skeleton" />
                 ) : (
-                  <p className="text-[22px] font-bold tracking-tight tabular-nums truncate leading-none">{k.value}</p>
+                  <p className="text-[24px] font-bold tracking-tight tabular-nums truncate leading-none text-foreground">{k.value}</p>
                 )}
                 {k.delta && (
-                  <div className="flex items-center gap-1.5 text-[11px] pt-1">
-                    <span className={`inline-flex items-center gap-0.5 font-medium tabular-nums ${
-                      k.deltaUp === true ? "text-emerald-400" : k.deltaUp === false ? "text-rose-400" : "text-muted-foreground"
+                  <div className="flex items-center gap-1.5 text-[11px] pt-0.5">
+                    <span className={`inline-flex items-center gap-0.5 font-semibold tabular-nums px-1.5 py-0.5 rounded-md ${
+                      k.deltaUp === true ? "text-success bg-success/10" : k.deltaUp === false ? "text-destructive bg-destructive/10" : "text-muted-foreground bg-secondary"
                     }`}>
                       {k.deltaUp === true && <TrendingUp className="size-3" />}
                       {k.deltaUp === false && <TrendingDown className="size-3" />}
@@ -244,13 +247,14 @@ function Dashboard() {
                   </div>
                 )}
               </div>
-              <div className={`size-10 rounded-xl ${k.iconBg} grid place-items-center shrink-0 ring-1 ring-white/5`}>
-                <k.icon className={`size-[18px] ${k.iconColor}`} />
+              <div className={`size-10 rounded-xl ${k.iconBg} grid place-items-center shrink-0`}>
+                <k.icon className={`size-[18px] ${k.iconColor}`} strokeWidth={2} />
               </div>
             </div>
           </div>
         ))}
       </section>
+
 
       {/* Próximos Prazos + Processos Recentes */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-up">
