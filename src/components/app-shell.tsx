@@ -1,25 +1,53 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, Briefcase, Calendar, DollarSign, BarChart3,
-  MessageSquare, Zap, Plug, Settings, LogOut, Search, Bell, Sparkles, Command, Menu, X,
+  MessageSquare, Zap, Plug, Settings, LogOut, Search, Bell, Sparkles,
+  Command, Menu, X, ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import advoraLogo from "@/assets/advora-logo.png.asset.json";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-const nav = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/crm", label: "CRM", icon: Users },
-  { to: "/processos", label: "Processos", icon: Briefcase },
-  { to: "/agenda", label: "Agenda", icon: Calendar },
-  { to: "/financeiro", label: "Financeiro", icon: DollarSign },
-  { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
-  { to: "/comunicacoes", label: "Comunicações", icon: MessageSquare },
-  { to: "/automacoes", label: "Automações", icon: Zap },
-  { to: "/integracoes", label: "Integrações", icon: Plug },
-  { to: "/config", label: "Configurações", icon: Settings },
+type NavItem = { to: string; label: string; icon: typeof LayoutDashboard };
+type NavGroup = { title: string; items: NavItem[] };
+
+const navGroups: NavGroup[] = [
+  {
+    title: "Gestão",
+    items: [
+      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/crm", label: "CRM", icon: Users },
+      { to: "/processos", label: "Processos", icon: Briefcase },
+      { to: "/agenda", label: "Agenda", icon: Calendar },
+    ],
+  },
+  {
+    title: "Financeiro",
+    items: [
+      { to: "/financeiro", label: "Financeiro", icon: DollarSign },
+      { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "Comunicação",
+    items: [
+      { to: "/comunicacoes", label: "Comunicações", icon: MessageSquare },
+      { to: "/automacoes", label: "Automações", icon: Zap },
+    ],
+  },
+  {
+    title: "Sistema",
+    items: [
+      { to: "/integracoes", label: "Integrações", icon: Plug },
+      { to: "/config", label: "Configurações", icon: Settings },
+    ],
+  },
 ];
+
+const labelByPath: Record<string, string> = Object.fromEntries(
+  navGroups.flatMap(g => g.items.map(i => [i.to, i.label]))
+);
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, signOut } = useAuth();
@@ -28,9 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [q, setQ] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // close drawer on route change
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
-  // lock body scroll when drawer open
   useEffect(() => {
     if (!mobileOpen) return;
     const prev = document.body.style.overflow;
@@ -41,20 +67,30 @@ export function AppShell({ children }: { children: ReactNode }) {
   const initials = (profile?.full_name ?? profile?.email ?? "?")
     .split(" ").map(s => s[0]).slice(0, 2).join("").toUpperCase();
 
+  const crumbs = useMemo(() => {
+    const path = location.pathname;
+    const root = "/" + (path.split("/")[1] || "");
+    const label = labelByPath[root] ?? "Workspace";
+    return [{ label: "Advora", to: "/dashboard" }, { label, to: root }];
+  }, [location.pathname]);
+
+  const isActive = (to: string) =>
+    location.pathname === to || location.pathname.startsWith(to + "/");
+
   const SidebarBody = (
     <>
       {/* Brand */}
-      <div className="px-5 py-5 flex items-center gap-3">
-        <div className="size-9 rounded-xl bg-black grid place-items-center ring-1 ring-white/10 shadow-[var(--shadow-glow)] overflow-hidden shrink-0">
-          <img src={advoraLogo.url} alt="Advora" className="size-7 object-contain" />
+      <div className="px-5 h-[72px] flex items-center gap-3 border-b border-sidebar-border">
+        <div className="size-9 rounded-xl bg-foreground grid place-items-center overflow-hidden shrink-0">
+          <img src={advoraLogo.url} alt="Advora" className="size-6 object-contain invert" />
         </div>
-        <div className="leading-tight min-w-0">
-          <div className="text-sm font-semibold tracking-tight gradient-text">Advora</div>
-          <div className="text-[10px] text-muted-foreground/80 font-mono">Legal OS · v2.3.0</div>
+        <div className="leading-tight min-w-0 flex-1">
+          <div className="text-[15px] font-semibold tracking-tight text-foreground">Advora</div>
+          <div className="text-[10px] text-muted-foreground font-medium tracking-wider uppercase">Legal OS</div>
         </div>
         <button
           onClick={() => setMobileOpen(false)}
-          className="ml-auto lg:hidden size-8 grid place-items-center rounded-md text-muted-foreground hover:bg-white/[0.05]"
+          className="lg:hidden size-8 grid place-items-center rounded-md text-muted-foreground hover:bg-secondary"
           aria-label="Fechar menu"
         >
           <X className="size-4" />
@@ -62,44 +98,49 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-        <div className="px-3 mb-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 font-medium">Workspace</div>
-        {nav.map(item => {
-          const active = location.pathname === item.to || location.pathname.startsWith(item.to + "/");
-          return (
-            <Link
-              key={item.to}
-              to={item.to as never}
-              className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${
-                active
-                  ? "bg-primary/12 text-foreground shadow-[inset_0_0_0_1px_oklch(0.70_0.18_285/0.25)]"
-                  : "text-muted-foreground hover:bg-white/[0.03] hover:text-foreground"
-              }`}
-            >
-              {active && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[2px] rounded-r-full bg-primary shadow-[0_0_12px_oklch(0.70_0.18_285/0.7)]" />
-              )}
-              <item.icon className={`size-[16px] shrink-0 ${active ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground"}`} />
-              <span className="font-medium tracking-tight truncate">{item.label}</span>
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
+        {navGroups.map(group => (
+          <div key={group.title}>
+            <div className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
+              {group.title}
+            </div>
+            <div className="space-y-0.5">
+              {group.items.map(item => {
+                const active = isActive(item.to);
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to as never}
+                    className={`group relative flex items-center gap-2.5 rounded-lg px-3 h-9 text-[13.5px] font-medium ${
+                      active
+                        ? "bg-primary-soft text-primary"
+                        : "text-foreground/70 hover:bg-secondary hover:text-foreground"
+                    }`}
+                  >
+                    <item.icon className={`size-[16px] shrink-0 ${active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`} strokeWidth={active ? 2.25 : 1.75} />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* User */}
-      <div className="p-3 border-t border-border/40">
-        <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/[0.03] transition-colors">
-          <Avatar className="size-9 ring-2 ring-primary/30 shrink-0">
+      <div className="p-3 border-t border-sidebar-border">
+        <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-secondary">
+          <Avatar className="size-9 shrink-0">
             {profile?.avatar_url && <AvatarImage src={profile.avatar_url} alt={profile.full_name ?? ""} />}
             <AvatarFallback className="text-xs bg-[image:var(--gradient-brand)] text-white font-semibold">{initials}</AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0 leading-tight">
-            <div className="text-xs font-medium truncate">{profile?.full_name ?? "Usuário"}</div>
-            <div className="text-[10px] text-muted-foreground truncate">{profile?.email}</div>
+            <div className="text-[13px] font-semibold truncate text-foreground">{profile?.full_name ?? "Usuário"}</div>
+            <div className="text-[11px] text-muted-foreground truncate">{profile?.email}</div>
           </div>
           <button
             onClick={async () => { await signOut(); navigate({ to: "/auth" }); }}
-            className="size-7 grid place-items-center rounded-md text-muted-foreground hover:bg-destructive/15 hover:text-destructive shrink-0"
+            className="size-7 grid place-items-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive shrink-0"
             aria-label="Sair"
           >
             <LogOut className="size-3.5" />
@@ -112,21 +153,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-64 shrink-0 border-r border-border/40 flex-col relative">
-        <div className="absolute inset-0 bg-gradient-to-b from-[oklch(0.18_0.02_270)] to-[oklch(0.14_0.012_265)] -z-10" />
+      <aside className="hidden lg:flex w-[260px] shrink-0 border-r border-sidebar-border bg-sidebar flex-col">
         {SidebarBody}
       </aside>
 
       {/* Mobile drawer */}
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex animate-fade-in-soft">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-            aria-hidden
-          />
-          <aside className="relative w-[82%] max-w-[300px] flex flex-col border-r border-border/40 animate-slide-in-left">
-            <div className="absolute inset-0 bg-gradient-to-b from-[oklch(0.18_0.02_270)] to-[oklch(0.14_0.012_265)] -z-10" />
+          <div className="absolute inset-0 bg-foreground/30 backdrop-blur-sm" onClick={() => setMobileOpen(false)} aria-hidden />
+          <aside className="relative w-[82%] max-w-[300px] flex flex-col border-r border-sidebar-border bg-sidebar animate-slide-in-left">
             {SidebarBody}
           </aside>
         </div>
@@ -134,41 +169,60 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 sm:h-16 border-b border-border/40 backdrop-blur-xl bg-background/60 flex items-center gap-2 sm:gap-3 px-3 sm:px-6 sticky top-0 z-30">
+        <header className="h-[72px] border-b border-border bg-background/85 backdrop-blur-xl flex items-center gap-3 px-4 sm:px-6 sticky top-0 z-30">
           <button
             onClick={() => setMobileOpen(true)}
-            className="lg:hidden size-9 grid place-items-center rounded-lg text-muted-foreground hover:bg-white/[0.04] hover:text-foreground shrink-0"
+            className="lg:hidden size-9 grid place-items-center rounded-lg text-muted-foreground hover:bg-secondary shrink-0"
             aria-label="Abrir menu"
           >
             <Menu className="size-5" />
           </button>
 
-          {/* Search */}
-          <div className="flex items-center gap-2.5 max-w-xl flex-1 min-w-0 h-9 sm:h-10 px-3 sm:px-3.5 rounded-lg border border-border/60 bg-white/[0.02] hover:bg-white/[0.04] focus-within:bg-white/[0.05] focus-within:border-primary/40 focus-within:shadow-[0_0_0_3px_oklch(0.70_0.18_285/0.12)]">
-            <Search className="size-4 text-muted-foreground/70 shrink-0" />
+          {/* Breadcrumb */}
+          <nav className="hidden sm:flex items-center gap-1.5 text-[13px] min-w-0 shrink-0">
+            {crumbs.map((c, i) => (
+              <span key={c.to} className="inline-flex items-center gap-1.5">
+                {i > 0 && <ChevronRight className="size-3.5 text-muted-foreground/60" />}
+                <Link
+                  to={c.to as never}
+                  className={i === crumbs.length - 1 ? "font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"}
+                >
+                  {c.label}
+                </Link>
+              </span>
+            ))}
+          </nav>
+
+          {/* Search (centered) */}
+          <div className="flex items-center gap-2.5 max-w-[480px] flex-1 min-w-0 mx-auto h-10 px-3.5 rounded-xl border border-border bg-card hover:border-foreground/15 focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_oklch(0.555_0.225_280/0.12)]">
+            <Search className="size-[15px] text-muted-foreground shrink-0" />
             <input
               value={q}
               onChange={e => setQ(e.target.value)}
-              placeholder="Buscar..."
-              className="bg-transparent flex-1 min-w-0 outline-none text-sm placeholder:text-muted-foreground/60"
+              placeholder="Buscar processos, clientes, documentos…"
+              className="bg-transparent flex-1 min-w-0 outline-none text-[13.5px] placeholder:text-muted-foreground"
             />
-            <kbd className="hidden md:inline-flex items-center gap-1 px-1.5 h-5 rounded border border-border/60 bg-white/[0.04] text-[10px] font-mono text-muted-foreground shrink-0">
+            <kbd className="hidden md:inline-flex items-center gap-0.5 px-1.5 h-5 rounded border border-border bg-secondary text-[10px] font-mono text-muted-foreground shrink-0">
               <Command className="size-2.5" /> K
             </kbd>
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-1.5 ml-auto shrink-0">
-            <button className="size-9 grid place-items-center rounded-lg text-muted-foreground hover:bg-white/[0.04] hover:text-foreground relative" aria-label="Notificações">
-              <Bell className="size-4" />
+          <div className="flex items-center gap-1 ml-auto shrink-0">
+            <button className="size-9 grid place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground relative" aria-label="Notificações">
+              <Bell className="size-[16px]" strokeWidth={1.75} />
               <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive ring-2 ring-background" />
             </button>
-            <button className="hidden sm:grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-white/[0.04] hover:text-foreground" aria-label="Configurações" onClick={() => navigate({ to: "/config" })}>
-              <Settings className="size-4" />
+            <button
+              className="hidden sm:grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+              aria-label="Configurações"
+              onClick={() => navigate({ to: "/config" })}
+            >
+              <Settings className="size-[16px]" strokeWidth={1.75} />
             </button>
-            <div className="hidden sm:block w-px h-6 bg-border/60 mx-1" />
+            <div className="hidden sm:block w-px h-6 bg-border mx-1.5" />
             <Link
               to="/copiloto"
-              className="group relative inline-flex items-center gap-2 h-9 px-3 sm:px-4 rounded-lg text-sm font-medium text-white bg-[image:var(--gradient-brand)] shadow-[0_4px_20px_-4px_oklch(0.70_0.18_285/0.55)] hover:shadow-[0_6px_28px_-4px_oklch(0.70_0.18_285/0.75)] hover:-translate-y-px"
+              className="inline-flex items-center gap-2 h-9 px-3.5 rounded-lg text-[13px] font-semibold text-primary-foreground bg-[image:var(--gradient-brand)] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)]"
             >
               <Sparkles className="size-3.5" />
               <span className="hidden sm:inline">Copiloto</span>
