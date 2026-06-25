@@ -387,7 +387,7 @@ function Dashboard() {
                 <XAxis dataKey="month" stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} width={48} />
                 <Tooltip
-                  contentStyle={{ background: "oklch(0.18 0.014 265)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 12, fontSize: 12, padding: "8px 12px" }}
+                  contentStyle={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 12, color: "#111827", boxShadow: "0 8px 24px -8px rgba(17,24,39,0.10)", padding: "8px 12px" }}
                   labelStyle={{ color: "oklch(0.7 0.02 260)", marginBottom: 4 }}
                   formatter={(v: number) => [new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v), "Receita"]}
                   cursor={{ stroke: "oklch(0.70 0.18 285 / 0.4)", strokeWidth: 1, strokeDasharray: "3 3" }}
@@ -429,7 +429,7 @@ function Dashboard() {
                       innerRadius={48}
                       outerRadius={70}
                       paddingAngle={3}
-                      stroke="oklch(0.16 0.012 265)"
+                      stroke="#FFFFFF"
                       strokeWidth={2}
                       isAnimationActive
                       animationDuration={900}
@@ -438,7 +438,7 @@ function Dashboard() {
                       {stats.areaDist.map((_, i) => <Cell key={i} fill={pieColors[i % pieColors.length]} />)}
                     </Pie>
                     <Tooltip
-                      contentStyle={{ background: "oklch(0.18 0.014 265)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 12, fontSize: 12 }}
+                      contentStyle={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 12, color: "#111827", boxShadow: "0 8px 24px -8px rgba(17,24,39,0.10)" }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -483,7 +483,7 @@ function Dashboard() {
                 <YAxis stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip
                   cursor={{ fill: "oklch(1 0 0 / 0.04)" }}
-                  contentStyle={{ background: "oklch(0.18 0.014 265)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 12, fontSize: 12 }}
+                  contentStyle={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 12, color: "#111827", boxShadow: "0 8px 24px -8px rgba(17,24,39,0.10)" }}
                 />
                 <Bar dataKey="count" fill="url(#barGrad)" radius={[6, 6, 0, 0]} isAnimationActive animationDuration={900} animationEasing="ease-out" />
               </BarChart>
@@ -509,7 +509,7 @@ function Dashboard() {
             { icon: Activity, bg: "bg-violet-500/10", ring: "ring-violet-500/20", fg: "text-violet-400", title: "Produtividade", body: stats ? `Você concluiu ${stats.doneLast7} atividades nos últimos 7 dias.` : "Calculando…" },
             { icon: Target, bg: "bg-sky-500/10", ring: "ring-sky-500/20", fg: "text-sky-400", title: "Clientes ativos", body: stats ? `Você possui ${stats.clients} clientes ativos no sistema.` : "Calculando…" },
           ].map(i => (
-            <div key={i.title} className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-b from-white/[0.03] to-white/[0.01] p-5 hover-lift">
+            <div key={i.title} className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-b bg-card p-5 hover-lift">
               <div className={`size-9 rounded-lg grid place-items-center mb-3 ring-1 ${i.bg} ${i.ring}`}>
                 <i.icon className={`size-4 ${i.fg}`} />
               </div>
