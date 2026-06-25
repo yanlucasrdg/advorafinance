@@ -148,9 +148,9 @@ function Dashboard() {
       deltaUp: revDelta >= 0,
       sub: "vs mês anterior",
       icon: DollarSign,
-      tint: "from-emerald-500/15 to-emerald-500/0",
-      iconColor: "text-emerald-400",
-      iconBg: "bg-emerald-500/10",
+      tint: "",
+      iconColor: "text-success",
+      iconBg: "bg-success/10",
     },
     {
       label: "A Receber",
@@ -158,9 +158,9 @@ function Dashboard() {
       delta: stats ? `${stats.receivableCount}` : null,
       sub: "títulos pendentes",
       icon: TrendingUp,
-      tint: "from-amber-500/15 to-amber-500/0",
-      iconColor: "text-amber-400",
-      iconBg: "bg-amber-500/10",
+      tint: "",
+      iconColor: "text-warning",
+      iconBg: "bg-warning/10",
     },
     {
       label: "Processos Ativos",
@@ -169,7 +169,7 @@ function Dashboard() {
       deltaUp: true,
       sub: "últimos 30 dias",
       icon: Briefcase,
-      tint: "from-violet-500/15 to-violet-500/0",
+      tint: "",
       iconColor: "text-primary",
       iconBg: "bg-primary/10",
     },
@@ -180,9 +180,9 @@ function Dashboard() {
       deltaUp: true,
       sub: "novos no mês",
       icon: Users,
-      tint: "from-sky-500/15 to-sky-500/0",
-      iconColor: "text-sky-400",
-      iconBg: "bg-sky-500/10",
+      tint: "",
+      iconColor: "text-[color:oklch(0.55_0.18_240)]",
+      iconBg: "bg-[oklch(0.55_0.18_240/0.10)]",
     },
     {
       label: "Prazos a vencer",
@@ -191,13 +191,14 @@ function Dashboard() {
       deltaUp: false,
       sub: "próximos 7 dias",
       icon: Clock,
-      tint: "from-rose-500/15 to-rose-500/0",
-      iconColor: "text-rose-400",
-      iconBg: "bg-rose-500/10",
+      tint: "",
+      iconColor: "text-destructive",
+      iconBg: "bg-destructive/10",
     },
   ];
 
-  const pieColors = ["#7C5CFF", "#4F7CFF", "#00D26A", "#FFB547", "#FF5C5C"];
+  const pieColors = ["#5B4CF0", "#7C6BFF", "#16A34A", "#F59E0B", "#DC2626"];
+
 
   return (
     <div className="p-6 lg:p-8 space-y-8 max-w-[1440px] mx-auto">
