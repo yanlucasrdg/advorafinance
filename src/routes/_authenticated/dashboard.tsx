@@ -148,9 +148,9 @@ function Dashboard() {
       deltaUp: revDelta >= 0,
       sub: "vs mês anterior",
       icon: DollarSign,
-      tint: "from-emerald-500/15 to-emerald-500/0",
-      iconColor: "text-emerald-400",
-      iconBg: "bg-emerald-500/10",
+      tint: "",
+      iconColor: "text-success",
+      iconBg: "bg-success/10",
     },
     {
       label: "A Receber",
@@ -158,9 +158,9 @@ function Dashboard() {
       delta: stats ? `${stats.receivableCount}` : null,
       sub: "títulos pendentes",
       icon: TrendingUp,
-      tint: "from-amber-500/15 to-amber-500/0",
-      iconColor: "text-amber-400",
-      iconBg: "bg-amber-500/10",
+      tint: "",
+      iconColor: "text-warning",
+      iconBg: "bg-warning/10",
     },
     {
       label: "Processos Ativos",
@@ -169,7 +169,7 @@ function Dashboard() {
       deltaUp: true,
       sub: "últimos 30 dias",
       icon: Briefcase,
-      tint: "from-violet-500/15 to-violet-500/0",
+      tint: "",
       iconColor: "text-primary",
       iconBg: "bg-primary/10",
     },
@@ -180,9 +180,9 @@ function Dashboard() {
       deltaUp: true,
       sub: "novos no mês",
       icon: Users,
-      tint: "from-sky-500/15 to-sky-500/0",
-      iconColor: "text-sky-400",
-      iconBg: "bg-sky-500/10",
+      tint: "",
+      iconColor: "text-[color:oklch(0.55_0.18_240)]",
+      iconBg: "bg-[oklch(0.55_0.18_240/0.10)]",
     },
     {
       label: "Prazos a vencer",
@@ -191,50 +191,54 @@ function Dashboard() {
       deltaUp: false,
       sub: "próximos 7 dias",
       icon: Clock,
-      tint: "from-rose-500/15 to-rose-500/0",
-      iconColor: "text-rose-400",
-      iconBg: "bg-rose-500/10",
+      tint: "",
+      iconColor: "text-destructive",
+      iconBg: "bg-destructive/10",
     },
   ];
 
-  const pieColors = ["#7C5CFF", "#4F7CFF", "#00D26A", "#FFB547", "#FF5C5C"];
+  const pieColors = ["#5B4CF0", "#7C6BFF", "#16A34A", "#F59E0B", "#DC2626"];
+
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1400px] mx-auto">
-      {/* Greeting */}
-      <header className="flex flex-wrap items-end justify-between gap-4 animate-fade-up">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1440px] mx-auto">
+      {/* Hero */}
+      <header className="flex flex-wrap items-end justify-between gap-6 animate-fade-up">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground uppercase tracking-[0.16em]">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
-            Sistema operacional
+          <div className="inline-flex items-center gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em]">
+            <span className="size-1.5 rounded-full bg-success animate-pulse-soft" />
+            Sistema operacional · {firstName}
           </div>
-          <h1 className="text-[22px] sm:text-[28px] leading-tight font-bold tracking-tight mt-2 truncate">
-            Olá, {firstName} <span className="inline-block animate-fade-in-soft">👋</span>
+          <h1 className="text-[28px] sm:text-[32px] leading-[1.1] font-bold tracking-tight mt-2 text-foreground">
+            Centro de Operações
           </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Você está no controle hoje, {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}.
+          <p className="text-sm text-muted-foreground mt-1.5 max-w-xl">
+            Visão consolidada da operação jurídica · {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
           </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-card">
+            <span className="size-1.5 rounded-full bg-success" /> Operacional
+          </span>
         </div>
       </header>
 
       {/* KPIs */}
-      <section className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+      <section className="stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {kpis.map(k => (
-          <div key={k.label} className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-b from-white/[0.03] to-white/[0.01] p-5 hover-lift">
-            <div className={`absolute inset-0 bg-gradient-to-br ${k.tint} opacity-50 pointer-events-none`} />
-            <div className="absolute -top-12 -right-12 size-32 rounded-full bg-primary/5 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <div key={k.label} className="group relative overflow-hidden rounded-2xl border border-border bg-card p-5 hover-lift min-h-[120px]">
             <div className="relative flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">{k.label}</p>
+              <div className="min-w-0 flex-1 space-y-2">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">{k.label}</p>
                 {k.value === null ? (
                   <div className="h-7 w-28 skeleton" />
                 ) : (
-                  <p className="text-[22px] font-bold tracking-tight tabular-nums truncate leading-none">{k.value}</p>
+                  <p className="text-[24px] font-bold tracking-tight tabular-nums truncate leading-none text-foreground">{k.value}</p>
                 )}
                 {k.delta && (
-                  <div className="flex items-center gap-1.5 text-[11px] pt-1">
-                    <span className={`inline-flex items-center gap-0.5 font-medium tabular-nums ${
-                      k.deltaUp === true ? "text-emerald-400" : k.deltaUp === false ? "text-rose-400" : "text-muted-foreground"
+                  <div className="flex items-center gap-1.5 text-[11px] pt-0.5">
+                    <span className={`inline-flex items-center gap-0.5 font-semibold tabular-nums px-1.5 py-0.5 rounded-md ${
+                      k.deltaUp === true ? "text-success bg-success/10" : k.deltaUp === false ? "text-destructive bg-destructive/10" : "text-muted-foreground bg-secondary"
                     }`}>
                       {k.deltaUp === true && <TrendingUp className="size-3" />}
                       {k.deltaUp === false && <TrendingDown className="size-3" />}
@@ -244,13 +248,14 @@ function Dashboard() {
                   </div>
                 )}
               </div>
-              <div className={`size-10 rounded-xl ${k.iconBg} grid place-items-center shrink-0 ring-1 ring-white/5`}>
-                <k.icon className={`size-[18px] ${k.iconColor}`} />
+              <div className={`size-10 rounded-xl ${k.iconBg} grid place-items-center shrink-0`}>
+                <k.icon className={`size-[18px] ${k.iconColor}`} strokeWidth={2} />
               </div>
             </div>
           </div>
         ))}
       </section>
+
 
       {/* Próximos Prazos + Processos Recentes */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fade-up">
@@ -382,7 +387,7 @@ function Dashboard() {
                 <XAxis dataKey="month" stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} width={48} />
                 <Tooltip
-                  contentStyle={{ background: "oklch(0.18 0.014 265)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 12, fontSize: 12, padding: "8px 12px" }}
+                  contentStyle={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 12, color: "#111827", boxShadow: "0 8px 24px -8px rgba(17,24,39,0.10)", padding: "8px 12px" }}
                   labelStyle={{ color: "oklch(0.7 0.02 260)", marginBottom: 4 }}
                   formatter={(v: number) => [new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v), "Receita"]}
                   cursor={{ stroke: "oklch(0.70 0.18 285 / 0.4)", strokeWidth: 1, strokeDasharray: "3 3" }}
@@ -394,7 +399,7 @@ function Dashboard() {
                   strokeWidth={2.5}
                   fill="url(#revGrad)"
                   dot={{ r: 3, fill: "#7C5CFF", strokeWidth: 0 }}
-                  activeDot={{ r: 6, fill: "#7C5CFF", stroke: "oklch(0.18 0.014 265)", strokeWidth: 3 }}
+                  activeDot={{ r: 6, fill: "#7C5CFF", stroke: "#FFFFFF", strokeWidth: 3 }}
                   isAnimationActive
                   animationDuration={1100}
                   animationEasing="ease-out"
@@ -424,7 +429,7 @@ function Dashboard() {
                       innerRadius={48}
                       outerRadius={70}
                       paddingAngle={3}
-                      stroke="oklch(0.16 0.012 265)"
+                      stroke="#FFFFFF"
                       strokeWidth={2}
                       isAnimationActive
                       animationDuration={900}
@@ -433,7 +438,7 @@ function Dashboard() {
                       {stats.areaDist.map((_, i) => <Cell key={i} fill={pieColors[i % pieColors.length]} />)}
                     </Pie>
                     <Tooltip
-                      contentStyle={{ background: "oklch(0.18 0.014 265)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 12, fontSize: 12 }}
+                      contentStyle={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 12, color: "#111827", boxShadow: "0 8px 24px -8px rgba(17,24,39,0.10)" }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -478,7 +483,7 @@ function Dashboard() {
                 <YAxis stroke="oklch(0.65 0.02 260)" fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip
                   cursor={{ fill: "oklch(1 0 0 / 0.04)" }}
-                  contentStyle={{ background: "oklch(0.18 0.014 265)", border: "1px solid oklch(1 0 0 / 0.08)", borderRadius: 12, fontSize: 12 }}
+                  contentStyle={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 12, color: "#111827", boxShadow: "0 8px 24px -8px rgba(17,24,39,0.10)" }}
                 />
                 <Bar dataKey="count" fill="url(#barGrad)" radius={[6, 6, 0, 0]} isAnimationActive animationDuration={900} animationEasing="ease-out" />
               </BarChart>
@@ -504,7 +509,7 @@ function Dashboard() {
             { icon: Activity, bg: "bg-violet-500/10", ring: "ring-violet-500/20", fg: "text-violet-400", title: "Produtividade", body: stats ? `Você concluiu ${stats.doneLast7} atividades nos últimos 7 dias.` : "Calculando…" },
             { icon: Target, bg: "bg-sky-500/10", ring: "ring-sky-500/20", fg: "text-sky-400", title: "Clientes ativos", body: stats ? `Você possui ${stats.clients} clientes ativos no sistema.` : "Calculando…" },
           ].map(i => (
-            <div key={i.title} className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-b from-white/[0.03] to-white/[0.01] p-5 hover-lift">
+            <div key={i.title} className="group relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-b bg-card p-5 hover-lift">
               <div className={`size-9 rounded-lg grid place-items-center mb-3 ring-1 ${i.bg} ${i.ring}`}>
                 <i.icon className={`size-4 ${i.fg}`} />
               </div>
