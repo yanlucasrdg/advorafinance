@@ -399,7 +399,7 @@ function Dashboard() {
                   strokeWidth={2.5}
                   fill="url(#revGrad)"
                   dot={{ r: 3, fill: "#7C5CFF", strokeWidth: 0 }}
-                  activeDot={{ r: 6, fill: "#7C5CFF", stroke: "oklch(0.18 0.014 265)", strokeWidth: 3 }}
+                  activeDot={{ r: 6, fill: "#7C5CFF", stroke: "#FFFFFF", strokeWidth: 3 }}
                   isAnimationActive
                   animationDuration={1100}
                   animationEasing="ease-out"
