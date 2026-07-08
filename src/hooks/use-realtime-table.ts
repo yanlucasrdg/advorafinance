@@ -15,8 +15,7 @@ export function useRealtimeTables(tables: string[], invalidateKeys: (string | (s
     if (tables.length === 0) return;
     const channel = supabase.channel(`rt:${tables.join(",")}:${Math.random().toString(36).slice(2, 8)}`);
     tables.forEach((table) => {
-      channel.on(
-        // @ts-expect-error supabase-js typing for postgres_changes is loose
+      (channel as unknown as { on: (t: string, f: Record<string, unknown>, cb: () => void) => void }).on(
         "postgres_changes",
         { event: "*", schema: "public", table },
         () => {
