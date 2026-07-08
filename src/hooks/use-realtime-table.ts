@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
  * Usage:
  *   useRealtimeTables(["financial_entries", "cases"], ["dashboard"]);
  */
-export function useRealtimeTables(tables: string[], invalidateKeys: (string | (string | number)[])[]) {
+export function useRealtimeTables(tables: string[], invalidateKeys: (string | readonly (string | number | null | undefined)[])[]) {
   const qc = useQueryClient();
   useEffect(() => {
     if (tables.length === 0) return;
