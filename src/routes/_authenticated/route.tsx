@@ -29,8 +29,10 @@ function AuthGate() {
   }
 
   return (
-    <AppShell>
-      <Outlet />
-    </AppShell>
+    <GlobalFiltersProvider>
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    </GlobalFiltersProvider>
   );
 }
