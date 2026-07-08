@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { GlobalFiltersProvider } from "@/lib/global-filters";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -28,8 +29,10 @@ function AuthGate() {
   }
 
   return (
-    <AppShell>
-      <Outlet />
-    </AppShell>
+    <GlobalFiltersProvider>
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    </GlobalFiltersProvider>
   );
 }
