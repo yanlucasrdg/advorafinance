@@ -11,6 +11,10 @@ export type FinRow = {
   paid_at: string | null;
   client_id: string | null;
   case_id: string | null;
+  paid_amount_cents?: number | null;
+  settlement_status?: string | null; // "previsto" | "confirmado" | "conciliado"
+  category?: string | null;
+  payment_method?: string | null;
 };
 
 export type CaseRow = {
