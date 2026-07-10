@@ -351,6 +351,16 @@ function Financeiro() {
                       <SelectContent>{clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
+                  <div>
+                    <Label>Categoria (DRE)</Label>
+                    <Select value={form.category || "__none"} onValueChange={(v) => setForm({ ...form, category: v === "__none" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="Automática pelo tipo" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none">Automática pelo tipo</SelectItem>
+                        {Object.entries(DRE_CATEGORIES).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Button onClick={create} className="mt-2">Criar</Button>
                 </div>
               </DialogContent>
