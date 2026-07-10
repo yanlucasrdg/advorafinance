@@ -226,7 +226,27 @@ function Financeiro() {
     return out;
   }, [series12]);
 
-  const contasReceber = useMemo(
+  // DRE + Cash Flow (period-scoped)
+  const dre = useMemo(() => dreReport(filtered, range.start, range.end), [filtered, range.start, range.end]);
+  const cashDirect = useMemo(() => cashFlowDirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
+  const cashIndirect = useMemo(() => cashFlowIndirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
+
+  // Recent audit log
+  const auditQ = useQuery({
+    queryKey: ["fin", "audit", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_audit_log")
+        .select("id,entry_id,action,created_at,actor_id,after")
+        .order("created_at", { ascending: false })
+        .limit(15);
+      if (error) throw error;
+      return (data ?? []) as unknown as AuditRow[];
+    },
+  });
+  useRealtimeTables(["financial_audit_log", "financial_payments"], [["fin", "audit", tenantId], ["fin", "entries", tenantId]]);
+
     () => filtered.filter((e) => e.kind === "receita" && e.status !== "pago").slice(0, 12),
     [filtered],
   );
