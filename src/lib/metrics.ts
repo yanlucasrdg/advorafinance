@@ -11,6 +11,10 @@ export type FinRow = {
   paid_at: string | null;
   client_id: string | null;
   case_id: string | null;
+  paid_amount_cents?: number | null;
+  settlement_status?: string | null; // "previsto" | "confirmado" | "conciliado"
+  category?: string | null;
+  payment_method?: string | null;
 };
 
 export type CaseRow = {
@@ -201,4 +205,90 @@ export function fmtBRLCompact(cents: number) {
   if (Math.abs(v) >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1)}M`;
   if (Math.abs(v) >= 1_000) return `R$ ${(v / 1_000).toFixed(1)}k`;
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
+}
+
+// ---------- DRE (Demonstração do Resultado do Exercício) ----------
+export const DRE_CATEGORIES: Record<string, string> = {
+  receita_servico: "Receita de serviços",
+  receita_outra: "Outras receitas",
+  imposto: "Impostos e deduções",
+  cogs: "Custos dos serviços",
+  despesa_operacional: "Despesas operacionais",
+  despesa_administrativa: "Despesas administrativas",
+  despesa_financeira: "Despesas financeiras",
+};
+
+function classify(row: FinRow): string {
+  const c = (row.category ?? "").toLowerCase();
+  if (c && DRE_CATEGORIES[c]) return c;
+  return row.kind === "receita" ? "receita_servico" : "despesa_operacional";
+}
+
+export function dreReport(rows: FinRow[], from?: Date, to?: Date) {
+  const inRange = (r: FinRow) => {
+    if (r.status !== "pago" || !r.paid_at) return false;
+    const d = new Date(r.paid_at);
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  };
+  const buckets: Record<string, number> = Object.fromEntries(Object.keys(DRE_CATEGORIES).map((k) => [k, 0]));
+  rows.filter(inRange).forEach((r) => {
+    const k = classify(r);
+    buckets[k] = (buckets[k] ?? 0) + (r.amount_cents ?? 0);
+  });
+  const receitaBruta = buckets.receita_servico + buckets.receita_outra;
+  const deducoes = buckets.imposto;
+  const receitaLiquida = receitaBruta - deducoes;
+  const custos = buckets.cogs;
+  const lucroBruto = receitaLiquida - custos;
+  const desOp = buckets.despesa_operacional + buckets.despesa_administrativa;
+  const resultadoOperacional = lucroBruto - desOp;
+  const desFin = buckets.despesa_financeira;
+  const resultado = resultadoOperacional - desFin;
+  return {
+    receitaBruta, deducoes, receitaLiquida, custos, lucroBruto,
+    desOp, resultadoOperacional, desFin, resultado, buckets,
+    margem: receitaBruta > 0 ? (resultado / receitaBruta) * 100 : 0,
+  };
+}
+
+// ---------- Cash Flow (Direct / Indirect) ----------
+export function cashFlowDirect(rows: FinRow[], from?: Date, to?: Date) {
+  const inRange = (r: FinRow) => {
+    if (r.status !== "pago" || !r.paid_at) return false;
+    const d = new Date(r.paid_at);
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  };
+  const byMethod: Record<string, { entradas: number; saidas: number }> = {};
+  let entradasOp = 0, saidasOp = 0;
+  rows.filter(inRange).forEach((r) => {
+    const method = r.payment_method || "não informado";
+    if (!byMethod[method]) byMethod[method] = { entradas: 0, saidas: 0 };
+    const amt = r.amount_cents ?? 0;
+    if (r.kind === "receita") { byMethod[method].entradas += amt; entradasOp += amt; }
+    else { byMethod[method].saidas += amt; saidasOp += amt; }
+  });
+  return { byMethod, entradasOp, saidasOp, caixaGerado: entradasOp - saidasOp };
+}
+
+export function cashFlowIndirect(rows: FinRow[], from?: Date, to?: Date) {
+  const dre = dreReport(rows, from, to);
+  // Simplified indirect: start from operating result, adjust for accruals (open receivables/payables in range).
+  const openReceivablesDelta = rows
+    .filter((r) => r.kind === "receita" && r.status !== "pago" && r.due_date && (!from || new Date(r.due_date) >= from) && (!to || new Date(r.due_date) <= to))
+    .reduce((s, r) => s + (r.amount_cents ?? 0), 0);
+  const openPayablesDelta = rows
+    .filter((r) => r.kind === "despesa" && r.status !== "pago" && r.due_date && (!from || new Date(r.due_date) >= from) && (!to || new Date(r.due_date) <= to))
+    .reduce((s, r) => s + (r.amount_cents ?? 0), 0);
+  const caixaOperacional = dre.resultadoOperacional - openReceivablesDelta + openPayablesDelta;
+  return {
+    resultadoOperacional: dre.resultadoOperacional,
+    variacaoRecebiveis: openReceivablesDelta,
+    variacaoPagaveis: openPayablesDelta,
+    caixaOperacional,
+    caixaFinal: caixaOperacional - dre.desFin,
+  };
 }

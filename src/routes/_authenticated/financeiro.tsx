@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Trash2, TrendingUp, TrendingDown, Wallet, DollarSign, AlertCircle,
   CircleDollarSign, ArrowUpRight, ArrowDownRight, Download, Radio, Sparkles,
-  Receipt, ReceiptText, Brain,
+  Receipt, ReceiptText, Brain, ShieldCheck, History, BookOpen, Check,
 } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -23,6 +25,7 @@ import { useGlobalFilters, PERIOD_LABELS, type PeriodKey } from "@/lib/global-fi
 import { useRealtimeTables } from "@/hooks/use-realtime-table";
 import {
   financeKpis, revenueByMonth, fmtBRL, fmtBRLCompact, pctDelta,
+  dreReport, cashFlowDirect, cashFlowIndirect, DRE_CATEGORIES,
   type FinRow,
 } from "@/lib/metrics";
 import { toast } from "sonner";
@@ -39,6 +42,8 @@ type Entry = FinRow & {
 };
 type CaseLite = { id: string; area: string | null; responsible: string | null };
 type ClientLite = { id: string; name: string };
+type PaymentRow = { id: string; entry_id: string; amount_cents: number; paid_at: string; method: string | null; notes: string | null };
+type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; after: { description?: string } | null };
 
 const TOOLTIP_STYLE = {
   background: "#FFFFFF",
@@ -58,7 +63,9 @@ function Financeiro() {
   const qc = useQueryClient();
   const { filters, setFilter, range } = useGlobalFilters();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "" });
+  const [cfMethod, setCfMethod] = useState<"direct" | "indirect">("direct");
+  const [reconcileEntry, setReconcileEntry] = useState<Entry | null>(null);
+  const [form, setForm] = useState({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
 
   useRealtimeTables(
     ["financial_entries", "cases", "clients"],
@@ -71,7 +78,7 @@ function Financeiro() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("financial_entries")
-        .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,clients(name)")
+        .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,paid_amount_cents,settlement_status,category,payment_method,clients(name)")
         .order("due_date", { ascending: false, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as unknown as Entry[];
@@ -219,6 +226,27 @@ function Financeiro() {
     return out;
   }, [series12]);
 
+  // DRE + Cash Flow (period-scoped)
+  const dre = useMemo(() => dreReport(filtered, range.start, range.end), [filtered, range.start, range.end]);
+  const cashDirect = useMemo(() => cashFlowDirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
+  const cashIndirect = useMemo(() => cashFlowIndirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
+
+  // Recent audit log
+  const auditQ = useQuery({
+    queryKey: ["fin", "audit", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_audit_log")
+        .select("id,entry_id,action,created_at,actor_id,after")
+        .order("created_at", { ascending: false })
+        .limit(15);
+      if (error) throw error;
+      return (data ?? []) as unknown as AuditRow[];
+    },
+  });
+  useRealtimeTables(["financial_audit_log", "financial_payments"], [["fin", "audit", tenantId], ["fin", "entries", tenantId]]);
+
   const contasReceber = useMemo(
     () => filtered.filter((e) => e.kind === "receita" && e.status !== "pago").slice(0, 12),
     [filtered],
@@ -239,15 +267,12 @@ function Financeiro() {
       due_date: form.due_date || null,
       client_id: form.client_id || null,
       case_id: form.case_id || null,
+      category: form.category || null,
     });
     if (error) return toast.error(error.message);
     toast.success("Lançamento criado");
     setOpen(false);
-    setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "" });
-    qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
-  };
-  const markPaid = async (e: Entry) => {
-    await supabase.from("financial_entries").update({ status: "pago", paid_at: new Date().toISOString() }).eq("id", e.id);
+    setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
     qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
   };
   const remove = async (id: string) => {
@@ -320,6 +345,16 @@ function Financeiro() {
                     <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
                       <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
                       <SelectContent>{clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Categoria (DRE)</Label>
+                    <Select value={form.category || "__none"} onValueChange={(v) => setForm({ ...form, category: v === "__none" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="Automática pelo tipo" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none">Automática pelo tipo</SelectItem>
+                        {Object.entries(DRE_CATEGORIES).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
+                      </SelectContent>
                     </Select>
                   </div>
                   <Button onClick={create} className="mt-2">Criar</Button>
@@ -554,39 +589,305 @@ function Financeiro() {
         </div>
       </div>
 
+      {/* DRE + Cash Flow + Audit */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-5">
+        {/* DRE */}
+        <div className="rounded-2xl border border-border bg-card p-5 xl:col-span-2">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <BookOpen className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">DRE — {PERIOD_LABELS[filters.period]}</h3>
+            </div>
+            <Badge variant="outline" className="text-[10px]">Margem líquida {dre.margem.toFixed(1)}%</Badge>
+          </div>
+          <table className="w-full text-sm">
+            <tbody className="[&_tr]:border-b [&_tr]:border-border/60 [&_tr:last-child]:border-0">
+              <DreRow label="Receita bruta" value={dre.receitaBruta} tone="pos" />
+              <DreRow label="(−) Impostos e deduções" value={-dre.deducoes} tone="neg" indent />
+              <DreRow label="= Receita líquida" value={dre.receitaLiquida} bold />
+              <DreRow label="(−) Custos dos serviços" value={-dre.custos} tone="neg" indent />
+              <DreRow label="= Lucro bruto" value={dre.lucroBruto} bold />
+              <DreRow label="(−) Despesas operacionais e administrativas" value={-dre.desOp} tone="neg" indent />
+              <DreRow label="= Resultado operacional" value={dre.resultadoOperacional} bold />
+              <DreRow label="(−) Despesas financeiras" value={-dre.desFin} tone="neg" indent />
+              <DreRow label="= Resultado do período" value={dre.resultado} big tone={dre.resultado >= 0 ? "pos" : "neg"} />
+            </tbody>
+          </table>
+        </div>
+
+        {/* Cash Flow method toggle */}
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Wallet className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">Fluxo de caixa</h3>
+            </div>
+          </div>
+          <Tabs value={cfMethod} onValueChange={(v) => setCfMethod(v as "direct" | "indirect")}>
+            <TabsList className="grid grid-cols-2 w-full h-8">
+              <TabsTrigger value="direct" className="text-xs">Direto</TabsTrigger>
+              <TabsTrigger value="indirect" className="text-xs">Indireto</TabsTrigger>
+            </TabsList>
+            <TabsContent value="direct" className="mt-3 space-y-1.5">
+              <RowLine label="Entradas operacionais" value={cashDirect.entradasOp} tone="pos" />
+              <RowLine label="Saídas operacionais" value={-cashDirect.saidasOp} tone="neg" />
+              <div className="h-px bg-border my-2" />
+              <RowLine label="Caixa gerado" value={cashDirect.caixaGerado} bold />
+              <div className="mt-3">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Por método</p>
+                {Object.keys(cashDirect.byMethod).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sem movimentações</p>
+                ) : (
+                  <div className="space-y-1">
+                    {Object.entries(cashDirect.byMethod).map(([m, v]) => (
+                      <div key={m} className="flex items-center justify-between text-xs">
+                        <span className="capitalize text-muted-foreground">{m}</span>
+                        <span className="tabular-nums">{fmtBRL(v.entradas - v.saidas)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+            <TabsContent value="indirect" className="mt-3 space-y-1.5">
+              <RowLine label="Resultado operacional" value={cashIndirect.resultadoOperacional} />
+              <RowLine label="(−) Δ Recebíveis" value={-cashIndirect.variacaoRecebiveis} tone="neg" />
+              <RowLine label="(+) Δ Pagáveis" value={cashIndirect.variacaoPagaveis} tone="pos" />
+              <div className="h-px bg-border my-2" />
+              <RowLine label="Caixa operacional" value={cashIndirect.caixaOperacional} bold />
+              <RowLine label="(−) Despesas financeiras" value={-dre.desFin} tone="neg" />
+              <div className="h-px bg-border my-2" />
+              <RowLine label="Caixa final" value={cashIndirect.caixaFinal} big bold />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+
       {/* Contas a Receber + a Pagar */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-5">
         <EntriesTable
           title="Contas a receber"
           icon={<Receipt className="size-4 text-primary" />}
           rows={contasReceber}
           loading={loading}
-          onPay={markPaid}
+          onReconcile={setReconcileEntry}
           onDelete={remove}
           emptyMsg="Nenhum recebível em aberto"
-          overdueTone="destructive"
         />
         <EntriesTable
           title="Contas a pagar"
           icon={<ReceiptText className="size-4 text-destructive" />}
           rows={contasPagar}
           loading={loading}
-          onPay={markPaid}
+          onReconcile={setReconcileEntry}
           onDelete={remove}
           emptyMsg="Nenhuma despesa em aberto"
-          overdueTone="destructive"
         />
       </div>
+
+      {/* Audit trail */}
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <History className="size-4 text-primary" />
+          <h3 className="text-sm font-semibold">Trilha de auditoria</h3>
+          <Badge variant="outline" className="text-[10px]">{auditQ.data?.length ?? 0}</Badge>
+        </div>
+        {(auditQ.data ?? []).length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted-foreground">Sem eventos ainda</p>
+        ) : (
+          <ul className="divide-y divide-border/60">
+            {(auditQ.data ?? []).map((a) => (
+              <li key={a.id} className="flex items-center justify-between py-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Badge variant="outline" className="text-[10px] capitalize">{a.action.replace("_", " ")}</Badge>
+                  <span className="truncate text-muted-foreground">{a.after?.description ?? a.entry_id ?? "—"}</span>
+                </div>
+                <span className="tabular-nums text-muted-foreground">{new Date(a.created_at).toLocaleString("pt-BR")}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <ReconcileDialog
+        entry={reconcileEntry}
+        tenantId={tenantId}
+        onClose={() => setReconcileEntry(null)}
+        onDone={() => {
+          qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
+          qc.invalidateQueries({ queryKey: ["fin", "audit", tenantId] });
+        }}
+      />
     </div>
   );
 }
 
+function DreRow({ label, value, tone, bold, big, indent }: { label: string; value: number; tone?: "pos" | "neg"; bold?: boolean; big?: boolean; indent?: boolean }) {
+  const color = tone === "neg" ? "text-destructive" : tone === "pos" ? "text-success" : "";
+  return (
+    <tr className={`${bold ? "font-semibold" : ""} ${big ? "text-base" : "text-sm"}`}>
+      <td className={`py-2 ${indent ? "pl-4" : ""} text-muted-foreground`}>{label}</td>
+      <td className={`py-2 text-right tabular-nums ${color}`}>{fmtBRL(value)}</td>
+    </tr>
+  );
+}
+
+function RowLine({ label, value, tone, bold, big }: { label: string; value: number; tone?: "pos" | "neg"; bold?: boolean; big?: boolean }) {
+  const color = tone === "neg" ? "text-destructive" : tone === "pos" ? "text-success" : "";
+  return (
+    <div className={`flex items-center justify-between ${bold ? "font-semibold" : ""} ${big ? "text-base" : "text-xs"}`}>
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`tabular-nums ${color}`}>{fmtBRL(value)}</span>
+    </div>
+  );
+}
+
+function ReconcileDialog({ entry, tenantId, onClose, onDone }: { entry: Entry | null; tenantId: string | null; onClose: () => void; onDone: () => void }) {
+  const [amount, setAmount] = useState(0);
+  const [method, setMethod] = useState("pix");
+  const [notes, setNotes] = useState("");
+  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const paymentsQ = useQuery({
+    queryKey: ["fin", "payments", entry?.id],
+    enabled: !!entry?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_payments")
+        .select("id,entry_id,amount_cents,paid_at,method,notes")
+        .eq("entry_id", entry!.id)
+        .order("paid_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as PaymentRow[];
+    },
+  });
+
+  const paid = entry?.paid_amount_cents ?? 0;
+  const total = entry?.amount_cents ?? 0;
+  const remaining = Math.max(0, total - paid);
+  const pct = total > 0 ? Math.min(100, (paid / total) * 100) : 0;
+
+  const registerPayment = async () => {
+    if (!entry || !tenantId) return;
+    const cents = Math.round(amount * 100);
+    if (cents <= 0) return toast.error("Informe um valor maior que zero");
+    if (cents > remaining) return toast.error(`Máximo permitido: ${fmtBRL(remaining)}`);
+    const { error } = await supabase.from("financial_payments").insert({
+      tenant_id: tenantId,
+      entry_id: entry.id,
+      amount_cents: cents,
+      method,
+      notes: notes || null,
+      paid_at: new Date(paidAt).toISOString(),
+    });
+    if (error) return toast.error(error.message);
+    toast.success("Baixa registrada");
+    setAmount(0); setNotes("");
+    onDone();
+  };
+
+  const reconcile = async () => {
+    if (!entry) return;
+    const { error } = await supabase.rpc("reconcile_financial_entry", { _entry_id: entry.id });
+    if (error) return toast.error(error.message);
+    toast.success("Lançamento conciliado");
+    onDone();
+    onClose();
+  };
+
+  return (
+    <Dialog open={!!entry} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><ShieldCheck className="size-4 text-primary" /> Conciliação</DialogTitle>
+        </DialogHeader>
+        {entry && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border p-3">
+              <p className="text-sm font-semibold truncate">{entry.description}</p>
+              <p className="text-xs text-muted-foreground">{entry.clients?.name ?? "Sem cliente"}</p>
+              <div className="mt-3 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Total {fmtBRL(total)}</span>
+                <span className="text-muted-foreground">Recebido {fmtBRL(paid)}</span>
+                <span className="font-semibold">Restante {fmtBRL(remaining)}</span>
+              </div>
+              <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <Badge variant="outline" className="text-[10px] capitalize">{entry.settlement_status ?? "previsto"}</Badge>
+                {entry.payment_method && <Badge variant="outline" className="text-[10px] capitalize">{entry.payment_method}</Badge>}
+              </div>
+            </div>
+
+            {remaining > 0 && (
+              <div className="grid gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Valor (R$)</Label>
+                    <Input type="number" value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} />
+                    <button className="text-[10px] text-primary hover:underline mt-1" onClick={() => setAmount(remaining / 100)}>Preencher restante</button>
+                  </div>
+                  <div>
+                    <Label>Data do pagamento</Label>
+                    <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+                  </div>
+                </div>
+                <div>
+                  <Label>Método</Label>
+                  <Select value={method} onValueChange={setMethod}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["pix", "ted", "boleto", "dinheiro", "cartao", "transferencia"].map((m) => (
+                        <SelectItem key={m} value={m} className="capitalize">{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Observação</Label>
+                  <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+                </div>
+                <Button onClick={registerPayment}><Check className="size-4 mr-1" /> Registrar baixa</Button>
+              </div>
+            )}
+
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Histórico de baixas</p>
+              {(paymentsQ.data ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">Sem baixas registradas</p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {(paymentsQ.data ?? []).map((p) => (
+                    <li key={p.id} className="flex items-center justify-between py-1.5 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="outline" className="text-[10px] capitalize">{p.method ?? "—"}</Badge>
+                        <span className="tabular-nums">{fmtBRL(p.amount_cents)}</span>
+                      </div>
+                      <span className="text-muted-foreground">{new Date(p.paid_at).toLocaleDateString("pt-BR")}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {entry.settlement_status !== "conciliado" && paid >= total && total > 0 && (
+              <Button variant="outline" onClick={reconcile} className="w-full">
+                <ShieldCheck className="size-4 mr-1" /> Marcar como conciliado
+              </Button>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EntriesTable({
-  title, icon, rows, loading, onPay, onDelete, emptyMsg,
+  title, icon, rows, loading, onReconcile, onDelete, emptyMsg,
 }: {
   title: string; icon: React.ReactNode; rows: Entry[]; loading: boolean;
-  onPay: (e: Entry) => void; onDelete: (id: string) => void; emptyMsg: string;
-  overdueTone: string;
+  onReconcile: (e: Entry) => void; onDelete: (id: string) => void; emptyMsg: string;
 }) {
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -630,7 +931,7 @@ function EntriesTable({
                   <td className="px-3 py-3 text-right tabular-nums font-semibold">{fmtBRL(e.amount_cents)}</td>
                   <td className="px-3 py-3 text-right">
                     <div className="flex justify-end gap-1">
-                      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => onPay(e)}>Baixar</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => onReconcile(e)}>Conciliar</Button>
                       <Button size="icon" variant="ghost" className="size-7" onClick={() => onDelete(e.id)}><Trash2 className="size-3.5" /></Button>
                     </div>
                   </td>
