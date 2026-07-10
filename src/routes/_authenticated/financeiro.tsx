@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Trash2, TrendingUp, TrendingDown, Wallet, DollarSign, AlertCircle,
   CircleDollarSign, ArrowUpRight, ArrowDownRight, Download, Radio, Sparkles,
-  Receipt, ReceiptText, Brain,
+  Receipt, ReceiptText, Brain, ShieldCheck, History, BookOpen, Check,
 } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -23,6 +25,7 @@ import { useGlobalFilters, PERIOD_LABELS, type PeriodKey } from "@/lib/global-fi
 import { useRealtimeTables } from "@/hooks/use-realtime-table";
 import {
   financeKpis, revenueByMonth, fmtBRL, fmtBRLCompact, pctDelta,
+  dreReport, cashFlowDirect, cashFlowIndirect, DRE_CATEGORIES,
   type FinRow,
 } from "@/lib/metrics";
 import { toast } from "sonner";
