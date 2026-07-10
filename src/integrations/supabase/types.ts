@@ -294,17 +294,81 @@ export type Database = {
           },
         ]
       }
+      financial_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          after: Json | null
+          before: Json | null
+          created_at: string
+          entry_id: string | null
+          id: string
+          payment_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          entry_id?: string | null
+          id?: string
+          payment_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          entry_id?: string | null
+          id?: string
+          payment_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_audit_log_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "financial_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_audit_log_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "financial_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_audit_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       financial_entries: {
         Row: {
           amount_cents: number
           case_id: string | null
+          category: string | null
           client_id: string | null
           created_at: string
           description: string
           due_date: string | null
           id: string
           kind: string
+          paid_amount_cents: number
           paid_at: string | null
+          payment_method: string | null
+          reconciled_at: string | null
+          reconciled_by: string | null
+          settlement_status: string
           status: string
           tenant_id: string
           updated_at: string
@@ -312,13 +376,19 @@ export type Database = {
         Insert: {
           amount_cents?: number
           case_id?: string | null
+          category?: string | null
           client_id?: string | null
           created_at?: string
           description: string
           due_date?: string | null
           id?: string
           kind?: string
+          paid_amount_cents?: number
           paid_at?: string | null
+          payment_method?: string | null
+          reconciled_at?: string | null
+          reconciled_by?: string | null
+          settlement_status?: string
           status?: string
           tenant_id: string
           updated_at?: string
@@ -326,13 +396,19 @@ export type Database = {
         Update: {
           amount_cents?: number
           case_id?: string | null
+          category?: string | null
           client_id?: string | null
           created_at?: string
           description?: string
           due_date?: string | null
           id?: string
           kind?: string
+          paid_amount_cents?: number
           paid_at?: string | null
+          payment_method?: string | null
+          reconciled_at?: string | null
+          reconciled_by?: string | null
+          settlement_status?: string
           status?: string
           tenant_id?: string
           updated_at?: string
@@ -354,6 +430,60 @@ export type Database = {
           },
           {
             foreignKeyName: "financial_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_payments: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          created_by: string | null
+          entry_id: string
+          id: string
+          method: string | null
+          notes: string | null
+          paid_at: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          created_by?: string | null
+          entry_id: string
+          id?: string
+          method?: string | null
+          notes?: string | null
+          paid_at?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string
+          id?: string
+          method?: string | null
+          notes?: string | null
+          paid_at?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_payments_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "financial_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_payments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -700,6 +830,10 @@ export type Database = {
         Returns: boolean
       }
       is_master_admin: { Args: { _user_id: string }; Returns: boolean }
+      reconcile_financial_entry: {
+        Args: { _entry_id: string }
+        Returns: undefined
+      }
       user_in_tenant: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
