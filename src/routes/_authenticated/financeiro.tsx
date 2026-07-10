@@ -247,6 +247,7 @@ function Financeiro() {
   });
   useRealtimeTables(["financial_audit_log", "financial_payments"], [["fin", "audit", tenantId], ["fin", "entries", tenantId]]);
 
+  const contasReceber = useMemo(
     () => filtered.filter((e) => e.kind === "receita" && e.status !== "pago").slice(0, 12),
     [filtered],
   );
