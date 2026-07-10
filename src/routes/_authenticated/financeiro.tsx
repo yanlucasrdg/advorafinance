@@ -275,10 +275,6 @@ function Financeiro() {
     setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
     qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
   };
-  const markPaid = async (e: Entry) => {
-    await supabase.from("financial_entries").update({ status: "pago", paid_at: new Date().toISOString() }).eq("id", e.id);
-    qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
-  };
   const remove = async (id: string) => {
     await supabase.from("financial_entries").delete().eq("id", id);
     qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
