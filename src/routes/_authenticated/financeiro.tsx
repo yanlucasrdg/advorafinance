@@ -63,7 +63,9 @@ function Financeiro() {
   const qc = useQueryClient();
   const { filters, setFilter, range } = useGlobalFilters();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "" });
+  const [cfMethod, setCfMethod] = useState<"direct" | "indirect">("direct");
+  const [reconcileEntry, setReconcileEntry] = useState<Entry | null>(null);
+  const [form, setForm] = useState({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
 
   useRealtimeTables(
     ["financial_entries", "cases", "clients"],
