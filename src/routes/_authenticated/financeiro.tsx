@@ -935,7 +935,7 @@ function EntriesTable({
                   <td className="px-3 py-3 text-right tabular-nums font-semibold">{fmtBRL(e.amount_cents)}</td>
                   <td className="px-3 py-3 text-right">
                     <div className="flex justify-end gap-1">
-                      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => onPay(e)}>Baixar</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => onReconcile(e)}>Conciliar</Button>
                       <Button size="icon" variant="ghost" className="size-7" onClick={() => onDelete(e.id)}><Trash2 className="size-3.5" /></Button>
                     </div>
                   </td>
