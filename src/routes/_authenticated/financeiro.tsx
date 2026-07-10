@@ -42,6 +42,8 @@ type Entry = FinRow & {
 };
 type CaseLite = { id: string; area: string | null; responsible: string | null };
 type ClientLite = { id: string; name: string };
+type PaymentRow = { id: string; entry_id: string; amount_cents: number; paid_at: string; method: string | null; notes: string | null };
+type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; after: { description?: string } | null };
 
 const TOOLTIP_STYLE = {
   background: "#FFFFFF",
