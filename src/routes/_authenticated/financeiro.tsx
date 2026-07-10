@@ -888,11 +888,10 @@ function ReconcileDialog({ entry, tenantId, onClose, onDone }: { entry: Entry | 
 }
 
 function EntriesTable({
-  title, icon, rows, loading, onPay, onDelete, emptyMsg,
+  title, icon, rows, loading, onReconcile, onDelete, emptyMsg,
 }: {
   title: string; icon: React.ReactNode; rows: Entry[]; loading: boolean;
-  onPay: (e: Entry) => void; onDelete: (id: string) => void; emptyMsg: string;
-  overdueTone: string;
+  onReconcile: (e: Entry) => void; onDelete: (id: string) => void; emptyMsg: string;
 }) {
   return (
     <section className="rounded-2xl border border-border bg-card overflow-hidden">
