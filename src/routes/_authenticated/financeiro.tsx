@@ -246,11 +246,12 @@ function Financeiro() {
       due_date: form.due_date || null,
       client_id: form.client_id || null,
       case_id: form.case_id || null,
+      category: form.category || null,
     });
     if (error) return toast.error(error.message);
     toast.success("Lançamento criado");
     setOpen(false);
-    setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "" });
+    setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
     qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
   };
   const markPaid = async (e: Entry) => {
