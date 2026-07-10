@@ -78,7 +78,7 @@ function Financeiro() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("financial_entries")
-        .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,clients(name)")
+        .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,paid_amount_cents,settlement_status,category,payment_method,clients(name)")
         .order("due_date", { ascending: false, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as unknown as Entry[];
