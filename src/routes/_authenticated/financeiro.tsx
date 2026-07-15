@@ -324,23 +324,71 @@ function Financeiro() {
     qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
   };
 
-  const exportCSV = () => {
-    const header = ["Descrição", "Tipo", "Status", "Valor (R$)", "Vencimento", "Pago em", "Cliente"];
-    const rows = filtered.map((e) => [
-      e.description.replace(/"/g, '""'),
-      e.kind,
-      e.status,
-      ((e.amount_cents ?? 0) / 100).toFixed(2).replace(".", ","),
-      e.due_date ?? "",
-      e.paid_at ?? "",
-      (e.clients?.name ?? "").replace(/"/g, '""'),
-    ]);
-    const csv = [header, ...rows].map((r) => r.map((v) => `"${v}"`).join(";")).join("\n");
+  const downloadCsv = (name: string, rows: (string | number)[][]) => {
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `financeiro_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.href = url; a.download = `${name}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click(); URL.revokeObjectURL(url);
+  };
+
+  const exportCSV = () => {
+    downloadCsv("financeiro", [
+      ["Descrição", "Tipo", "Status", "Valor (R$)", "Vencimento", "Pago em", "Cliente"],
+      ...filtered.map((e) => [
+        e.description, e.kind, e.status,
+        ((e.amount_cents ?? 0) / 100).toFixed(2).replace(".", ","),
+        e.due_date ?? "", e.paid_at ?? "", e.clients?.name ?? "",
+      ]),
+    ]);
+  };
+
+  const exportReconciled = () => {
+    const rows = filtered.filter((e) => e.settlement_status === "conciliado" || (e.settlement_status === "confirmado" && e.status === "pago"));
+    downloadCsv("conciliados", [
+      ["Descrição", "Tipo", "Status conciliação", "Valor (R$)", "Pago (R$)", "Método", "Categoria", "Vencimento", "Pago em", "Cliente"],
+      ...rows.map((e) => [
+        e.description, e.kind, e.settlement_status ?? "",
+        ((e.amount_cents ?? 0) / 100).toFixed(2).replace(".", ","),
+        ((e.paid_amount_cents ?? 0) / 100).toFixed(2).replace(".", ","),
+        e.payment_method ?? "", e.category ?? "",
+        e.due_date ?? "", e.paid_at ?? "", e.clients?.name ?? "",
+      ]),
+    ]);
+  };
+
+  const exportDre = () => {
+    downloadCsv(`dre_${filters.period}`, [
+      ["Linha", "Valor (R$)"],
+      ["Receita bruta", (dre.receitaBruta / 100).toFixed(2).replace(".", ",")],
+      ["(-) Impostos e deduções", (dre.deducoes / 100).toFixed(2).replace(".", ",")],
+      ["= Receita líquida", (dre.receitaLiquida / 100).toFixed(2).replace(".", ",")],
+      ["(-) Custos dos serviços", (dre.custos / 100).toFixed(2).replace(".", ",")],
+      ["= Lucro bruto", (dre.lucroBruto / 100).toFixed(2).replace(".", ",")],
+      ["(-) Despesas op/adm", (dre.desOp / 100).toFixed(2).replace(".", ",")],
+      ["= Resultado operacional", (dre.resultadoOperacional / 100).toFixed(2).replace(".", ",")],
+      ["(-) Despesas financeiras", (dre.desFin / 100).toFixed(2).replace(".", ",")],
+      ["= Resultado do período", (dre.resultado / 100).toFixed(2).replace(".", ",")],
+      ["Margem líquida (%)", dre.margem.toFixed(2).replace(".", ",")],
+    ]);
+  };
+
+  const exportCashFlow = () => {
+    downloadCsv(`fluxo_caixa_${filters.period}`, [
+      ["Método", "Linha", "Valor (R$)"],
+      ["Direto", "Entradas operacionais", (cashDirect.entradasOp / 100).toFixed(2).replace(".", ",")],
+      ["Direto", "Saídas operacionais", (cashDirect.saidasOp / 100).toFixed(2).replace(".", ",")],
+      ["Direto", "Caixa gerado", (cashDirect.caixaGerado / 100).toFixed(2).replace(".", ",")],
+      ...Object.entries(cashDirect.byMethod).map(([m, v]) => [
+        "Direto", `Por método: ${m}`, ((v.entradas - v.saidas) / 100).toFixed(2).replace(".", ","),
+      ] as (string | number)[]),
+      ["Indireto", "Resultado operacional", (cashIndirect.resultadoOperacional / 100).toFixed(2).replace(".", ",")],
+      ["Indireto", "Δ Recebíveis", (cashIndirect.variacaoRecebiveis / 100).toFixed(2).replace(".", ",")],
+      ["Indireto", "Δ Pagáveis", (cashIndirect.variacaoPagaveis / 100).toFixed(2).replace(".", ",")],
+      ["Indireto", "Caixa operacional", (cashIndirect.caixaOperacional / 100).toFixed(2).replace(".", ",")],
+      ["Indireto", "Caixa final", (cashIndirect.caixaFinal / 100).toFixed(2).replace(".", ",")],
+    ]);
   };
 
   const areasList = useMemo(() => Array.from(new Set(cases.map((c) => c.area).filter(Boolean) as string[])).sort(), [cases]);
