@@ -5,6 +5,7 @@ import {
   Plus, Trash2, TrendingUp, TrendingDown, Wallet, DollarSign, AlertCircle,
   CircleDollarSign, ArrowUpRight, ArrowDownRight, Download, Radio, Sparkles,
   Receipt, ReceiptText, Brain, ShieldCheck, History, BookOpen, Check,
+  Settings2, Bell, FileDown,
 } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -19,14 +20,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useGlobalFilters, PERIOD_LABELS, type PeriodKey } from "@/lib/global-filters";
 import { useRealtimeTables } from "@/hooks/use-realtime-table";
 import {
   financeKpis, revenueByMonth, fmtBRL, fmtBRLCompact, pctDelta,
-  dreReport, cashFlowDirect, cashFlowIndirect, DRE_CATEGORIES,
-  type FinRow,
+  dreReport, cashFlowDirect, cashFlowIndirect, DRE_CATEGORIES, DEFAULT_DRE_CONFIG,
+  type FinRow, type DreConfig,
 } from "@/lib/metrics";
 import { toast } from "sonner";
 
