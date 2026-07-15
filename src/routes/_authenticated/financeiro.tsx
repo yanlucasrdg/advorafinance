@@ -1074,3 +1074,238 @@ function EntriesTable({
     </section>
   );
 }
+
+function NotificationsBell({
+  items, unread, tenantId, onOpenEntry, onRefresh,
+}: {
+  items: NotificationRow[]; unread: number; tenantId: string | null;
+  onOpenEntry: (id: string) => void; onRefresh: () => void;
+}) {
+  const markAllRead = async () => {
+    if (!tenantId) return;
+    await (supabase as unknown as { from: (t: string) => { update: (v: Record<string, unknown>) => { is: (k: string, v: unknown) => Promise<unknown> } } })
+      .from("notifications").update({ read_at: new Date().toISOString() }).is("read_at", null);
+    onRefresh();
+  };
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="relative">
+          <Bell className="size-4" />
+          {unread > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-destructive text-[9px] font-bold text-white grid place-items-center">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+          <p className="text-xs font-semibold">Notificações</p>
+          <button className="text-[10px] text-primary hover:underline" onClick={markAllRead}>Marcar todas como lidas</button>
+        </div>
+        <div className="max-h-96 overflow-y-auto">
+          {items.length === 0 ? (
+            <p className="py-8 text-center text-xs text-muted-foreground">Sem notificações</p>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {items.map((n) => (
+                <li
+                  key={n.id}
+                  className={`px-3 py-2 text-xs cursor-pointer hover:bg-muted/50 ${!n.read_at ? "bg-primary/5" : ""}`}
+                  onClick={() => { if (n.entry_id) onOpenEntry(n.entry_id); }}
+                >
+                  <div className="flex items-center gap-2">
+                    {!n.read_at && <span className="size-1.5 rounded-full bg-primary shrink-0" />}
+                    <span className="font-semibold truncate">{n.title}</span>
+                  </div>
+                  {n.body && <p className="text-muted-foreground truncate mt-0.5">{n.body}</p>}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(n.created_at).toLocaleString("pt-BR")}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function DreSettingsDialog({
+  open, onClose, tenantId, current, onSaved,
+}: {
+  open: boolean; onClose: () => void; tenantId: string | null;
+  current: DreConfig; onSaved: () => void;
+}) {
+  const [applyCogs, setApplyCogs] = useState(current.applyCogs);
+  const [enabled, setEnabled] = useState<string[]>(current.enabledCategories);
+  useMemo(() => { setApplyCogs(current.applyCogs); setEnabled(current.enabledCategories); }, [current]);
+  const toggle = (k: string) => setEnabled((prev) => prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]);
+  const save = async () => {
+    if (!tenantId) return;
+    const { error } = await (supabase as unknown as { from: (t: string) => { upsert: (v: Record<string, unknown>, o: { onConflict: string }) => Promise<{ error: unknown }> } })
+      .from("dre_settings").upsert({
+        tenant_id: tenantId,
+        apply_cogs: applyCogs,
+        enabled_categories: enabled,
+        category_map: current.categoryMap,
+      }, { onConflict: "tenant_id" });
+    if (error) return toast.error(String((error as { message?: string })?.message ?? error));
+    toast.success("Configuração do DRE atualizada");
+    onSaved();
+    onClose();
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><BookOpen className="size-4 text-primary" /> Configuração do DRE</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
+            <div>
+              <p className="text-sm font-semibold">Aplicar COGS (Custos dos serviços)</p>
+              <p className="text-xs text-muted-foreground">Quando desligado, os custos não deduzem do lucro bruto.</p>
+            </div>
+            <Switch checked={applyCogs} onCheckedChange={setApplyCogs} />
+          </div>
+          <div>
+            <p className="text-xs font-semibold mb-2">Categorias que entram no DRE</p>
+            <div className="grid grid-cols-1 gap-1.5">
+              {Object.entries(DRE_CATEGORIES).map(([k, label]) => (
+                <label key={k} className="flex items-center gap-2 text-sm rounded-md border border-border px-3 py-2 cursor-pointer hover:bg-muted/40">
+                  <Checkbox checked={enabled.includes(k)} onCheckedChange={() => toggle(k)} />
+                  <span className="flex-1">{label}</span>
+                  <code className="text-[10px] text-muted-foreground">{k}</code>
+                </label>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-2">Cálculos são sempre derivados dos lançamentos do banco. Alterar aqui apenas muda como cada categoria é agregada no DRE.</p>
+          </div>
+          <Button onClick={save} className="w-full">Salvar</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AuditSheet({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
+  const auditQ = useQuery({
+    queryKey: ["fin", "audit_entry", entry?.id],
+    enabled: !!entry?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_audit_log")
+        .select("id,entry_id,action,created_at,actor_id,before,after")
+        .eq("entry_id", entry!.id)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as AuditRow[];
+    },
+  });
+  const paymentsQ = useQuery({
+    queryKey: ["fin", "audit_payments", entry?.id],
+    enabled: !!entry?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_payments")
+        .select("id,entry_id,amount_cents,paid_at,method,notes")
+        .eq("entry_id", entry!.id)
+        .order("paid_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as PaymentRow[];
+    },
+  });
+
+  const diffs = (a: AuditRow) => {
+    const before = (a.before ?? {}) as Record<string, unknown>;
+    const after = (a.after ?? {}) as Record<string, unknown>;
+    const keys = ["status", "settlement_status", "paid_amount_cents", "payment_method", "amount_cents"];
+    return keys
+      .filter((k) => before[k] !== after[k])
+      .map((k) => ({
+        key: k,
+        from: k.endsWith("_cents") ? fmtBRL(Number(before[k] ?? 0)) : String(before[k] ?? "—"),
+        to: k.endsWith("_cents") ? fmtBRL(Number(after[k] ?? 0)) : String(after[k] ?? "—"),
+      }));
+  };
+
+  return (
+    <Sheet open={!!entry} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2"><History className="size-4 text-primary" /> Trilha completa</SheetTitle>
+        </SheetHeader>
+        {entry && (
+          <div className="mt-4 space-y-4">
+            <div className="rounded-xl border border-border p-3">
+              <p className="text-sm font-semibold truncate">{entry.description}</p>
+              <p className="text-xs text-muted-foreground">{entry.clients?.name ?? "Sem cliente"}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+                <Badge variant="outline" className="capitalize">{entry.kind}</Badge>
+                <Badge variant="outline" className="capitalize">{entry.status}</Badge>
+                <Badge variant="outline" className="capitalize">{entry.settlement_status ?? "previsto"}</Badge>
+                {entry.payment_method && <Badge variant="outline" className="capitalize">{entry.payment_method}</Badge>}
+                {entry.category && <Badge variant="outline">{entry.category}</Badge>}
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div><p className="text-muted-foreground">Total</p><p className="font-semibold tabular-nums">{fmtBRL(entry.amount_cents)}</p></div>
+                <div><p className="text-muted-foreground">Pago</p><p className="font-semibold tabular-nums">{fmtBRL(entry.paid_amount_cents ?? 0)}</p></div>
+                <div><p className="text-muted-foreground">Restante</p><p className="font-semibold tabular-nums">{fmtBRL(Math.max(0, entry.amount_cents - (entry.paid_amount_cents ?? 0)))}</p></div>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Baixas registradas</p>
+              {(paymentsQ.data ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">Sem baixas registradas</p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {(paymentsQ.data ?? []).map((p) => (
+                    <li key={p.id} className="flex items-center justify-between py-1.5 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px] capitalize">{p.method ?? "—"}</Badge>
+                        <span className="tabular-nums font-semibold">{fmtBRL(p.amount_cents)}</span>
+                        {p.notes && <span className="text-muted-foreground truncate max-w-[120px]">— {p.notes}</span>}
+                      </div>
+                      <span className="text-muted-foreground">{new Date(p.paid_at).toLocaleDateString("pt-BR")}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Eventos</p>
+              {(auditQ.data ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">Sem eventos</p>
+              ) : (
+                <ol className="space-y-3">
+                  {(auditQ.data ?? []).map((a) => (
+                    <li key={a.id} className="relative pl-5 border-l border-border">
+                      <span className="absolute -left-[5px] top-1.5 size-2.5 rounded-full bg-primary" />
+                      <div className="flex items-center justify-between">
+                        <Badge variant="outline" className="text-[10px] capitalize">{a.action.replace("_", " ")}</Badge>
+                        <span className="text-[10px] text-muted-foreground tabular-nums">{new Date(a.created_at).toLocaleString("pt-BR")}</span>
+                      </div>
+                      <div className="mt-1 space-y-0.5">
+                        {diffs(a).length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground">Sem alterações registradas.</p>
+                        ) : diffs(a).map((d) => (
+                          <p key={d.key} className="text-[11px]">
+                            <span className="text-muted-foreground capitalize">{d.key.replace("_", " ")}: </span>
+                            <span className="line-through text-muted-foreground">{d.from}</span>
+                            <span className="mx-1">→</span>
+                            <span className="font-semibold">{d.to}</span>
+                          </p>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
