@@ -294,6 +294,38 @@ export type Database = {
           },
         ]
       }
+      dre_settings: {
+        Row: {
+          apply_cogs: boolean
+          category_map: Json
+          enabled_categories: string[]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          apply_cogs?: boolean
+          category_map?: Json
+          enabled_categories?: string[]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          apply_cogs?: boolean
+          category_map?: Json
+          enabled_categories?: string[]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dre_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       financial_audit_log: {
         Row: {
           action: string
@@ -484,6 +516,57 @@ export type Database = {
           },
           {
             foreignKeyName: "financial_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          entry_id: string | null
+          id: string
+          kind: string
+          read_at: string | null
+          tenant_id: string
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          entry_id?: string | null
+          id?: string
+          kind: string
+          read_at?: string | null
+          tenant_id: string
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          entry_id?: string | null
+          id?: string
+          kind?: string
+          read_at?: string | null
+          tenant_id?: string
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "financial_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
