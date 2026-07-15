@@ -414,7 +414,28 @@ function Financeiro() {
         subtitle="Receitas, despesas, fluxo de caixa e recebíveis calculados em tempo real."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={exportCSV}><Download className="size-4 mr-1.5" /> CSV</Button>
+            <NotificationsBell
+              items={notifQ.data ?? []}
+              unread={unreadCount}
+              tenantId={tenantId}
+              onOpenEntry={(id) => {
+                const e = entries.find((x) => x.id === id);
+                if (e) setHistoryEntry(e);
+              }}
+              onRefresh={() => qc.invalidateQueries({ queryKey: ["fin", "notifications", tenantId] })}
+            />
+            <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><Settings2 className="size-4 mr-1.5" /> DRE</Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm"><Download className="size-4 mr-1.5" /> Exportar</Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-56 p-1">
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportCSV}><FileDown className="size-3.5" /> Todos os lançamentos</button>
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportReconciled}><FileDown className="size-3.5" /> Somente conciliados</button>
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportDre}><FileDown className="size-3.5" /> DRE do período</button>
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportCashFlow}><FileDown className="size-3.5" /> Fluxo de caixa</button>
+              </PopoverContent>
+            </Popover>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild><Button size="sm"><Plus className="size-4 mr-1" /> Novo lançamento</Button></DialogTrigger>
               <DialogContent>
