@@ -418,7 +418,7 @@ function Financeiro() {
               items={notifQ.data ?? []}
               unread={unreadCount}
               tenantId={tenantId}
-              onOpenEntry={(id) => {
+              onOpenEntry={(id: string) => {
                 const e = entries.find((x) => x.id === id);
                 if (e) setHistoryEntry(e);
               }}
