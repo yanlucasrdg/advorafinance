@@ -235,8 +235,25 @@ function Financeiro() {
     return out;
   }, [series12]);
 
+  // DRE settings (per tenant)
+  const dreCfgQ = useQuery({
+    queryKey: ["fin", "dre_settings", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: DreSettingsRow | null; error: unknown }> } } } })
+        .from("dre_settings").select("*").eq("tenant_id", tenantId!).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const dreConfig: DreConfig = useMemo(() => dreCfgQ.data ? {
+    applyCogs: dreCfgQ.data.apply_cogs,
+    enabledCategories: dreCfgQ.data.enabled_categories,
+    categoryMap: dreCfgQ.data.category_map ?? {},
+  } : DEFAULT_DRE_CONFIG, [dreCfgQ.data]);
+
   // DRE + Cash Flow (period-scoped)
-  const dre = useMemo(() => dreReport(filtered, range.start, range.end), [filtered, range.start, range.end]);
+  const dre = useMemo(() => dreReport(filtered, range.start, range.end, dreConfig), [filtered, range.start, range.end, dreConfig]);
   const cashDirect = useMemo(() => cashFlowDirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
   const cashIndirect = useMemo(() => cashFlowIndirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
 
@@ -247,14 +264,32 @@ function Financeiro() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("financial_audit_log")
-        .select("id,entry_id,action,created_at,actor_id,after")
+        .select("id,entry_id,action,created_at,actor_id,before,after")
         .order("created_at", { ascending: false })
-        .limit(15);
+        .limit(30);
       if (error) throw error;
       return (data ?? []) as unknown as AuditRow[];
     },
   });
-  useRealtimeTables(["financial_audit_log", "financial_payments"], [["fin", "audit", tenantId], ["fin", "entries", tenantId]]);
+
+  // Notifications
+  const notifQ = useQuery({
+    queryKey: ["fin", "notifications", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { order: (k: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: NotificationRow[] | null; error: unknown }> } } } })
+        .from("notifications").select("id,kind,title,body,entry_id,read_at,created_at")
+        .order("created_at", { ascending: false }).limit(30);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const unreadCount = (notifQ.data ?? []).filter((n) => !n.read_at).length;
+
+  useRealtimeTables(
+    ["financial_audit_log", "financial_payments", "notifications"],
+    [["fin", "audit", tenantId], ["fin", "entries", tenantId], ["fin", "notifications", tenantId]],
+  );
 
   const contasReceber = useMemo(
     () => filtered.filter((e) => e.kind === "receita" && e.status !== "pago").slice(0, 12),
