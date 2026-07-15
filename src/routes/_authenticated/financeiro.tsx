@@ -72,6 +72,8 @@ function Financeiro() {
   const [open, setOpen] = useState(false);
   const [cfMethod, setCfMethod] = useState<"direct" | "indirect">("direct");
   const [reconcileEntry, setReconcileEntry] = useState<Entry | null>(null);
+  const [historyEntry, setHistoryEntry] = useState<Entry | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [form, setForm] = useState({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
 
   useRealtimeTables(
