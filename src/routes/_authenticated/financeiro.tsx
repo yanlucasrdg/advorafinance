@@ -707,7 +707,7 @@ function Financeiro() {
               <li key={a.id} className="flex items-center justify-between py-2 text-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <Badge variant="outline" className="text-[10px] capitalize">{a.action.replace("_", " ")}</Badge>
-                  <span className="truncate text-muted-foreground">{a.after?.description ?? a.entry_id ?? "—"}</span>
+                  <span className="truncate text-muted-foreground">{(a.after as { description?: string } | null)?.description ?? a.entry_id ?? "—"}</span>
                 </div>
                 <span className="tabular-nums text-muted-foreground">{new Date(a.created_at).toLocaleString("pt-BR")}</span>
               </li>
