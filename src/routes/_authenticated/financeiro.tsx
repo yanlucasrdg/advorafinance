@@ -809,15 +809,22 @@ function Financeiro() {
           <p className="py-6 text-center text-xs text-muted-foreground">Sem eventos ainda</p>
         ) : (
           <ul className="divide-y divide-border/60">
-            {(auditQ.data ?? []).map((a) => (
-              <li key={a.id} className="flex items-center justify-between py-2 text-xs">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Badge variant="outline" className="text-[10px] capitalize">{a.action.replace("_", " ")}</Badge>
-                  <span className="truncate text-muted-foreground">{(a.after as { description?: string } | null)?.description ?? a.entry_id ?? "—"}</span>
-                </div>
-                <span className="tabular-nums text-muted-foreground">{new Date(a.created_at).toLocaleString("pt-BR")}</span>
-              </li>
-            ))}
+            {(auditQ.data ?? []).slice(0, 15).map((a) => {
+              const e = a.entry_id ? entries.find((x) => x.id === a.entry_id) ?? null : null;
+              return (
+                <li
+                  key={a.id}
+                  className={`flex items-center justify-between py-2 text-xs ${e ? "cursor-pointer hover:bg-muted/50 px-2 -mx-2 rounded-md" : ""}`}
+                  onClick={() => e && setHistoryEntry(e)}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Badge variant="outline" className="text-[10px] capitalize">{a.action.replace("_", " ")}</Badge>
+                    <span className="truncate text-muted-foreground">{(a.after as { description?: string } | null)?.description ?? a.entry_id ?? "—"}</span>
+                  </div>
+                  <span className="tabular-nums text-muted-foreground">{new Date(a.created_at).toLocaleString("pt-BR")}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -830,6 +837,16 @@ function Financeiro() {
           qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
           qc.invalidateQueries({ queryKey: ["fin", "audit", tenantId] });
         }}
+      />
+
+      <AuditSheet entry={historyEntry} onClose={() => setHistoryEntry(null)} />
+
+      <DreSettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        tenantId={tenantId}
+        current={dreConfig}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["fin", "dre_settings", tenantId] })}
       />
     </div>
   );
