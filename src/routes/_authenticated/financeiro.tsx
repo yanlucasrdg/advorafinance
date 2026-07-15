@@ -5,6 +5,7 @@ import {
   Plus, Trash2, TrendingUp, TrendingDown, Wallet, DollarSign, AlertCircle,
   CircleDollarSign, ArrowUpRight, ArrowDownRight, Download, Radio, Sparkles,
   Receipt, ReceiptText, Brain, ShieldCheck, History, BookOpen, Check,
+  Settings2, Bell, FileDown,
 } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -19,14 +20,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useGlobalFilters, PERIOD_LABELS, type PeriodKey } from "@/lib/global-filters";
 import { useRealtimeTables } from "@/hooks/use-realtime-table";
 import {
   financeKpis, revenueByMonth, fmtBRL, fmtBRLCompact, pctDelta,
-  dreReport, cashFlowDirect, cashFlowIndirect, DRE_CATEGORIES,
-  type FinRow,
+  dreReport, cashFlowDirect, cashFlowIndirect, DRE_CATEGORIES, DEFAULT_DRE_CONFIG,
+  type FinRow, type DreConfig,
 } from "@/lib/metrics";
 import { toast } from "sonner";
 
@@ -43,7 +48,9 @@ type Entry = FinRow & {
 type CaseLite = { id: string; area: string | null; responsible: string | null };
 type ClientLite = { id: string; name: string };
 type PaymentRow = { id: string; entry_id: string; amount_cents: number; paid_at: string; method: string | null; notes: string | null };
-type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; after: { description?: string } | null };
+type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
+type NotificationRow = { id: string; kind: string; title: string; body: string | null; entry_id: string | null; read_at: string | null; created_at: string };
+type DreSettingsRow = { tenant_id: string; apply_cogs: boolean; enabled_categories: string[]; category_map: Record<string, string> };
 
 const TOOLTIP_STYLE = {
   background: "#FFFFFF",
@@ -65,6 +72,8 @@ function Financeiro() {
   const [open, setOpen] = useState(false);
   const [cfMethod, setCfMethod] = useState<"direct" | "indirect">("direct");
   const [reconcileEntry, setReconcileEntry] = useState<Entry | null>(null);
+  const [historyEntry, setHistoryEntry] = useState<Entry | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [form, setForm] = useState({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
 
   useRealtimeTables(
@@ -226,8 +235,25 @@ function Financeiro() {
     return out;
   }, [series12]);
 
+  // DRE settings (per tenant)
+  const dreCfgQ = useQuery({
+    queryKey: ["fin", "dre_settings", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: DreSettingsRow | null; error: unknown }> } } } })
+        .from("dre_settings").select("*").eq("tenant_id", tenantId!).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const dreConfig: DreConfig = useMemo(() => dreCfgQ.data ? {
+    applyCogs: dreCfgQ.data.apply_cogs,
+    enabledCategories: dreCfgQ.data.enabled_categories,
+    categoryMap: dreCfgQ.data.category_map ?? {},
+  } : DEFAULT_DRE_CONFIG, [dreCfgQ.data]);
+
   // DRE + Cash Flow (period-scoped)
-  const dre = useMemo(() => dreReport(filtered, range.start, range.end), [filtered, range.start, range.end]);
+  const dre = useMemo(() => dreReport(filtered, range.start, range.end, dreConfig), [filtered, range.start, range.end, dreConfig]);
   const cashDirect = useMemo(() => cashFlowDirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
   const cashIndirect = useMemo(() => cashFlowIndirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
 
@@ -238,14 +264,32 @@ function Financeiro() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("financial_audit_log")
-        .select("id,entry_id,action,created_at,actor_id,after")
+        .select("id,entry_id,action,created_at,actor_id,before,after")
         .order("created_at", { ascending: false })
-        .limit(15);
+        .limit(30);
       if (error) throw error;
       return (data ?? []) as unknown as AuditRow[];
     },
   });
-  useRealtimeTables(["financial_audit_log", "financial_payments"], [["fin", "audit", tenantId], ["fin", "entries", tenantId]]);
+
+  // Notifications
+  const notifQ = useQuery({
+    queryKey: ["fin", "notifications", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { order: (k: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: NotificationRow[] | null; error: unknown }> } } } })
+        .from("notifications").select("id,kind,title,body,entry_id,read_at,created_at")
+        .order("created_at", { ascending: false }).limit(30);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const unreadCount = (notifQ.data ?? []).filter((n) => !n.read_at).length;
+
+  useRealtimeTables(
+    ["financial_audit_log", "financial_payments", "notifications"],
+    [["fin", "audit", tenantId], ["fin", "entries", tenantId], ["fin", "notifications", tenantId]],
+  );
 
   const contasReceber = useMemo(
     () => filtered.filter((e) => e.kind === "receita" && e.status !== "pago").slice(0, 12),
@@ -280,23 +324,71 @@ function Financeiro() {
     qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
   };
 
-  const exportCSV = () => {
-    const header = ["Descrição", "Tipo", "Status", "Valor (R$)", "Vencimento", "Pago em", "Cliente"];
-    const rows = filtered.map((e) => [
-      e.description.replace(/"/g, '""'),
-      e.kind,
-      e.status,
-      ((e.amount_cents ?? 0) / 100).toFixed(2).replace(".", ","),
-      e.due_date ?? "",
-      e.paid_at ?? "",
-      (e.clients?.name ?? "").replace(/"/g, '""'),
-    ]);
-    const csv = [header, ...rows].map((r) => r.map((v) => `"${v}"`).join(";")).join("\n");
+  const downloadCsv = (name: string, rows: (string | number)[][]) => {
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `financeiro_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.href = url; a.download = `${name}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click(); URL.revokeObjectURL(url);
+  };
+
+  const exportCSV = () => {
+    downloadCsv("financeiro", [
+      ["Descrição", "Tipo", "Status", "Valor (R$)", "Vencimento", "Pago em", "Cliente"],
+      ...filtered.map((e) => [
+        e.description, e.kind, e.status,
+        ((e.amount_cents ?? 0) / 100).toFixed(2).replace(".", ","),
+        e.due_date ?? "", e.paid_at ?? "", e.clients?.name ?? "",
+      ]),
+    ]);
+  };
+
+  const exportReconciled = () => {
+    const rows = filtered.filter((e) => e.settlement_status === "conciliado" || (e.settlement_status === "confirmado" && e.status === "pago"));
+    downloadCsv("conciliados", [
+      ["Descrição", "Tipo", "Status conciliação", "Valor (R$)", "Pago (R$)", "Método", "Categoria", "Vencimento", "Pago em", "Cliente"],
+      ...rows.map((e) => [
+        e.description, e.kind, e.settlement_status ?? "",
+        ((e.amount_cents ?? 0) / 100).toFixed(2).replace(".", ","),
+        ((e.paid_amount_cents ?? 0) / 100).toFixed(2).replace(".", ","),
+        e.payment_method ?? "", e.category ?? "",
+        e.due_date ?? "", e.paid_at ?? "", e.clients?.name ?? "",
+      ]),
+    ]);
+  };
+
+  const exportDre = () => {
+    downloadCsv(`dre_${filters.period}`, [
+      ["Linha", "Valor (R$)"],
+      ["Receita bruta", (dre.receitaBruta / 100).toFixed(2).replace(".", ",")],
+      ["(-) Impostos e deduções", (dre.deducoes / 100).toFixed(2).replace(".", ",")],
+      ["= Receita líquida", (dre.receitaLiquida / 100).toFixed(2).replace(".", ",")],
+      ["(-) Custos dos serviços", (dre.custos / 100).toFixed(2).replace(".", ",")],
+      ["= Lucro bruto", (dre.lucroBruto / 100).toFixed(2).replace(".", ",")],
+      ["(-) Despesas op/adm", (dre.desOp / 100).toFixed(2).replace(".", ",")],
+      ["= Resultado operacional", (dre.resultadoOperacional / 100).toFixed(2).replace(".", ",")],
+      ["(-) Despesas financeiras", (dre.desFin / 100).toFixed(2).replace(".", ",")],
+      ["= Resultado do período", (dre.resultado / 100).toFixed(2).replace(".", ",")],
+      ["Margem líquida (%)", dre.margem.toFixed(2).replace(".", ",")],
+    ]);
+  };
+
+  const exportCashFlow = () => {
+    downloadCsv(`fluxo_caixa_${filters.period}`, [
+      ["Método", "Linha", "Valor (R$)"],
+      ["Direto", "Entradas operacionais", (cashDirect.entradasOp / 100).toFixed(2).replace(".", ",")],
+      ["Direto", "Saídas operacionais", (cashDirect.saidasOp / 100).toFixed(2).replace(".", ",")],
+      ["Direto", "Caixa gerado", (cashDirect.caixaGerado / 100).toFixed(2).replace(".", ",")],
+      ...Object.entries(cashDirect.byMethod).map(([m, v]) => [
+        "Direto", `Por método: ${m}`, ((v.entradas - v.saidas) / 100).toFixed(2).replace(".", ","),
+      ] as (string | number)[]),
+      ["Indireto", "Resultado operacional", (cashIndirect.resultadoOperacional / 100).toFixed(2).replace(".", ",")],
+      ["Indireto", "Δ Recebíveis", (cashIndirect.variacaoRecebiveis / 100).toFixed(2).replace(".", ",")],
+      ["Indireto", "Δ Pagáveis", (cashIndirect.variacaoPagaveis / 100).toFixed(2).replace(".", ",")],
+      ["Indireto", "Caixa operacional", (cashIndirect.caixaOperacional / 100).toFixed(2).replace(".", ",")],
+      ["Indireto", "Caixa final", (cashIndirect.caixaFinal / 100).toFixed(2).replace(".", ",")],
+    ]);
   };
 
   const areasList = useMemo(() => Array.from(new Set(cases.map((c) => c.area).filter(Boolean) as string[])).sort(), [cases]);
@@ -322,7 +414,28 @@ function Financeiro() {
         subtitle="Receitas, despesas, fluxo de caixa e recebíveis calculados em tempo real."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={exportCSV}><Download className="size-4 mr-1.5" /> CSV</Button>
+            <NotificationsBell
+              items={notifQ.data ?? []}
+              unread={unreadCount}
+              tenantId={tenantId}
+              onOpenEntry={(id: string) => {
+                const e = entries.find((x) => x.id === id);
+                if (e) setHistoryEntry(e);
+              }}
+              onRefresh={() => qc.invalidateQueries({ queryKey: ["fin", "notifications", tenantId] })}
+            />
+            <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><Settings2 className="size-4 mr-1.5" /> DRE</Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm"><Download className="size-4 mr-1.5" /> Exportar</Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-56 p-1">
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportCSV}><FileDown className="size-3.5" /> Todos os lançamentos</button>
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportReconciled}><FileDown className="size-3.5" /> Somente conciliados</button>
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportDre}><FileDown className="size-3.5" /> DRE do período</button>
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportCashFlow}><FileDown className="size-3.5" /> Fluxo de caixa</button>
+              </PopoverContent>
+            </Popover>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild><Button size="sm"><Plus className="size-4 mr-1" /> Novo lançamento</Button></DialogTrigger>
               <DialogContent>
@@ -696,15 +809,22 @@ function Financeiro() {
           <p className="py-6 text-center text-xs text-muted-foreground">Sem eventos ainda</p>
         ) : (
           <ul className="divide-y divide-border/60">
-            {(auditQ.data ?? []).map((a) => (
-              <li key={a.id} className="flex items-center justify-between py-2 text-xs">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Badge variant="outline" className="text-[10px] capitalize">{a.action.replace("_", " ")}</Badge>
-                  <span className="truncate text-muted-foreground">{a.after?.description ?? a.entry_id ?? "—"}</span>
-                </div>
-                <span className="tabular-nums text-muted-foreground">{new Date(a.created_at).toLocaleString("pt-BR")}</span>
-              </li>
-            ))}
+            {(auditQ.data ?? []).slice(0, 15).map((a) => {
+              const e = a.entry_id ? entries.find((x) => x.id === a.entry_id) ?? null : null;
+              return (
+                <li
+                  key={a.id}
+                  className={`flex items-center justify-between py-2 text-xs ${e ? "cursor-pointer hover:bg-muted/50 px-2 -mx-2 rounded-md" : ""}`}
+                  onClick={() => e && setHistoryEntry(e)}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Badge variant="outline" className="text-[10px] capitalize">{a.action.replace("_", " ")}</Badge>
+                    <span className="truncate text-muted-foreground">{(a.after as { description?: string } | null)?.description ?? a.entry_id ?? "—"}</span>
+                  </div>
+                  <span className="tabular-nums text-muted-foreground">{new Date(a.created_at).toLocaleString("pt-BR")}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -717,6 +837,16 @@ function Financeiro() {
           qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
           qc.invalidateQueries({ queryKey: ["fin", "audit", tenantId] });
         }}
+      />
+
+      <AuditSheet entry={historyEntry} onClose={() => setHistoryEntry(null)} />
+
+      <DreSettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        tenantId={tenantId}
+        current={dreConfig}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["fin", "dre_settings", tenantId] })}
       />
     </div>
   );
@@ -942,5 +1072,240 @@ function EntriesTable({
         </table>
       )}
     </section>
+  );
+}
+
+function NotificationsBell({
+  items, unread, tenantId, onOpenEntry, onRefresh,
+}: {
+  items: NotificationRow[]; unread: number; tenantId: string | null;
+  onOpenEntry: (id: string) => void; onRefresh: () => void;
+}) {
+  const markAllRead = async () => {
+    if (!tenantId) return;
+    await (supabase as unknown as { from: (t: string) => { update: (v: Record<string, unknown>) => { is: (k: string, v: unknown) => Promise<unknown> } } })
+      .from("notifications").update({ read_at: new Date().toISOString() }).is("read_at", null);
+    onRefresh();
+  };
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="relative">
+          <Bell className="size-4" />
+          {unread > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-destructive text-[9px] font-bold text-white grid place-items-center">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+          <p className="text-xs font-semibold">Notificações</p>
+          <button className="text-[10px] text-primary hover:underline" onClick={markAllRead}>Marcar todas como lidas</button>
+        </div>
+        <div className="max-h-96 overflow-y-auto">
+          {items.length === 0 ? (
+            <p className="py-8 text-center text-xs text-muted-foreground">Sem notificações</p>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {items.map((n) => (
+                <li
+                  key={n.id}
+                  className={`px-3 py-2 text-xs cursor-pointer hover:bg-muted/50 ${!n.read_at ? "bg-primary/5" : ""}`}
+                  onClick={() => { if (n.entry_id) onOpenEntry(n.entry_id); }}
+                >
+                  <div className="flex items-center gap-2">
+                    {!n.read_at && <span className="size-1.5 rounded-full bg-primary shrink-0" />}
+                    <span className="font-semibold truncate">{n.title}</span>
+                  </div>
+                  {n.body && <p className="text-muted-foreground truncate mt-0.5">{n.body}</p>}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(n.created_at).toLocaleString("pt-BR")}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function DreSettingsDialog({
+  open, onClose, tenantId, current, onSaved,
+}: {
+  open: boolean; onClose: () => void; tenantId: string | null;
+  current: DreConfig; onSaved: () => void;
+}) {
+  const [applyCogs, setApplyCogs] = useState(current.applyCogs);
+  const [enabled, setEnabled] = useState<string[]>(current.enabledCategories);
+  useMemo(() => { setApplyCogs(current.applyCogs); setEnabled(current.enabledCategories); }, [current]);
+  const toggle = (k: string) => setEnabled((prev) => prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]);
+  const save = async () => {
+    if (!tenantId) return;
+    const { error } = await (supabase as unknown as { from: (t: string) => { upsert: (v: Record<string, unknown>, o: { onConflict: string }) => Promise<{ error: unknown }> } })
+      .from("dre_settings").upsert({
+        tenant_id: tenantId,
+        apply_cogs: applyCogs,
+        enabled_categories: enabled,
+        category_map: current.categoryMap,
+      }, { onConflict: "tenant_id" });
+    if (error) return toast.error(String((error as { message?: string })?.message ?? error));
+    toast.success("Configuração do DRE atualizada");
+    onSaved();
+    onClose();
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><BookOpen className="size-4 text-primary" /> Configuração do DRE</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
+            <div>
+              <p className="text-sm font-semibold">Aplicar COGS (Custos dos serviços)</p>
+              <p className="text-xs text-muted-foreground">Quando desligado, os custos não deduzem do lucro bruto.</p>
+            </div>
+            <Switch checked={applyCogs} onCheckedChange={setApplyCogs} />
+          </div>
+          <div>
+            <p className="text-xs font-semibold mb-2">Categorias que entram no DRE</p>
+            <div className="grid grid-cols-1 gap-1.5">
+              {Object.entries(DRE_CATEGORIES).map(([k, label]) => (
+                <label key={k} className="flex items-center gap-2 text-sm rounded-md border border-border px-3 py-2 cursor-pointer hover:bg-muted/40">
+                  <Checkbox checked={enabled.includes(k)} onCheckedChange={() => toggle(k)} />
+                  <span className="flex-1">{label}</span>
+                  <code className="text-[10px] text-muted-foreground">{k}</code>
+                </label>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-2">Cálculos são sempre derivados dos lançamentos do banco. Alterar aqui apenas muda como cada categoria é agregada no DRE.</p>
+          </div>
+          <Button onClick={save} className="w-full">Salvar</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AuditSheet({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
+  const auditQ = useQuery({
+    queryKey: ["fin", "audit_entry", entry?.id],
+    enabled: !!entry?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_audit_log")
+        .select("id,entry_id,action,created_at,actor_id,before,after")
+        .eq("entry_id", entry!.id)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as AuditRow[];
+    },
+  });
+  const paymentsQ = useQuery({
+    queryKey: ["fin", "audit_payments", entry?.id],
+    enabled: !!entry?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_payments")
+        .select("id,entry_id,amount_cents,paid_at,method,notes")
+        .eq("entry_id", entry!.id)
+        .order("paid_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as PaymentRow[];
+    },
+  });
+
+  const diffs = (a: AuditRow) => {
+    const before = (a.before ?? {}) as Record<string, unknown>;
+    const after = (a.after ?? {}) as Record<string, unknown>;
+    const keys = ["status", "settlement_status", "paid_amount_cents", "payment_method", "amount_cents"];
+    return keys
+      .filter((k) => before[k] !== after[k])
+      .map((k) => ({
+        key: k,
+        from: k.endsWith("_cents") ? fmtBRL(Number(before[k] ?? 0)) : String(before[k] ?? "—"),
+        to: k.endsWith("_cents") ? fmtBRL(Number(after[k] ?? 0)) : String(after[k] ?? "—"),
+      }));
+  };
+
+  return (
+    <Sheet open={!!entry} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2"><History className="size-4 text-primary" /> Trilha completa</SheetTitle>
+        </SheetHeader>
+        {entry && (
+          <div className="mt-4 space-y-4">
+            <div className="rounded-xl border border-border p-3">
+              <p className="text-sm font-semibold truncate">{entry.description}</p>
+              <p className="text-xs text-muted-foreground">{entry.clients?.name ?? "Sem cliente"}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+                <Badge variant="outline" className="capitalize">{entry.kind}</Badge>
+                <Badge variant="outline" className="capitalize">{entry.status}</Badge>
+                <Badge variant="outline" className="capitalize">{entry.settlement_status ?? "previsto"}</Badge>
+                {entry.payment_method && <Badge variant="outline" className="capitalize">{entry.payment_method}</Badge>}
+                {entry.category && <Badge variant="outline">{entry.category}</Badge>}
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div><p className="text-muted-foreground">Total</p><p className="font-semibold tabular-nums">{fmtBRL(entry.amount_cents)}</p></div>
+                <div><p className="text-muted-foreground">Pago</p><p className="font-semibold tabular-nums">{fmtBRL(entry.paid_amount_cents ?? 0)}</p></div>
+                <div><p className="text-muted-foreground">Restante</p><p className="font-semibold tabular-nums">{fmtBRL(Math.max(0, entry.amount_cents - (entry.paid_amount_cents ?? 0)))}</p></div>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Baixas registradas</p>
+              {(paymentsQ.data ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">Sem baixas registradas</p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {(paymentsQ.data ?? []).map((p) => (
+                    <li key={p.id} className="flex items-center justify-between py-1.5 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px] capitalize">{p.method ?? "—"}</Badge>
+                        <span className="tabular-nums font-semibold">{fmtBRL(p.amount_cents)}</span>
+                        {p.notes && <span className="text-muted-foreground truncate max-w-[120px]">— {p.notes}</span>}
+                      </div>
+                      <span className="text-muted-foreground">{new Date(p.paid_at).toLocaleDateString("pt-BR")}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Eventos</p>
+              {(auditQ.data ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">Sem eventos</p>
+              ) : (
+                <ol className="space-y-3">
+                  {(auditQ.data ?? []).map((a) => (
+                    <li key={a.id} className="relative pl-5 border-l border-border">
+                      <span className="absolute -left-[5px] top-1.5 size-2.5 rounded-full bg-primary" />
+                      <div className="flex items-center justify-between">
+                        <Badge variant="outline" className="text-[10px] capitalize">{a.action.replace("_", " ")}</Badge>
+                        <span className="text-[10px] text-muted-foreground tabular-nums">{new Date(a.created_at).toLocaleString("pt-BR")}</span>
+                      </div>
+                      <div className="mt-1 space-y-0.5">
+                        {diffs(a).length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground">Sem alterações registradas.</p>
+                        ) : diffs(a).map((d) => (
+                          <p key={d.key} className="text-[11px]">
+                            <span className="text-muted-foreground capitalize">{d.key.replace("_", " ")}: </span>
+                            <span className="line-through text-muted-foreground">{d.from}</span>
+                            <span className="mx-1">→</span>
+                            <span className="font-semibold">{d.to}</span>
+                          </p>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

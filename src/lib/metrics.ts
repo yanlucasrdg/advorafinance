@@ -218,13 +218,26 @@ export const DRE_CATEGORIES: Record<string, string> = {
   despesa_financeira: "Despesas financeiras",
 };
 
-function classify(row: FinRow): string {
-  const c = (row.category ?? "").toLowerCase();
-  if (c && DRE_CATEGORIES[c]) return c;
+export type DreConfig = {
+  applyCogs: boolean;
+  enabledCategories: string[];
+  categoryMap: Record<string, string>;
+};
+
+export const DEFAULT_DRE_CONFIG: DreConfig = {
+  applyCogs: true,
+  enabledCategories: Object.keys(DRE_CATEGORIES),
+  categoryMap: {},
+};
+
+function classify(row: FinRow, cfg: DreConfig = DEFAULT_DRE_CONFIG): string {
+  const raw = (row.category ?? "").toLowerCase();
+  const mapped = cfg.categoryMap[raw] || raw;
+  if (mapped && DRE_CATEGORIES[mapped]) return mapped;
   return row.kind === "receita" ? "receita_servico" : "despesa_operacional";
 }
 
-export function dreReport(rows: FinRow[], from?: Date, to?: Date) {
+export function dreReport(rows: FinRow[], from?: Date, to?: Date, cfg: DreConfig = DEFAULT_DRE_CONFIG) {
   const inRange = (r: FinRow) => {
     if (r.status !== "pago" || !r.paid_at) return false;
     const d = new Date(r.paid_at);
@@ -234,13 +247,14 @@ export function dreReport(rows: FinRow[], from?: Date, to?: Date) {
   };
   const buckets: Record<string, number> = Object.fromEntries(Object.keys(DRE_CATEGORIES).map((k) => [k, 0]));
   rows.filter(inRange).forEach((r) => {
-    const k = classify(r);
+    const k = classify(r, cfg);
+    if (!cfg.enabledCategories.includes(k)) return;
     buckets[k] = (buckets[k] ?? 0) + (r.amount_cents ?? 0);
   });
   const receitaBruta = buckets.receita_servico + buckets.receita_outra;
   const deducoes = buckets.imposto;
   const receitaLiquida = receitaBruta - deducoes;
-  const custos = buckets.cogs;
+  const custos = cfg.applyCogs ? buckets.cogs : 0;
   const lucroBruto = receitaLiquida - custos;
   const desOp = buckets.despesa_operacional + buckets.despesa_administrativa;
   const resultadoOperacional = lucroBruto - desOp;
@@ -250,6 +264,7 @@ export function dreReport(rows: FinRow[], from?: Date, to?: Date) {
     receitaBruta, deducoes, receitaLiquida, custos, lucroBruto,
     desOp, resultadoOperacional, desFin, resultado, buckets,
     margem: receitaBruta > 0 ? (resultado / receitaBruta) * 100 : 0,
+    config: cfg,
   };
 }
 
