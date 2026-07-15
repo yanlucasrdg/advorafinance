@@ -48,7 +48,9 @@ type Entry = FinRow & {
 type CaseLite = { id: string; area: string | null; responsible: string | null };
 type ClientLite = { id: string; name: string };
 type PaymentRow = { id: string; entry_id: string; amount_cents: number; paid_at: string; method: string | null; notes: string | null };
-type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; after: { description?: string } | null };
+type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
+type NotificationRow = { id: string; kind: string; title: string; body: string | null; entry_id: string | null; read_at: string | null; created_at: string };
+type DreSettingsRow = { tenant_id: string; apply_cogs: boolean; enabled_categories: string[]; category_map: Record<string, string> };
 
 const TOOLTIP_STYLE = {
   background: "#FFFFFF",
