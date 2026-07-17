@@ -243,36 +243,45 @@ export type Database = {
       deadlines: {
         Row: {
           case_id: string | null
+          client_id: string | null
+          completed_at: string | null
           created_at: string
           done: boolean
           due_at: string
           id: string
           kind: string
           notes: string | null
+          priority: string
           tenant_id: string
           title: string
           updated_at: string
         }
         Insert: {
           case_id?: string | null
+          client_id?: string | null
+          completed_at?: string | null
           created_at?: string
           done?: boolean
           due_at: string
           id?: string
           kind?: string
           notes?: string | null
+          priority?: string
           tenant_id: string
           title: string
           updated_at?: string
         }
         Update: {
           case_id?: string | null
+          client_id?: string | null
+          completed_at?: string | null
           created_at?: string
           done?: boolean
           due_at?: string
           id?: string
           kind?: string
           notes?: string | null
+          priority?: string
           tenant_id?: string
           title?: string
           updated_at?: string
@@ -283,6 +292,13 @@ export type Database = {
             columns: ["case_id"]
             isOneToOne: false
             referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deadlines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
           {
