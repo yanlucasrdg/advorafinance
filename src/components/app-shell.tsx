@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, Briefcase, Calendar, DollarSign, BarChart3,
-  MessageSquare, Zap, Plug, Settings, LogOut, Search, Bell, Sparkles,
+  MessageSquare, Zap, Plug, Settings, LogOut, Search, Sparkles,
   Command, Menu, X, ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import advoraLogo from "@/assets/advora-logo.png.asset.json";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserMenu } from "@/components/user-menu";
+import { NotificationsPopover } from "@/components/notifications-popover";
+
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard };
 type NavGroup = { title: string; items: NavItem[] };
@@ -208,10 +211,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-1 ml-auto shrink-0">
-            <button className="size-9 grid place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground relative" aria-label="Notificações">
-              <Bell className="size-[16px]" strokeWidth={1.75} />
-              <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive ring-2 ring-background" />
-            </button>
+            <NotificationsPopover />
             <button
               className="hidden sm:grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
               aria-label="Configurações"
@@ -227,6 +227,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Sparkles className="size-3.5" />
               <span className="hidden sm:inline">Copiloto</span>
             </Link>
+            <div className="hidden sm:block w-px h-6 bg-border mx-1.5" />
+            <UserMenu />
           </div>
         </header>
         <main className="flex-1 overflow-auto">{children}</main>
@@ -234,3 +236,4 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
+

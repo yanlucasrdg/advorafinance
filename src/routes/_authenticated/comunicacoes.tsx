@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   MessageSquare, Send, Search, Archive, UserPlus, Tag, Phone, Instagram,
   Facebook, CheckCheck, Circle, Filter, Sparkles, Inbox, Clock, X, Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -16,6 +17,9 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
+import { useServerFn } from "@tanstack/react-start";
+import { zapiSendText } from "@/lib/zapi.functions";
+
 
 export const Route = createFileRoute("/_authenticated/comunicacoes")({
   component: Comunicacoes,
@@ -98,10 +102,15 @@ function Comunicacoes() {
   const [draft, setDraft] = useState("");
   const [newTag, setNewTag] = useState("");
   const [openNew, setOpenNew] = useState(false);
-  const [newContact, setNewContact] = useState({ name: "", phone: "", channel: "whatsapp" as Channel, message: "" });
+  const [newContact, setNewContact] = useState<{ name: string; phone: string; channel: Channel | null; message: string }>({ name: "", phone: "", channel: null, message: "" });
+  const [newErrors, setNewErrors] = useState<{ name?: string; phone?: string; channel?: string; submit?: string }>({});
+  const [creating, setCreating] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sendZapi = useServerFn(zapiSendText);
 
   useRealtimeTables(["whatsapp_conversations", "whatsapp_messages"], ["comms:convs", "comms:msgs"]);
+
 
   const load = async () => {
     setLoading(true);
@@ -224,35 +233,120 @@ function Comunicacoes() {
     setSending(false);
   };
 
-  const createConversation = async () => {
-    if (!profile?.tenant_id || !newContact.phone.trim()) return;
-    const { data, error } = await supabase.from("whatsapp_conversations").insert({
-      tenant_id: profile.tenant_id,
-      instance_id: null as unknown as string,
-      contact_name: newContact.name || null,
-      contact_phone: newContact.phone,
-      channel: newContact.channel,
-      assignment_status: "new" as AssignmentStatus,
-      last_message: newContact.message || null,
-      last_message_at: new Date().toISOString(),
-      unread_count: 0,
-    } as never).select().single();
-    if (error) return toast.error(error.message);
-    if (newContact.message.trim() && data) {
-      await supabase.from("whatsapp_messages").insert({
-        conversation_id: data.id,
-        tenant_id: profile.tenant_id,
-        direction: "outbound",
-        body: newContact.message,
-        status: "sent",
-      } as never);
+  const validateNewContact = () => {
+    const errs: typeof newErrors = {};
+    if (!newContact.name.trim()) errs.name = "Informe o nome do contato.";
+    if (!newContact.channel) errs.channel = "Selecione um canal.";
+    const raw = newContact.phone.trim();
+    if (!raw) errs.phone = "Informe o telefone ou ID.";
+    else if (newContact.channel === "whatsapp") {
+      const digits = raw.replace(/\D/g, "");
+      if (digits.length < 10 || digits.length > 15) errs.phone = "Telefone inválido. Use DDI+DDD+número (ex: +5511999999999).";
+    } else if (newContact.channel === "instagram" || newContact.channel === "messenger") {
+      const ok = /^@?[a-zA-Z0-9._]{3,}$/.test(raw) || /^\d{3,}$/.test(raw);
+      if (!ok) errs.phone = "Use @usuario ou ID numérico.";
     }
-    toast.success("Conversa criada");
-    setOpenNew(false);
-    setNewContact({ name: "", phone: "", channel: "whatsapp", message: "" });
-    load();
-    if (data?.id) setSelected(data.id);
+    return errs;
   };
+
+  const closeNewModal = (force = false) => {
+    const dirty = newContact.name || newContact.phone || newContact.message || newContact.channel;
+    if (!force && dirty) { setConfirmClose(true); return; }
+    setOpenNew(false);
+    setConfirmClose(false);
+    setNewContact({ name: "", phone: "", channel: null, message: "" });
+    setNewErrors({});
+  };
+
+  const createConversation = async () => {
+    setNewErrors({});
+    if (!profile?.tenant_id) return;
+    const errs = validateNewContact();
+    if (Object.keys(errs).length > 0) { setNewErrors(errs); return; }
+    setCreating(true);
+    try {
+      const channel = newContact.channel!;
+      const identifier = channel === "whatsapp"
+        ? "+" + newContact.phone.replace(/\D/g, "")
+        : newContact.phone.trim().replace(/^@/, "");
+
+      // Dedupe check: existing conversation with same channel + identifier
+      const { data: existing } = await supabase
+        .from("whatsapp_conversations")
+        .select("id")
+        .eq("channel", channel)
+        .eq("contact_phone", identifier)
+        .maybeSingle();
+      if (existing?.id) {
+        const ok = window.confirm("Este contato já existe. Deseja abrir a conversa existente?");
+        if (ok) { setSelected(existing.id); closeNewModal(true); }
+        setCreating(false);
+        return;
+      }
+
+      // Also link/create a client record by phone (WhatsApp only)
+      if (channel === "whatsapp") {
+        const { data: cli } = await supabase.from("clients").select("id").eq("phone", identifier).maybeSingle();
+        if (!cli) {
+          await supabase.from("clients").insert({
+            tenant_id: profile.tenant_id,
+            name: newContact.name.trim(),
+            phone: identifier,
+            type: "pf",
+            status: "novo_contato",
+            created_by: user?.id ?? null,
+          } as never);
+        }
+      }
+
+      const { data, error } = await supabase.from("whatsapp_conversations").insert({
+        tenant_id: profile.tenant_id,
+        instance_id: null as unknown as string,
+        contact_name: newContact.name.trim(),
+        contact_phone: identifier,
+        channel,
+        assigned_to: user?.id ?? null,
+        assignment_status: "assigned" as AssignmentStatus,
+        last_message: newContact.message.trim() || null,
+        last_message_at: new Date().toISOString(),
+        unread_count: 0,
+      } as never).select().single();
+      if (error) throw new Error(error.message);
+
+      if (newContact.message.trim() && data) {
+        if (channel === "instagram" || channel === "messenger") {
+          setNewErrors({ submit: `Não foi possível enviar via ${channel === "instagram" ? "Instagram" : "Messenger"}. Verifique a integração.` });
+          setCreating(false);
+          return;
+        }
+        // WhatsApp: send via Z-API
+        try {
+          await sendZapi({ data: { phone: identifier.replace(/\D/g, ""), message: newContact.message.trim() } });
+          await supabase.from("whatsapp_messages").insert({
+            conversation_id: data.id,
+            tenant_id: profile.tenant_id,
+            direction: "outbound",
+            body: newContact.message.trim(),
+            status: "sent",
+          } as never);
+        } catch (e) {
+          setNewErrors({ submit: `Não foi possível enviar via WhatsApp. ${e instanceof Error ? e.message : "Verifique a integração."}` });
+          setCreating(false);
+          return;
+        }
+      }
+
+      toast.success("Conversa criada");
+      if (data?.id) setSelected(data.id);
+      closeNewModal(true);
+      load();
+    } catch (e) {
+      setNewErrors({ submit: e instanceof Error ? e.message : "Erro ao criar conversa." });
+    } finally {
+      setCreating(false);
+    }
+  };
+
 
   return (
     <div className="relative h-[calc(100vh-72px)] overflow-hidden">
@@ -268,18 +362,31 @@ function Comunicacoes() {
             <h1 className="text-3xl font-bold tracking-tight">Central de Atendimento</h1>
             <p className="text-sm text-muted-foreground mt-1.5">Omnichannel — WhatsApp, Instagram e Messenger em um só lugar.</p>
           </div>
-          <Dialog open={openNew} onOpenChange={setOpenNew}>
+          <Dialog open={openNew} onOpenChange={(o) => { if (!o) closeNewModal(); else setOpenNew(true); }}>
             <DialogTrigger asChild>
-              <Button size="sm" className="h-9 bg-[image:var(--gradient-brand)]">
+              <Button size="sm" className="h-9 bg-[image:var(--gradient-brand)]" onClick={() => setOpenNew(true)}>
                 <MessageSquare className="size-3.5 mr-1.5" /> Nova conversa
               </Button>
             </DialogTrigger>
-            <DialogContent className="glass">
+            <DialogContent className="glass" onEscapeKeyDown={(e) => { e.preventDefault(); closeNewModal(); }} onPointerDownOutside={(e) => { e.preventDefault(); closeNewModal(); }}>
               <DialogHeader><DialogTitle>Iniciar nova conversa</DialogTitle></DialogHeader>
               <div className="grid gap-3">
-                <div><Label>Nome do contato</Label><Input value={newContact.name} onChange={e => setNewContact(v => ({ ...v, name: e.target.value }))} /></div>
+                <div>
+                  <Label>Nome do contato</Label>
+                  <Input value={newContact.name} onChange={e => setNewContact(v => ({ ...v, name: e.target.value }))} className={newErrors.name ? "border-destructive" : ""} />
+                  {newErrors.name && <p className="text-[11px] text-destructive mt-1">{newErrors.name}</p>}
+                </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Telefone / ID</Label><Input value={newContact.phone} onChange={e => setNewContact(v => ({ ...v, phone: e.target.value }))} /></div>
+                  <div>
+                    <Label>{newContact.channel === "whatsapp" ? "Telefone" : "Telefone / ID"}</Label>
+                    <Input
+                      value={newContact.phone}
+                      onChange={e => setNewContact(v => ({ ...v, phone: e.target.value }))}
+                      placeholder={newContact.channel === "whatsapp" ? "+55 11 99999-9999" : newContact.channel ? "@usuario ou ID" : ""}
+                      className={newErrors.phone ? "border-destructive" : ""}
+                    />
+                    {newErrors.phone && <p className="text-[11px] text-destructive mt-1">{newErrors.phone}</p>}
+                  </div>
                   <div>
                     <Label>Canal</Label>
                     <div className="flex gap-1 mt-1">
@@ -287,20 +394,42 @@ function Comunicacoes() {
                         const M = CHANNEL_META[ch];
                         const active = newContact.channel === ch;
                         return (
-                          <button key={ch} onClick={() => setNewContact(v => ({ ...v, channel: ch }))}
+                          <button key={ch} type="button" onClick={() => setNewContact(v => ({ ...v, channel: ch }))}
                             className={`flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-2 rounded-md text-xs font-medium transition-all ${active ? `${M.bg} ${M.color} ring-1 ring-current/30` : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"}`}>
                             <M.icon className="size-3.5" />{M.label}
                           </button>
                         );
                       })}
                     </div>
+                    {newErrors.channel && <p className="text-[11px] text-destructive mt-1">{newErrors.channel}</p>}
                   </div>
                 </div>
-                <div><Label>Mensagem inicial (opcional)</Label><Textarea rows={3} value={newContact.message} onChange={e => setNewContact(v => ({ ...v, message: e.target.value }))} /></div>
-                <Button onClick={createConversation} className="mt-1 bg-[image:var(--gradient-brand)]">Criar conversa</Button>
+                <div>
+                  <Label>Mensagem inicial (opcional)</Label>
+                  <Textarea rows={3} value={newContact.message} onChange={e => setNewContact(v => ({ ...v, message: e.target.value }))} />
+                </div>
+                {newErrors.submit && (
+                  <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                    <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+                    <span>{newErrors.submit}</span>
+                  </div>
+                )}
+                <Button onClick={createConversation} disabled={creating} className="mt-1 bg-[image:var(--gradient-brand)]">
+                  {creating ? <><Loader2 className="size-4 mr-2 animate-spin" />Criando…</> : "Criar conversa"}
+                </Button>
+                {confirmClose && (
+                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-500 flex items-center justify-between gap-2">
+                    <span>Descartar nova conversa?</span>
+                    <div className="flex gap-1">
+                      <button className="h-7 px-2 rounded-md hover:bg-amber-500/20" onClick={() => setConfirmClose(false)}>Voltar</button>
+                      <button className="h-7 px-2 rounded-md bg-amber-500 text-white" onClick={() => closeNewModal(true)}>Descartar</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </DialogContent>
           </Dialog>
+
         </div>
 
         {/* KPIs */}

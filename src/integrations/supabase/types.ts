@@ -571,7 +571,9 @@ export type Database = {
           entry_id: string | null
           id: string
           kind: string
+          link_action: string | null
           read_at: string | null
+          severity: string
           tenant_id: string
           title: string
           user_id: string | null
@@ -582,7 +584,9 @@ export type Database = {
           entry_id?: string | null
           id?: string
           kind: string
+          link_action?: string | null
           read_at?: string | null
+          severity?: string
           tenant_id: string
           title: string
           user_id?: string | null
@@ -593,7 +597,9 @@ export type Database = {
           entry_id?: string | null
           id?: string
           kind?: string
+          link_action?: string | null
           read_at?: string | null
+          severity?: string
           tenant_id?: string
           title?: string
           user_id?: string | null
@@ -622,8 +628,10 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          locale: string
           phone: string | null
           tenant_id: string | null
+          theme: string
           updated_at: string
         }
         Insert: {
@@ -632,8 +640,10 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          locale?: string
           phone?: string | null
           tenant_id?: string | null
+          theme?: string
           updated_at?: string
         }
         Update: {
@@ -642,8 +652,10 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          locale?: string
           phone?: string | null
           tenant_id?: string | null
+          theme?: string
           updated_at?: string
         }
         Relationships: [
