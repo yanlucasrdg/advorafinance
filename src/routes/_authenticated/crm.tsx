@@ -76,13 +76,29 @@ type Client = {
 };
 
 const STAGES = [
-  { id: "lead",          label: "Lead",          subtitle: "Contato inicial",     color: "oklch(0.70 0.18 285)", ring: "ring-violet-500/40",  bar: "bg-violet-500",  text: "text-violet-300",  bg: "bg-violet-500/10" },
-  { id: "qualificacao",  label: "Qualificação",  subtitle: "Análise inicial",     color: "oklch(0.70 0.18 250)", ring: "ring-blue-500/40",    bar: "bg-blue-500",    text: "text-blue-300",    bg: "bg-blue-500/10" },
-  { id: "reuniao",       label: "Reunião",       subtitle: "Consulta agendada",   color: "oklch(0.78 0.14 200)", ring: "ring-cyan-500/40",    bar: "bg-cyan-500",    text: "text-cyan-300",    bg: "bg-cyan-500/10" },
-  { id: "proposta",      label: "Proposta",      subtitle: "Honorários enviados", color: "oklch(0.80 0.15 85)",  ring: "ring-amber-500/40",   bar: "bg-amber-500",   text: "text-amber-300",   bg: "bg-amber-500/10" },
-  { id: "fechado",       label: "Fechado",       subtitle: "Cliente convertido",  color: "oklch(0.72 0.17 155)", ring: "ring-emerald-500/40", bar: "bg-emerald-500", text: "text-emerald-300", bg: "bg-emerald-500/10" },
-  { id: "perdido",       label: "Perdido",       subtitle: "Não convertido",      color: "oklch(0.65 0.22 25)",  ring: "ring-rose-500/40",    bar: "bg-rose-500",    text: "text-rose-300",    bg: "bg-rose-500/10" },
+  { id: "novo_contato",      label: "Novo Contato",      subtitle: "Primeiro contato",     color: "oklch(0.70 0.18 285)", ring: "ring-violet-500/40",  bar: "bg-violet-500",  text: "text-violet-300",  bg: "bg-violet-500/10" },
+  { id: "triagem",           label: "Triagem",           subtitle: "Qualificação",         color: "oklch(0.70 0.18 250)", ring: "ring-blue-500/40",    bar: "bg-blue-500",    text: "text-blue-300",    bg: "bg-blue-500/10" },
+  { id: "consulta_agendada", label: "Consulta Agendada", subtitle: "Reunião marcada",      color: "oklch(0.78 0.14 200)", ring: "ring-cyan-500/40",    bar: "bg-cyan-500",    text: "text-cyan-300",    bg: "bg-cyan-500/10" },
+  { id: "proposta",          label: "Proposta",          subtitle: "Honorários enviados",  color: "oklch(0.80 0.15 85)",  ring: "ring-amber-500/40",   bar: "bg-amber-500",   text: "text-amber-300",   bg: "bg-amber-500/10" },
+  { id: "contrato",          label: "Contrato",          subtitle: "Assinado",             color: "oklch(0.74 0.17 130)", ring: "ring-lime-500/40",    bar: "bg-lime-500",    text: "text-lime-300",    bg: "bg-lime-500/10" },
+  { id: "em_andamento",      label: "Em Andamento",      subtitle: "Caso ativo",           color: "oklch(0.72 0.17 155)", ring: "ring-emerald-500/40", bar: "bg-emerald-500", text: "text-emerald-300", bg: "bg-emerald-500/10" },
+  { id: "encerrado",         label: "Concluído / Perdido", subtitle: "Encerrado",          color: "oklch(0.65 0.10 25)",  ring: "ring-rose-500/40",    bar: "bg-rose-500",    text: "text-rose-300",    bg: "bg-rose-500/10" },
 ] as const;
+
+// Retrocompat: mapeia status legados dos clientes para os 7 novos estágios
+const LEGACY_STAGE_MAP: Record<string, string> = {
+  lead: "novo_contato",
+  prospect: "novo_contato",
+  qualificacao: "triagem",
+  reuniao: "consulta_agendada",
+  fechado: "contrato",
+  ativo: "em_andamento",
+  perdido: "encerrado",
+  inativo: "encerrado",
+};
+function stageOf(status: string): string {
+  return LEGACY_STAGE_MAP[status] ?? status;
+}
 
 const AREAS = ["Trabalhista", "Cível", "Empresarial", "Tributário", "Família", "Criminal", "Previdenciário"];
 
