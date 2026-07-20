@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   MessageSquare, Send, Search, Archive, UserPlus, Tag, Phone, Instagram,
   Facebook, CheckCheck, Circle, Filter, Sparkles, Inbox, Clock, X, Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -16,6 +17,9 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
+import { useServerFn } from "@tanstack/react-start";
+import { zapiSendText } from "@/lib/zapi.functions";
+
 
 export const Route = createFileRoute("/_authenticated/comunicacoes")({
   component: Comunicacoes,
@@ -98,10 +102,15 @@ function Comunicacoes() {
   const [draft, setDraft] = useState("");
   const [newTag, setNewTag] = useState("");
   const [openNew, setOpenNew] = useState(false);
-  const [newContact, setNewContact] = useState({ name: "", phone: "", channel: "whatsapp" as Channel, message: "" });
+  const [newContact, setNewContact] = useState<{ name: string; phone: string; channel: Channel | null; message: string }>({ name: "", phone: "", channel: null, message: "" });
+  const [newErrors, setNewErrors] = useState<{ name?: string; phone?: string; channel?: string; submit?: string }>({});
+  const [creating, setCreating] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sendZapi = useServerFn(zapiSendText);
 
   useRealtimeTables(["whatsapp_conversations", "whatsapp_messages"], ["comms:convs", "comms:msgs"]);
+
 
   const load = async () => {
     setLoading(true);
