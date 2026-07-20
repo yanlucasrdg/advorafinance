@@ -139,7 +139,7 @@ function CRM() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", doc: "", type: "PF", status: "lead", area: "Trabalhista", value: 10000 });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
   const [filter, setFilter] = useState<"all" | "PF" | "PJ" | "leads" | "ativos" | "inativos">("all");
   const [view, setView] = useState<"funil" | "lista">("funil");
   const [selected, setSelected] = useState<Client | null>(null);
