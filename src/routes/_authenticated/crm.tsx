@@ -182,14 +182,14 @@ function CRM() {
   const grouped = useMemo(
     () => STAGES.map(s => ({
       ...s,
-      items: filtered.filter(c => (c.status === s.id) || (s.id === "fechado" && c.status === "ativo") || (s.id === "perdido" && c.status === "inativo") || (s.id === "lead" && c.status === "prospect")),
+      items: filtered.filter(c => stageOf(c.status) === s.id),
     })),
     [filtered]
   );
 
   const kpis = useMemo(() => {
-    const leads = clients.filter(c => ["lead", "qualificacao", "prospect"].includes(c.status)).length;
-    const ativos = clients.filter(c => ["fechado", "ativo"].includes(c.status)).length;
+    const leads = clients.filter(c => ["novo_contato", "triagem"].includes(stageOf(c.status))).length;
+    const ativos = clients.filter(c => ["contrato", "em_andamento"].includes(stageOf(c.status))).length;
     const total = clients.length || 1;
     const conv = Math.round((ativos / total) * 100);
     const pipeline = clients
