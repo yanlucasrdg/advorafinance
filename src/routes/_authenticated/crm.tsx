@@ -215,7 +215,7 @@ function CRM() {
     if (error) return toast.error(error.message);
     toast.success("Cliente criado");
     setOpen(false);
-    setForm({ name: "", email: "", phone: "", doc: "", type: "PF", status: "lead", area: "Trabalhista", value: 10000 });
+    setForm({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
     load();
   };
 
