@@ -228,6 +228,16 @@ function Comunicacoes() {
     if (!profile?.tenant_id || !newContact.phone.trim()) return;
     const { data, error } = await supabase.from("whatsapp_conversations").insert({
       tenant_id: profile.tenant_id,
+      instance_id: null as unknown as string,
+      contact_name: newContact.name || null,
+      contact_phone: newContact.phone,
+      channel: newContact.channel,
+      assignment_status: "new" as AssignmentStatus,
+      last_message: newContact.message || null,
+      last_message_at: new Date().toISOString(),
+      unread_count: 0,
+    } as never).select().single();
+      tenant_id: profile.tenant_id,
       contact_name: newContact.name || null,
       contact_phone: newContact.phone,
       channel: newContact.channel,
