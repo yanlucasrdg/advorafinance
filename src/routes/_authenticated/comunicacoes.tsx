@@ -233,35 +233,120 @@ function Comunicacoes() {
     setSending(false);
   };
 
-  const createConversation = async () => {
-    if (!profile?.tenant_id || !newContact.phone.trim()) return;
-    const { data, error } = await supabase.from("whatsapp_conversations").insert({
-      tenant_id: profile.tenant_id,
-      instance_id: null as unknown as string,
-      contact_name: newContact.name || null,
-      contact_phone: newContact.phone,
-      channel: newContact.channel,
-      assignment_status: "new" as AssignmentStatus,
-      last_message: newContact.message || null,
-      last_message_at: new Date().toISOString(),
-      unread_count: 0,
-    } as never).select().single();
-    if (error) return toast.error(error.message);
-    if (newContact.message.trim() && data) {
-      await supabase.from("whatsapp_messages").insert({
-        conversation_id: data.id,
-        tenant_id: profile.tenant_id,
-        direction: "outbound",
-        body: newContact.message,
-        status: "sent",
-      } as never);
+  const validateNewContact = () => {
+    const errs: typeof newErrors = {};
+    if (!newContact.name.trim()) errs.name = "Informe o nome do contato.";
+    if (!newContact.channel) errs.channel = "Selecione um canal.";
+    const raw = newContact.phone.trim();
+    if (!raw) errs.phone = "Informe o telefone ou ID.";
+    else if (newContact.channel === "whatsapp") {
+      const digits = raw.replace(/\D/g, "");
+      if (digits.length < 10 || digits.length > 15) errs.phone = "Telefone inválido. Use DDI+DDD+número (ex: +5511999999999).";
+    } else if (newContact.channel === "instagram" || newContact.channel === "messenger") {
+      const ok = /^@?[a-zA-Z0-9._]{3,}$/.test(raw) || /^\d{3,}$/.test(raw);
+      if (!ok) errs.phone = "Use @usuario ou ID numérico.";
     }
-    toast.success("Conversa criada");
-    setOpenNew(false);
-    setNewContact({ name: "", phone: "", channel: "whatsapp", message: "" });
-    load();
-    if (data?.id) setSelected(data.id);
+    return errs;
   };
+
+  const closeNewModal = (force = false) => {
+    const dirty = newContact.name || newContact.phone || newContact.message || newContact.channel;
+    if (!force && dirty) { setConfirmClose(true); return; }
+    setOpenNew(false);
+    setConfirmClose(false);
+    setNewContact({ name: "", phone: "", channel: null, message: "" });
+    setNewErrors({});
+  };
+
+  const createConversation = async () => {
+    setNewErrors({});
+    if (!profile?.tenant_id) return;
+    const errs = validateNewContact();
+    if (Object.keys(errs).length > 0) { setNewErrors(errs); return; }
+    setCreating(true);
+    try {
+      const channel = newContact.channel!;
+      const identifier = channel === "whatsapp"
+        ? "+" + newContact.phone.replace(/\D/g, "")
+        : newContact.phone.trim().replace(/^@/, "");
+
+      // Dedupe check: existing conversation with same channel + identifier
+      const { data: existing } = await supabase
+        .from("whatsapp_conversations")
+        .select("id")
+        .eq("channel", channel)
+        .eq("contact_phone", identifier)
+        .maybeSingle();
+      if (existing?.id) {
+        const ok = window.confirm("Este contato já existe. Deseja abrir a conversa existente?");
+        if (ok) { setSelected(existing.id); closeNewModal(true); }
+        setCreating(false);
+        return;
+      }
+
+      // Also link/create a client record by phone (WhatsApp only)
+      if (channel === "whatsapp") {
+        const { data: cli } = await supabase.from("clients").select("id").eq("phone", identifier).maybeSingle();
+        if (!cli) {
+          await supabase.from("clients").insert({
+            tenant_id: profile.tenant_id,
+            name: newContact.name.trim(),
+            phone: identifier,
+            type: "pf",
+            status: "novo_contato",
+            created_by: user?.id ?? null,
+          } as never);
+        }
+      }
+
+      const { data, error } = await supabase.from("whatsapp_conversations").insert({
+        tenant_id: profile.tenant_id,
+        instance_id: null as unknown as string,
+        contact_name: newContact.name.trim(),
+        contact_phone: identifier,
+        channel,
+        assigned_to: user?.id ?? null,
+        assignment_status: "assigned" as AssignmentStatus,
+        last_message: newContact.message.trim() || null,
+        last_message_at: new Date().toISOString(),
+        unread_count: 0,
+      } as never).select().single();
+      if (error) throw new Error(error.message);
+
+      if (newContact.message.trim() && data) {
+        if (channel === "instagram" || channel === "messenger") {
+          setNewErrors({ submit: `Não foi possível enviar via ${channel === "instagram" ? "Instagram" : "Messenger"}. Verifique a integração.` });
+          setCreating(false);
+          return;
+        }
+        // WhatsApp: send via Z-API
+        try {
+          await sendZapi({ data: { phone: identifier.replace(/\D/g, ""), message: newContact.message.trim() } });
+          await supabase.from("whatsapp_messages").insert({
+            conversation_id: data.id,
+            tenant_id: profile.tenant_id,
+            direction: "outbound",
+            body: newContact.message.trim(),
+            status: "sent",
+          } as never);
+        } catch (e) {
+          setNewErrors({ submit: `Não foi possível enviar via WhatsApp. ${e instanceof Error ? e.message : "Verifique a integração."}` });
+          setCreating(false);
+          return;
+        }
+      }
+
+      toast.success("Conversa criada");
+      if (data?.id) setSelected(data.id);
+      closeNewModal(true);
+      load();
+    } catch (e) {
+      setNewErrors({ submit: e instanceof Error ? e.message : "Erro ao criar conversa." });
+    } finally {
+      setCreating(false);
+    }
+  };
+
 
   return (
     <div className="relative h-[calc(100vh-72px)] overflow-hidden">
