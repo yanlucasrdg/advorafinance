@@ -237,15 +237,6 @@ function Comunicacoes() {
       last_message_at: new Date().toISOString(),
       unread_count: 0,
     } as never).select().single();
-      tenant_id: profile.tenant_id,
-      contact_name: newContact.name || null,
-      contact_phone: newContact.phone,
-      channel: newContact.channel,
-      assignment_status: "new" as AssignmentStatus,
-      last_message: newContact.message || null,
-      last_message_at: new Date().toISOString(),
-      unread_count: 0,
-    }).select().single();
     if (error) return toast.error(error.message);
     if (newContact.message.trim() && data) {
       await supabase.from("whatsapp_messages").insert({
