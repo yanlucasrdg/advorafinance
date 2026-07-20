@@ -362,18 +362,31 @@ function Comunicacoes() {
             <h1 className="text-3xl font-bold tracking-tight">Central de Atendimento</h1>
             <p className="text-sm text-muted-foreground mt-1.5">Omnichannel — WhatsApp, Instagram e Messenger em um só lugar.</p>
           </div>
-          <Dialog open={openNew} onOpenChange={setOpenNew}>
+          <Dialog open={openNew} onOpenChange={(o) => { if (!o) closeNewModal(); else setOpenNew(true); }}>
             <DialogTrigger asChild>
-              <Button size="sm" className="h-9 bg-[image:var(--gradient-brand)]">
+              <Button size="sm" className="h-9 bg-[image:var(--gradient-brand)]" onClick={() => setOpenNew(true)}>
                 <MessageSquare className="size-3.5 mr-1.5" /> Nova conversa
               </Button>
             </DialogTrigger>
-            <DialogContent className="glass">
+            <DialogContent className="glass" onEscapeKeyDown={(e) => { e.preventDefault(); closeNewModal(); }} onPointerDownOutside={(e) => { e.preventDefault(); closeNewModal(); }}>
               <DialogHeader><DialogTitle>Iniciar nova conversa</DialogTitle></DialogHeader>
               <div className="grid gap-3">
-                <div><Label>Nome do contato</Label><Input value={newContact.name} onChange={e => setNewContact(v => ({ ...v, name: e.target.value }))} /></div>
+                <div>
+                  <Label>Nome do contato</Label>
+                  <Input value={newContact.name} onChange={e => setNewContact(v => ({ ...v, name: e.target.value }))} className={newErrors.name ? "border-destructive" : ""} />
+                  {newErrors.name && <p className="text-[11px] text-destructive mt-1">{newErrors.name}</p>}
+                </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Telefone / ID</Label><Input value={newContact.phone} onChange={e => setNewContact(v => ({ ...v, phone: e.target.value }))} /></div>
+                  <div>
+                    <Label>{newContact.channel === "whatsapp" ? "Telefone" : "Telefone / ID"}</Label>
+                    <Input
+                      value={newContact.phone}
+                      onChange={e => setNewContact(v => ({ ...v, phone: e.target.value }))}
+                      placeholder={newContact.channel === "whatsapp" ? "+55 11 99999-9999" : newContact.channel ? "@usuario ou ID" : ""}
+                      className={newErrors.phone ? "border-destructive" : ""}
+                    />
+                    {newErrors.phone && <p className="text-[11px] text-destructive mt-1">{newErrors.phone}</p>}
+                  </div>
                   <div>
                     <Label>Canal</Label>
                     <div className="flex gap-1 mt-1">
@@ -381,20 +394,42 @@ function Comunicacoes() {
                         const M = CHANNEL_META[ch];
                         const active = newContact.channel === ch;
                         return (
-                          <button key={ch} onClick={() => setNewContact(v => ({ ...v, channel: ch }))}
+                          <button key={ch} type="button" onClick={() => setNewContact(v => ({ ...v, channel: ch }))}
                             className={`flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-2 rounded-md text-xs font-medium transition-all ${active ? `${M.bg} ${M.color} ring-1 ring-current/30` : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"}`}>
                             <M.icon className="size-3.5" />{M.label}
                           </button>
                         );
                       })}
                     </div>
+                    {newErrors.channel && <p className="text-[11px] text-destructive mt-1">{newErrors.channel}</p>}
                   </div>
                 </div>
-                <div><Label>Mensagem inicial (opcional)</Label><Textarea rows={3} value={newContact.message} onChange={e => setNewContact(v => ({ ...v, message: e.target.value }))} /></div>
-                <Button onClick={createConversation} className="mt-1 bg-[image:var(--gradient-brand)]">Criar conversa</Button>
+                <div>
+                  <Label>Mensagem inicial (opcional)</Label>
+                  <Textarea rows={3} value={newContact.message} onChange={e => setNewContact(v => ({ ...v, message: e.target.value }))} />
+                </div>
+                {newErrors.submit && (
+                  <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                    <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+                    <span>{newErrors.submit}</span>
+                  </div>
+                )}
+                <Button onClick={createConversation} disabled={creating} className="mt-1 bg-[image:var(--gradient-brand)]">
+                  {creating ? <><Loader2 className="size-4 mr-2 animate-spin" />Criando…</> : "Criar conversa"}
+                </Button>
+                {confirmClose && (
+                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-500 flex items-center justify-between gap-2">
+                    <span>Descartar nova conversa?</span>
+                    <div className="flex gap-1">
+                      <button className="h-7 px-2 rounded-md hover:bg-amber-500/20" onClick={() => setConfirmClose(false)}>Voltar</button>
+                      <button className="h-7 px-2 rounded-md bg-amber-500 text-white" onClick={() => closeNewModal(true)}>Descartar</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </DialogContent>
           </Dialog>
+
         </div>
 
         {/* KPIs */}
