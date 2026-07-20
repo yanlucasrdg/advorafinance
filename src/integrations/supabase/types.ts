@@ -105,6 +105,7 @@ export type Database = {
           area: string | null
           class_name: string | null
           client_id: string | null
+          conversation_id: string | null
           court: string | null
           created_at: string
           datajud_synced_at: string | null
@@ -113,8 +114,13 @@ export type Database = {
           id: string
           instance: string | null
           last_movement_at: string | null
+          lead_source: string | null
+          lead_temperature: string
+          next_deadline_at: string | null
           number: string | null
           parties: Json | null
+          pipeline_stage: string
+          pipeline_value_cents: number
           responsible: string | null
           status: string
           subjects: Json | null
@@ -128,6 +134,7 @@ export type Database = {
           area?: string | null
           class_name?: string | null
           client_id?: string | null
+          conversation_id?: string | null
           court?: string | null
           created_at?: string
           datajud_synced_at?: string | null
@@ -136,8 +143,13 @@ export type Database = {
           id?: string
           instance?: string | null
           last_movement_at?: string | null
+          lead_source?: string | null
+          lead_temperature?: string
+          next_deadline_at?: string | null
           number?: string | null
           parties?: Json | null
+          pipeline_stage?: string
+          pipeline_value_cents?: number
           responsible?: string | null
           status?: string
           subjects?: Json | null
@@ -151,6 +163,7 @@ export type Database = {
           area?: string | null
           class_name?: string | null
           client_id?: string | null
+          conversation_id?: string | null
           court?: string | null
           created_at?: string
           datajud_synced_at?: string | null
@@ -159,8 +172,13 @@ export type Database = {
           id?: string
           instance?: string | null
           last_movement_at?: string | null
+          lead_source?: string | null
+          lead_temperature?: string
+          next_deadline_at?: string | null
           number?: string | null
           parties?: Json | null
+          pipeline_stage?: string
+          pipeline_value_cents?: number
           responsible?: string | null
           status?: string
           subjects?: Json | null
@@ -176,6 +194,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cases_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
             referencedColumns: ["id"]
           },
           {
@@ -695,6 +720,12 @@ export type Database = {
       }
       whatsapp_conversations: {
         Row: {
+          archived_at: string | null
+          assigned_to: string | null
+          assignment_status: string
+          category: string | null
+          channel: string
+          client_id: string | null
           contact_avatar: string | null
           contact_name: string | null
           contact_phone: string
@@ -703,11 +734,18 @@ export type Database = {
           instance_id: string
           last_message: string | null
           last_message_at: string | null
+          tags: string[]
           tenant_id: string
           unread_count: number
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
+          assigned_to?: string | null
+          assignment_status?: string
+          category?: string | null
+          channel?: string
+          client_id?: string | null
           contact_avatar?: string | null
           contact_name?: string | null
           contact_phone: string
@@ -716,11 +754,18 @@ export type Database = {
           instance_id: string
           last_message?: string | null
           last_message_at?: string | null
+          tags?: string[]
           tenant_id: string
           unread_count?: number
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
+          assigned_to?: string | null
+          assignment_status?: string
+          category?: string | null
+          channel?: string
+          client_id?: string | null
           contact_avatar?: string | null
           contact_name?: string | null
           contact_phone?: string
@@ -729,11 +774,19 @@ export type Database = {
           instance_id?: string
           last_message?: string | null
           last_message_at?: string | null
+          tags?: string[]
           tenant_id?: string
           unread_count?: number
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "whatsapp_conversations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "whatsapp_conversations_instance_id_fkey"
             columns: ["instance_id"]
