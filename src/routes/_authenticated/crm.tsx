@@ -243,7 +243,7 @@ function CRM() {
       const payload = rows.map(r => {
         const name = r.name || r.nome || "";
         const type = (r.type || r.tipo || "PF").toUpperCase() === "PJ" ? "PJ" : "PF";
-        const status = valid.includes((r.status || "lead").toLowerCase()) ? (r.status || "lead").toLowerCase() : "lead";
+        const status = valid.includes((r.status || "novo_contato").toLowerCase()) ? (r.status || "novo_contato").toLowerCase() : "novo_contato";
         const area = r.area || "Cível";
         const value = Number(r.value || r.valor || 0) || 10000;
         return {
