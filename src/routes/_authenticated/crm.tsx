@@ -165,9 +165,9 @@ function CRM() {
     return clients.filter(c => {
       if (filter === "PF" && c.type !== "PF") return false;
       if (filter === "PJ" && c.type !== "PJ") return false;
-      if (filter === "leads" && !(c.status === "lead" || c.status === "qualificacao")) return false;
-      if (filter === "ativos" && !(c.status === "fechado" || c.status === "ativo")) return false;
-      if (filter === "inativos" && !(c.status === "perdido" || c.status === "inativo")) return false;
+      if (filter === "leads" && !["novo_contato", "triagem"].includes(stageOf(c.status))) return false;
+      if (filter === "ativos" && !["contrato", "em_andamento"].includes(stageOf(c.status))) return false;
+      if (filter === "inativos" && stageOf(c.status) !== "encerrado") return false;
       const m = getMeta(c);
       if (adv.areas.length && !adv.areas.includes(m.area)) return false;
       if (adv.stages.length && !adv.stages.includes(c.status)) return false;
