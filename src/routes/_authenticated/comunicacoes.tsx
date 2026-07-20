@@ -213,7 +213,7 @@ function Comunicacoes() {
       direction: "outbound",
       body,
       status: "sent",
-    });
+    } as never);
     if (error) toast.error(error.message);
     // update last_message + read
     await supabase.from("whatsapp_conversations").update({
