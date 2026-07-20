@@ -193,12 +193,12 @@ function CRM() {
     const total = clients.length || 1;
     const conv = Math.round((ativos / total) * 100);
     const pipeline = clients
-      .filter(c => !["perdido", "inativo"].includes(c.status))
+      .filter(c => stageOf(c.status) !== "encerrado")
       .reduce((sum, c) => sum + getMeta(c).value, 0);
     const fechadosMes = clients.filter(c => {
       const d = new Date(c.updated_at);
       const now = new Date();
-      return ["fechado", "ativo"].includes(c.status) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      return ["contrato", "em_andamento"].includes(stageOf(c.status)) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     }).length;
     return { leads, ativos, conv, pipeline, fechadosMes };
   }, [clients]);
