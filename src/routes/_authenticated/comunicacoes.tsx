@@ -245,7 +245,7 @@ function Comunicacoes() {
         direction: "outbound",
         body: newContact.message,
         status: "sent",
-      });
+      } as never);
     }
     toast.success("Conversa criada");
     setOpenNew(false);
