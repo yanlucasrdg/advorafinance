@@ -165,7 +165,6 @@ function Comunicacoes() {
     });
   }, [convs, q, channelFilter, statusFilter, assignedFilter, user?.id]);
 
-  const kpis = useMemo(() => {
   const { data: metrics } = useMetricsComunicacoes();
   const kpis = {
     total: metrics?.total ?? 0,
@@ -173,6 +172,8 @@ function Comunicacoes() {
     minhas: metrics?.minhas ?? 0,
     naoLidas: metrics?.nao_lidas ?? 0,
   };
+
+
 
 
   const current = useMemo(() => convs.find(c => c.id === selected) || null, [convs, selected]);
