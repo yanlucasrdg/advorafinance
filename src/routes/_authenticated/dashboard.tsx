@@ -19,6 +19,7 @@ import {
   revenueByMonth, pctDelta, fmtBRL, fmtBRLCompact,
   type FinRow, type CaseRow, type ClientRow, type DeadlineRow,
 } from "@/lib/metrics";
+import { useMetricsDashboard } from "@/hooks/use-metrics";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Centro de Operações — Advora" }] }),
