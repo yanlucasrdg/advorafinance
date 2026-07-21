@@ -182,13 +182,13 @@ function Dashboard() {
       .map(([id, cents]) => ({ id, name: clientNames.get(id) ?? id.slice(0, 8), value: cents }));
   }, [fin]);
 
-  // ---- KPI cards (only real data; empty state when zero) ----
-  const kpis = [
+  // ---- KPI cards (server-side aggregates) ----
   const F = dashM?.financeiro;
   const P = dashM?.processos;
   const C = dashM?.clientes;
   const A = dashM?.agenda;
   const kpis = [
+
     {
       label: "Receita do mês",
       value: fmtBRL(F?.rev_month ?? fin.revMonth),
