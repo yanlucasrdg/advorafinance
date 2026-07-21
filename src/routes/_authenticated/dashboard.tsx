@@ -133,13 +133,16 @@ function Dashboard() {
   const loading = finQ.isLoading || casesQ.isLoading || clientsQ.isLoading || deadlinesQ.isLoading;
 
   // ---- Derived ----
+  // Server-side aggregates (source of truth for KPIs)
+  const { data: dashM } = useMetricsDashboard();
   const fin = useMemo(() => financeKpis(finQ.data ?? []), [finQ.data]);
   const cs = useMemo(() => caseKpis(casesQ.data ?? []), [casesQ.data]);
   const cl = useMemo(() => clientKpis(clientsQ.data ?? []), [clientsQ.data]);
   const ag = useMemo(() => agendaKpis(deadlinesQ.data ?? []), [deadlinesQ.data]);
 
   const revenue12 = useMemo(() => revenueByMonth(finQ.data ?? [], 12), [finQ.data]);
-  const revDelta = pctDelta(fin.revMonth, fin.revPrev);
+  const revDelta = pctDelta(dashM?.financeiro.rev_month ?? fin.revMonth, dashM?.financeiro.rev_prev ?? fin.revPrev);
+
 
   const areaDist = useMemo(() =>
     Object.entries(cs.byArea)
