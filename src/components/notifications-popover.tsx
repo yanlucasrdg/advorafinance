@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useRealtimeTables } from "@/hooks/use-realtime-table";
+import { useNotificationsSummary } from "@/hooks/use-metrics";
 
 type Notification = {
   id: string;
@@ -32,6 +33,7 @@ export function NotificationsPopover() {
   const [open, setOpen] = useState(false);
 
   useRealtimeTables(["notifications"], ["notif-bell"]);
+  const { data: summary, refetch } = useNotificationsSummary();
 
   const load = async () => {
     if (!profile?.tenant_id) return;
@@ -44,31 +46,32 @@ export function NotificationsPopover() {
   };
 
   useEffect(() => { load(); }, [profile?.tenant_id]);
-  useEffect(() => {
-    const t = setInterval(load, 30000);
-    return () => clearInterval(t);
-  }, [profile?.tenant_id]);
+  // Reload the visible list whenever realtime bumps the summary (list is limited to 20).
+  useEffect(() => { load(); }, [summary?.total, summary?.unread]);
 
-  const unread = items.filter(i => !i.read_at);
+  const unreadTotal = summary?.unread ?? 0;
 
   const markAllRead = async () => {
-    const ids = unread.map(i => i.id);
+    const ids = items.filter(i => !i.read_at).map(i => i.id);
     if (ids.length === 0) return;
     await supabase.from("notifications").update({ read_at: new Date().toISOString() } as never).in("id", ids);
     load();
+    refetch();
   };
 
-  const countMsg = items.length === 0
+  const countMsg = (summary?.total ?? 0) === 0
     ? t("noNotifications")
-    : t("youHaveNotifications", { count: items.length });
+    : t("youHaveNotifications", { count: summary?.total ?? 0 });
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button className="size-9 grid place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground relative" aria-label={t("notifications")}>
           <Bell className="size-[16px]" strokeWidth={1.75} />
-          {unread.length > 0 && (
-            <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-emerald-500 ring-2 ring-background" />
+          {unreadTotal > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 grid place-items-center rounded-full bg-emerald-500 text-white text-[9px] font-bold ring-2 ring-background tabular-nums">
+              {unreadTotal > 99 ? "99+" : unreadTotal}
+            </span>
           )}
         </button>
       </PopoverTrigger>
@@ -78,7 +81,7 @@ export function NotificationsPopover() {
             <div className="text-sm font-semibold">{t("notifications")}</div>
             <div className="text-xs text-muted-foreground">{countMsg}</div>
           </div>
-          {unread.length > 0 && (
+          {unreadTotal > 0 && (
             <button onClick={markAllRead} className="text-[11px] text-primary hover:underline">
               {t("markAllRead")}
             </button>
