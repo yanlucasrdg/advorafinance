@@ -150,45 +150,34 @@ function Processos() {
     return m;
   }, [deadlines]);
 
+  const { data: metrics } = useMetricsProcessos();
+
   const kpis = useMemo(() => {
-    const now = Date.now();
-    const in48 = now + 48 * 3600 * 1000;
-    const active = cases.filter(c => c.status === "ativo" || c.status === "recurso" || c.status === "suspenso").length;
-    const totalValue = cases.reduce((s, c) => s + (c.value_cents ?? 0), 0);
-    let critical = 0;
-    for (const d of deadlines) {
-      if (d.done) continue;
-      const t = new Date(d.due_at).getTime();
-      if (t >= now && t <= in48) critical += 1;
-    }
-    const won = cases.filter(c => c.status === "ganho").length;
-    const lost = cases.filter(c => c.status === "perdido").length;
-    const success = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : 82;
-    const fees = entries.filter(e => e.kind === "receita").reduce((s, e) => s + (e.amount_cents ?? 0), 0);
-    const moveToday = cases.filter(c => new Date(c.updated_at).toDateString() === new Date().toDateString()).length || 12;
-    return [
-      { label: "Processos Ativos", value: String(active), delta: "+12%", icon: Briefcase, tone: "text-violet-300", bg: "from-violet-500/15" },
-      { label: "Valor Total em Causa", value: formatBRL(totalValue), delta: "+8%", icon: DollarSign, tone: "text-emerald-300", bg: "from-emerald-500/15" },
-      { label: "Prazos Críticos", value: String(critical), delta: "−5%", down: true, icon: AlertTriangle, tone: "text-rose-300", bg: "from-rose-500/15" },
-      { label: "Taxa de Êxito (IA)", value: `${success}%`, delta: "+5%", icon: Target, tone: "text-sky-300", bg: "from-sky-500/15" },
-      { label: "Honorários Vinculados", value: formatBRL(fees), delta: "+22%", icon: TrendingUp, tone: "text-amber-300", bg: "from-amber-500/15" },
-      { label: "Movimentações Hoje", value: String(moveToday), delta: "−8%", down: true, icon: Activity, tone: "text-indigo-300", bg: "from-indigo-500/15" },
+    const m = metrics;
+    const d = (curr: number, prev: number | null) => formatDelta(pctDelta(curr, prev));
+    const items: {
+      label: string; value: string; delta: string | null; down?: boolean;
+      icon: typeof Briefcase; tone: string; bg: string;
+    }[] = [
+      { label: "Processos Ativos", value: String(m?.active.value ?? 0), delta: m ? d(m.active.value, m.active.prev) : null, down: (m?.active.value ?? 0) < (m?.active.prev ?? 0), icon: Briefcase, tone: "text-violet-300", bg: "from-violet-500/15" },
+      { label: "Valor Total em Causa", value: formatBRL(m?.value_cause.value ?? 0), delta: m ? d(m.value_cause.value, m.value_cause.prev) : null, down: (m?.value_cause.value ?? 0) < (m?.value_cause.prev ?? 0), icon: DollarSign, tone: "text-emerald-300", bg: "from-emerald-500/15" },
+      { label: "Prazos Críticos", value: String(m?.critical.value ?? 0), delta: m ? d(m.critical.value, m.critical.prev) : null, down: (m?.critical.value ?? 0) > (m?.critical.prev ?? 0), icon: AlertTriangle, tone: "text-rose-300", bg: "from-rose-500/15" },
+      { label: "Taxa de Êxito", value: m?.success_pct != null ? `${m.success_pct}%` : "—", delta: null, icon: Target, tone: "text-sky-300", bg: "from-sky-500/15" },
+      { label: "Honorários Vinculados", value: formatBRL(m?.fees.value ?? 0), delta: m ? d(m.fees.value, m.fees.prev) : null, down: (m?.fees.value ?? 0) < (m?.fees.prev ?? 0), icon: TrendingUp, tone: "text-amber-300", bg: "from-amber-500/15" },
+      { label: "Movimentações Hoje", value: String(m?.moves_today.value ?? 0), delta: m ? d(m.moves_today.value, m.moves_today.prev) : null, down: (m?.moves_today.value ?? 0) < (m?.moves_today.prev ?? 0), icon: Activity, tone: "text-indigo-300", bg: "from-indigo-500/15" },
     ];
-  }, [cases, deadlines, entries]);
+    return items;
+  }, [metrics]);
 
   const alerts = useMemo(() => {
-    const now = Date.now();
-    const in48 = now + 48 * 3600 * 1000;
-    const closeDeadlines = deadlines.filter(d => !d.done && new Date(d.due_at).getTime() <= in48 && new Date(d.due_at).getTime() >= now).length;
-    const thirtyDaysAgo = now - 30 * 24 * 3600 * 1000;
-    const stale = cases.filter(c => new Date(c.updated_at).getTime() < thirtyDaysAgo && (c.status === "ativo" || c.status === "recurso")).length;
-    return [
-      { icon: AlertTriangle, color: "text-rose-300", text: `${closeDeadlines || 5} processos com prazo em menos de 48h` },
-      { icon: Clock, color: "text-amber-300", text: `${stale || 2} processos sem movimentação há mais de 30 dias` },
-      { icon: Users, color: "text-sky-300", text: "3 clientes aguardam retorno" },
-      { icon: Brain, color: "text-violet-300", text: "IA detectou risco elevado em 2 ações trabalhistas" },
-    ];
-  }, [cases, deadlines]);
+    if (!metrics) return [];
+    const out: { icon: typeof AlertTriangle; color: string; text: string }[] = [];
+    if (metrics.critical.value > 0)
+      out.push({ icon: AlertTriangle, color: "text-rose-300", text: `${metrics.critical.value} processo(s) com prazo em menos de 48h` });
+    if (metrics.stale_30d > 0)
+      out.push({ icon: Clock, color: "text-amber-300", text: `${metrics.stale_30d} processo(s) sem movimentação há mais de 30 dias` });
+    return out;
+  }, [metrics]);
 
   const create = async () => {
     if (!form.title.trim() || !profile?.tenant_id) return;
