@@ -105,17 +105,21 @@ export const useMetricsComunicacoes = () => useMetric<ComunicacoesMetrics>("metr
 export const useMetricsDashboard    = () => useMetric<DashboardMetrics>("metrics_dashboard", ["cases", "clients", "deadlines", "financial_entries"]);
 export const useNotificationsSummary = () => useMetric<NotificationsSummary>("notifications_summary", ["notifications"]);
 
-export function useMetricsFinanceiro(from?: string, to?: string) {
+export function useMetricsFinanceiro(opts: { from?: string; to?: string; clientId?: string; area?: string; responsible?: string } = {}) {
   const { profile } = useAuth();
   const tenant = profile?.tenant_id ?? null;
-  useRealtimeTables(["financial_entries"], [["metrics_financeiro", tenant, from ?? null, to ?? null]]);
+  const key = ["metrics_financeiro", tenant, opts.from ?? null, opts.to ?? null, opts.clientId ?? null, opts.area ?? null, opts.responsible ?? null];
+  useRealtimeTables(["financial_entries", "cases"], [key]);
   return useQuery<FinanceiroMetrics>({
-    queryKey: ["metrics_financeiro", tenant, from ?? null, to ?? null],
+    queryKey: key,
     enabled: !!tenant,
     queryFn: async () => {
       const args: Record<string, string> = {};
-      if (from) args._from = from;
-      if (to) args._to = to;
+      if (opts.from)        args._from = opts.from;
+      if (opts.to)          args._to = opts.to;
+      if (opts.clientId)    args._client_id = opts.clientId;
+      if (opts.area)        args._area = opts.area;
+      if (opts.responsible) args._responsible = opts.responsible;
       const { data, error } = await supabase.rpc("metrics_financeiro", args);
       if (error) throw error;
       return data as FinanceiroMetrics;
@@ -123,6 +127,7 @@ export function useMetricsFinanceiro(from?: string, to?: string) {
     staleTime: 15_000,
   });
 }
+
 
 export function pctDelta(curr: number, prev: number | null): number | null {
   if (prev === null || prev === undefined) return null;

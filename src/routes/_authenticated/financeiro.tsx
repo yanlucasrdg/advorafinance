@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useGlobalFilters, PERIOD_LABELS, type PeriodKey } from "@/lib/global-filters";
 import { useRealtimeTables } from "@/hooks/use-realtime-table";
+import { useMetricsFinanceiro } from "@/hooks/use-metrics";
 import {
   financeKpis, revenueByMonth, fmtBRL, fmtBRLCompact, pctDelta,
   dreReport, cashFlowDirect, cashFlowIndirect, DRE_CATEGORIES, DEFAULT_DRE_CONFIG,
@@ -133,7 +134,29 @@ function Financeiro() {
     });
   }, [entries, filters.area, filters.responsible, filters.clientId, caseMap]);
 
-  const kpis = useMemo(() => financeKpis(filtered), [filtered]);
+  const kpisLocal = useMemo(() => financeKpis(filtered), [filtered]);
+  const { data: kpisRpc } = useMetricsFinanceiro({
+    clientId: filters.clientId || undefined,
+    area: filters.area || undefined,
+    responsible: filters.responsible || undefined,
+  });
+  const kpis = {
+    revMonth:         kpisRpc?.rev_month          ?? kpisLocal.revMonth,
+    revPrev:          kpisRpc?.rev_prev           ?? kpisLocal.revPrev,
+    revYear:          kpisRpc?.rev_year           ?? kpisLocal.revYear,
+    rev12:            kpisRpc?.rev_12             ?? kpisLocal.rev12,
+    expMonth:         kpisRpc?.exp_month          ?? kpisLocal.expMonth,
+    expYear:          kpisRpc?.exp_year           ?? kpisLocal.expYear,
+    openReceivable:   kpisRpc?.open_receivable    ?? kpisLocal.openReceivable,
+    overdueReceivable:kpisRpc?.overdue_receivable ?? kpisLocal.overdueReceivable,
+    openPayable:      kpisRpc?.open_payable       ?? kpisLocal.openPayable,
+    overduePayable:   kpisRpc?.overdue_payable    ?? kpisLocal.overduePayable,
+    delinquencyPct:   kpisRpc?.delinquency_pct    ?? kpisLocal.delinquencyPct,
+    ticketAvg:        kpisRpc?.ticket_avg         ?? kpisLocal.ticketAvg,
+    profitMonth:      kpisRpc?.profit_month       ?? kpisLocal.profitMonth,
+    profitYear:       kpisRpc?.profit_year        ?? kpisLocal.profitYear,
+    clientRev:        kpisLocal.clientRev,
+  };
   const series12 = useMemo(() => revenueByMonth(filtered, 12), [filtered]);
 
   // Daily flow inside the selected period range
