@@ -17,7 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { useMetricsCrm, pctDelta, formatDelta } from "@/hooks/use-metrics";
+import { useMetricsCrm } from "@/hooks/use-metrics";
 
 /* ---------- CSV helpers ---------- */
 function parseCSV(text: string): Record<string, string>[] {
