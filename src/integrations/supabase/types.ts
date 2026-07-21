@@ -109,6 +109,7 @@ export type Database = {
           court: string | null
           created_at: string
           datajud_synced_at: string | null
+          deleted_at: string | null
           description: string | null
           distribution_date: string | null
           id: string
@@ -138,6 +139,7 @@ export type Database = {
           court?: string | null
           created_at?: string
           datajud_synced_at?: string | null
+          deleted_at?: string | null
           description?: string | null
           distribution_date?: string | null
           id?: string
@@ -167,6 +169,7 @@ export type Database = {
           court?: string | null
           created_at?: string
           datajud_synced_at?: string | null
+          deleted_at?: string | null
           description?: string | null
           distribution_date?: string | null
           id?: string
@@ -216,6 +219,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          deleted_at: string | null
           doc: string | null
           email: string | null
           id: string
@@ -230,6 +234,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           doc?: string | null
           email?: string | null
           id?: string
@@ -244,6 +249,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           doc?: string | null
           email?: string | null
           id?: string
@@ -271,6 +277,7 @@ export type Database = {
           client_id: string | null
           completed_at: string | null
           created_at: string
+          deleted_at: string | null
           done: boolean
           due_at: string
           id: string
@@ -286,6 +293,7 @@ export type Database = {
           client_id?: string | null
           completed_at?: string | null
           created_at?: string
+          deleted_at?: string | null
           done?: boolean
           due_at: string
           id?: string
@@ -301,6 +309,7 @@ export type Database = {
           client_id?: string | null
           completed_at?: string | null
           created_at?: string
+          deleted_at?: string | null
           done?: boolean
           due_at?: string
           id?: string
@@ -432,6 +441,7 @@ export type Database = {
           category: string | null
           client_id: string | null
           created_at: string
+          deleted_at: string | null
           description: string
           due_date: string | null
           id: string
@@ -452,6 +462,7 @@ export type Database = {
           category?: string | null
           client_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           description: string
           due_date?: string | null
           id?: string
@@ -472,6 +483,7 @@ export type Database = {
           category?: string | null
           client_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string
           due_date?: string | null
           id?: string
@@ -994,10 +1006,21 @@ export type Database = {
         Returns: boolean
       }
       is_master_admin: { Args: { _user_id: string }; Returns: boolean }
+      metrics_agenda: { Args: never; Returns: Json }
+      metrics_comunicacoes: { Args: never; Returns: Json }
+      metrics_crm: { Args: never; Returns: Json }
+      metrics_dashboard: { Args: never; Returns: Json }
+      metrics_financeiro: {
+        Args: { _from?: string; _to?: string }
+        Returns: Json
+      }
+      metrics_processos: { Args: never; Returns: Json }
+      notifications_summary: { Args: never; Returns: Json }
       reconcile_financial_entry: {
         Args: { _entry_id: string }
         Returns: undefined
       }
+      tz_today: { Args: never; Returns: string }
       user_in_tenant: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
