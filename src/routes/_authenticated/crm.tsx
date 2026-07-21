@@ -188,7 +188,6 @@ function CRM() {
     [filtered]
   );
 
-  const kpis = useMemo(() => {
   const { data: crmMetrics } = useMetricsCrm();
   const kpis = {
     leads: crmMetrics?.leads ?? 0,
@@ -197,6 +196,8 @@ function CRM() {
     pipeline: crmMetrics?.pipeline_value ?? 0,
     fechadosMes: crmMetrics?.fechados_mes ?? 0,
   };
+
+
 
 
   const create = async () => {
