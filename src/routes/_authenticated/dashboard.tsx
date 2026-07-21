@@ -19,6 +19,7 @@ import {
   revenueByMonth, pctDelta, fmtBRL, fmtBRLCompact,
   type FinRow, type CaseRow, type ClientRow, type DeadlineRow,
 } from "@/lib/metrics";
+import { useMetricsDashboard } from "@/hooks/use-metrics";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Centro de Operações — Advora" }] }),
@@ -132,13 +133,16 @@ function Dashboard() {
   const loading = finQ.isLoading || casesQ.isLoading || clientsQ.isLoading || deadlinesQ.isLoading;
 
   // ---- Derived ----
+  // Server-side aggregates (source of truth for KPIs)
+  const { data: dashM } = useMetricsDashboard();
   const fin = useMemo(() => financeKpis(finQ.data ?? []), [finQ.data]);
   const cs = useMemo(() => caseKpis(casesQ.data ?? []), [casesQ.data]);
   const cl = useMemo(() => clientKpis(clientsQ.data ?? []), [clientsQ.data]);
   const ag = useMemo(() => agendaKpis(deadlinesQ.data ?? []), [deadlinesQ.data]);
 
   const revenue12 = useMemo(() => revenueByMonth(finQ.data ?? [], 12), [finQ.data]);
-  const revDelta = pctDelta(fin.revMonth, fin.revPrev);
+  const revDelta = pctDelta(dashM?.financeiro.rev_month ?? fin.revMonth, dashM?.financeiro.rev_prev ?? fin.revPrev);
+
 
   const areaDist = useMemo(() =>
     Object.entries(cs.byArea)
@@ -178,81 +182,87 @@ function Dashboard() {
       .map(([id, cents]) => ({ id, name: clientNames.get(id) ?? id.slice(0, 8), value: cents }));
   }, [fin]);
 
-  // ---- KPI cards (only real data; empty state when zero) ----
+  // ---- KPI cards (server-side aggregates) ----
+  const F = dashM?.financeiro;
+  const P = dashM?.processos;
+  const C = dashM?.clientes;
+  const A = dashM?.agenda;
   const kpis = [
+
     {
       label: "Receita do mês",
-      value: fmtBRL(fin.revMonth),
-      delta: `${revDelta >= 0 ? "+" : ""}${revDelta.toFixed(1)}%`,
-      deltaUp: revDelta >= 0,
+      value: fmtBRL(F?.rev_month ?? fin.revMonth),
+      delta: revDelta !== null ? `${revDelta >= 0 ? "+" : ""}${revDelta.toFixed(1)}%` : null,
+      deltaUp: revDelta !== null ? revDelta >= 0 : undefined,
       sub: "vs mês anterior",
       icon: DollarSign, iconColor: "text-success", iconBg: "bg-success/10",
     },
     {
       label: "Receita YTD",
-      value: fmtBRLCompact(fin.revYear),
+      value: fmtBRLCompact(F?.rev_year ?? fin.revYear),
       delta: null, sub: "acumulado no ano",
       icon: Wallet, iconColor: "text-primary", iconBg: "bg-primary/10",
     },
     {
       label: "A Receber",
-      value: fmtBRL(fin.openReceivable),
-      delta: fin.overdueReceivable > 0 ? fmtBRLCompact(fin.overdueReceivable) : "0",
-      deltaUp: fin.overdueReceivable === 0,
+      value: fmtBRL(F?.open_receivable ?? fin.openReceivable),
+      delta: (F?.overdue_receivable ?? fin.overdueReceivable) > 0 ? fmtBRLCompact(F?.overdue_receivable ?? fin.overdueReceivable) : "0",
+      deltaUp: (F?.overdue_receivable ?? fin.overdueReceivable) === 0,
       sub: "vencido",
       icon: TrendingUp, iconColor: "text-warning", iconBg: "bg-warning/10",
     },
     {
       label: "Inadimplência",
-      value: `${fin.delinquencyPct.toFixed(1)}%`,
+      value: `${(F?.delinquency_pct ?? fin.delinquencyPct).toFixed(1)}%`,
       delta: null, sub: "do a receber",
       icon: AlertTriangle,
-      iconColor: fin.delinquencyPct > 20 ? "text-destructive" : "text-warning",
-      iconBg: fin.delinquencyPct > 20 ? "bg-destructive/10" : "bg-warning/10",
+      iconColor: (F?.delinquency_pct ?? fin.delinquencyPct) > 20 ? "text-destructive" : "text-warning",
+      iconBg: (F?.delinquency_pct ?? fin.delinquencyPct) > 20 ? "bg-destructive/10" : "bg-warning/10",
     },
     {
       label: "Ticket médio",
-      value: fmtBRL(fin.ticketAvg),
+      value: fmtBRL(F?.ticket_avg ?? fin.ticketAvg),
       delta: null, sub: "receita YTD",
       icon: Target, iconColor: "text-[color:oklch(0.55_0.18_240)]", iconBg: "bg-[oklch(0.55_0.18_240/0.10)]",
     },
     {
       label: "Processos ativos",
-      value: String(cs.byStatus.ativo ?? 0),
-      delta: cs.stale30 > 0 ? `${cs.stale30}` : null,
-      deltaUp: cs.stale30 === 0,
+      value: String(P?.active.value ?? cs.byStatus.ativo ?? 0),
+      delta: (P?.stale_30d ?? cs.stale30) > 0 ? `${P?.stale_30d ?? cs.stale30}` : null,
+      deltaUp: (P?.stale_30d ?? cs.stale30) === 0,
       sub: "sem mov. 30d+",
       icon: Briefcase, iconColor: "text-primary", iconBg: "bg-primary/10",
     },
     {
       label: "Valor em causa",
-      value: fmtBRLCompact(cs.valueInCause),
-      delta: null, sub: `${cs.total} processos`,
+      value: fmtBRLCompact(P?.value_cause.value ?? cs.valueInCause),
+      delta: null, sub: `${P ? Object.values(P.by_status).reduce((a,b)=>a+b,0) : cs.total} processos`,
       icon: Scale, iconColor: "text-[color:oklch(0.55_0.15_180)]", iconBg: "bg-[oklch(0.55_0.15_180/0.10)]",
     },
     {
       label: "Clientes",
-      value: String(cl.total),
-      delta: cl.newMonth ? `+${cl.newMonth}` : "0",
-      deltaUp: cl.newMonth > 0,
+      value: String(C?.total ?? cl.total),
+      delta: (C?.new_month ?? cl.newMonth) ? `+${C?.new_month ?? cl.newMonth}` : "0",
+      deltaUp: (C?.new_month ?? cl.newMonth) > 0,
       sub: "novos no mês",
       icon: Users, iconColor: "text-[color:oklch(0.55_0.18_290)]", iconBg: "bg-[oklch(0.55_0.18_290/0.10)]",
     },
     {
       label: "Prazos 7d",
-      value: String(ag.next7),
-      delta: ag.overdue > 0 ? `${ag.overdue}` : null,
-      deltaUp: ag.overdue === 0,
+      value: String(A?.proximos_7d ?? ag.next7),
+      delta: (A?.atraso ?? ag.overdue) > 0 ? `${A?.atraso ?? ag.overdue}` : null,
+      deltaUp: (A?.atraso ?? ag.overdue) === 0,
       sub: "vencidos",
       icon: Clock, iconColor: "text-destructive", iconBg: "bg-destructive/10",
     },
     {
-      label: "Concluídos",
-      value: String(ag.done),
-      delta: null, sub: "prazos totais",
+      label: "Concluídos hoje",
+      value: String(A?.concluidos_hoje ?? ag.done),
+      delta: null, sub: "prazos",
       icon: CheckCircle2, iconColor: "text-success", iconBg: "bg-success/10",
     },
   ];
+
 
   const upcoming = upcomingQ.data ?? [];
   const recent = recentQ.data ?? [];

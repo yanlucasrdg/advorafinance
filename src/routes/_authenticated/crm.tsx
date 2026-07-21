@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
+import { useMetricsCrm } from "@/hooks/use-metrics";
 
 /* ---------- CSV helpers ---------- */
 function parseCSV(text: string): Record<string, string>[] {
@@ -187,21 +188,17 @@ function CRM() {
     [filtered]
   );
 
-  const kpis = useMemo(() => {
-    const leads = clients.filter(c => ["novo_contato", "triagem"].includes(stageOf(c.status))).length;
-    const ativos = clients.filter(c => ["contrato", "em_andamento"].includes(stageOf(c.status))).length;
-    const total = clients.length || 1;
-    const conv = Math.round((ativos / total) * 100);
-    const pipeline = clients
-      .filter(c => stageOf(c.status) !== "encerrado")
-      .reduce((sum, c) => sum + getMeta(c).value, 0);
-    const fechadosMes = clients.filter(c => {
-      const d = new Date(c.updated_at);
-      const now = new Date();
-      return ["contrato", "em_andamento"].includes(stageOf(c.status)) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).length;
-    return { leads, ativos, conv, pipeline, fechadosMes };
-  }, [clients]);
+  const { data: crmMetrics } = useMetricsCrm();
+  const kpis = {
+    leads: crmMetrics?.leads ?? 0,
+    ativos: crmMetrics?.ativos ?? 0,
+    conv: crmMetrics?.conv_pct ?? 0,
+    pipeline: crmMetrics?.pipeline_value ?? 0,
+    fechadosMes: crmMetrics?.fechados_mes ?? 0,
+  };
+
+
+
 
   const create = async () => {
     if (!form.name.trim() || !profile?.tenant_id) return;
@@ -467,9 +464,9 @@ function CRM() {
 
           {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 stagger">
-            <KpiCard label="Leads" value={String(kpis.leads)} delta="+12%" deltaLabel="vs mês anterior" icon={Users} tone="violet" />
-            <KpiCard label="Clientes Ativos" value={String(kpis.ativos)} delta="+8%" deltaLabel="vs mês anterior" icon={UserCheck} tone="blue" />
-            <KpiCard label="Taxa de Conversão" value={`${kpis.conv}%`} delta="+4%" deltaLabel="vs mês anterior" icon={TrendingUp} tone="emerald" />
+            <KpiCard label="Leads" value={String(kpis.leads)} deltaLabel="novos e triagem" icon={Users} tone="violet" />
+            <KpiCard label="Clientes Ativos" value={String(kpis.ativos)} deltaLabel="em contrato / andamento" icon={UserCheck} tone="blue" />
+            <KpiCard label="Taxa de Conversão" value={crmMetrics?.conv_pct != null ? `${crmMetrics.conv_pct}%` : "—"} deltaLabel="ativos vs pipeline" icon={TrendingUp} tone="emerald" />
             <KpiCard label="Receita Potencial" value={brl(kpis.pipeline)} deltaLabel="em pipeline" icon={DollarSign} tone="amber" />
             <KpiCard label="Contratos Fechados" value={String(kpis.fechadosMes)} deltaLabel="este mês" icon={FileCheck2} tone="rose" />
           </div>
