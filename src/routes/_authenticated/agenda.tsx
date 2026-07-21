@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useRealtimeTables } from "@/hooks/use-realtime-table";
+import { useMetricsAgenda } from "@/hooks/use-metrics";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/agenda")({
