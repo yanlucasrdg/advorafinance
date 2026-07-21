@@ -464,9 +464,9 @@ function CRM() {
 
           {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 stagger">
-            <KpiCard label="Leads" value={String(kpis.leads)} delta="+12%" deltaLabel="vs mês anterior" icon={Users} tone="violet" />
-            <KpiCard label="Clientes Ativos" value={String(kpis.ativos)} delta="+8%" deltaLabel="vs mês anterior" icon={UserCheck} tone="blue" />
-            <KpiCard label="Taxa de Conversão" value={`${kpis.conv}%`} delta="+4%" deltaLabel="vs mês anterior" icon={TrendingUp} tone="emerald" />
+            <KpiCard label="Leads" value={String(kpis.leads)} deltaLabel="novos e triagem" icon={Users} tone="violet" />
+            <KpiCard label="Clientes Ativos" value={String(kpis.ativos)} deltaLabel="em contrato / andamento" icon={UserCheck} tone="blue" />
+            <KpiCard label="Taxa de Conversão" value={crmMetrics?.conv_pct != null ? `${crmMetrics.conv_pct}%` : "—"} deltaLabel="ativos vs pipeline" icon={TrendingUp} tone="emerald" />
             <KpiCard label="Receita Potencial" value={brl(kpis.pipeline)} deltaLabel="em pipeline" icon={DollarSign} tone="amber" />
             <KpiCard label="Contratos Fechados" value={String(kpis.fechadosMes)} deltaLabel="este mês" icon={FileCheck2} tone="rose" />
           </div>
