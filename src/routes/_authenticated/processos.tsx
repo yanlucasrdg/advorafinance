@@ -413,21 +413,23 @@ function Processos() {
       </section>
 
       {/* Alerts Center */}
-      <section className="glass rounded-2xl p-4 mb-5 border-l-2 border-l-amber-500/60 animate-fade-up">
-        <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle className="size-4 text-amber-300" />
-          <h3 className="text-sm font-semibold">Alertas Inteligentes</h3>
-          <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-300">{alerts.length} ativos</Badge>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
-          {alerts.map((a, i) => (
-            <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card/40 border border-border/40 hover-lift cursor-pointer">
-              <a.icon className={`size-4 shrink-0 ${a.color}`} />
-              <p className="text-xs truncate">{a.text}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      {alerts.length > 0 && (
+        <section className="glass rounded-2xl p-4 mb-5 border-l-2 border-l-amber-500/60 animate-fade-up">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="size-4 text-amber-300" />
+            <h3 className="text-sm font-semibold">Alertas Inteligentes</h3>
+            <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-300">{alerts.length} ativos</Badge>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
+            {alerts.map((a, i) => (
+              <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card/40 border border-border/40 hover-lift cursor-pointer">
+                <a.icon className={`size-4 shrink-0 ${a.color}`} />
+                <p className="text-xs truncate">{a.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Search */}
       <div className="relative mb-5 max-w-md">
