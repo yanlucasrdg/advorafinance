@@ -1010,10 +1010,18 @@ export type Database = {
       metrics_comunicacoes: { Args: never; Returns: Json }
       metrics_crm: { Args: never; Returns: Json }
       metrics_dashboard: { Args: never; Returns: Json }
-      metrics_financeiro: {
-        Args: { _from?: string; _to?: string }
-        Returns: Json
-      }
+      metrics_financeiro:
+        | { Args: { _from?: string; _to?: string }; Returns: Json }
+        | {
+            Args: {
+              _area?: string
+              _client_id?: string
+              _from?: string
+              _responsible?: string
+              _to?: string
+            }
+            Returns: Json
+          }
       metrics_processos: { Args: never; Returns: Json }
       notifications_summary: { Args: never; Returns: Json }
       reconcile_financial_entry: {
