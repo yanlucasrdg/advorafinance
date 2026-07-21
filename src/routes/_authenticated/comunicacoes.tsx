@@ -166,12 +166,14 @@ function Comunicacoes() {
   }, [convs, q, channelFilter, statusFilter, assignedFilter, user?.id]);
 
   const kpis = useMemo(() => {
-    const total = convs.length;
-    const novas = convs.filter(c => c.assignment_status === "new" || !c.assignment_status).length;
-    const minhas = convs.filter(c => c.assigned_to === user?.id && c.assignment_status !== "archived").length;
-    const naoLidas = convs.reduce((s, c) => s + (c.unread_count || 0), 0);
-    return { total, novas, minhas, naoLidas };
-  }, [convs, user?.id]);
+  const { data: metrics } = useMetricsComunicacoes();
+  const kpis = {
+    total: metrics?.total ?? 0,
+    novas: metrics?.novas ?? 0,
+    minhas: metrics?.minhas ?? 0,
+    naoLidas: metrics?.nao_lidas ?? 0,
+  };
+
 
   const current = useMemo(() => convs.find(c => c.id === selected) || null, [convs, selected]);
 
