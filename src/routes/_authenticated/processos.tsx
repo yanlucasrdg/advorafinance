@@ -23,6 +23,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { lookupDatajud, syncCaseMovements, validateCNJ } from "@/lib/datajud.functions";
+import { useMetricsProcessos, pctDelta, formatDelta } from "@/hooks/use-metrics";
 
 function maskCNJ(raw: string): string {
   const d = (raw ?? "").replace(/\D/g, "").slice(0, 20);
