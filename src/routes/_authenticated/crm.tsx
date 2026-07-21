@@ -189,20 +189,15 @@ function CRM() {
   );
 
   const kpis = useMemo(() => {
-    const leads = clients.filter(c => ["novo_contato", "triagem"].includes(stageOf(c.status))).length;
-    const ativos = clients.filter(c => ["contrato", "em_andamento"].includes(stageOf(c.status))).length;
-    const total = clients.length || 1;
-    const conv = Math.round((ativos / total) * 100);
-    const pipeline = clients
-      .filter(c => stageOf(c.status) !== "encerrado")
-      .reduce((sum, c) => sum + getMeta(c).value, 0);
-    const fechadosMes = clients.filter(c => {
-      const d = new Date(c.updated_at);
-      const now = new Date();
-      return ["contrato", "em_andamento"].includes(stageOf(c.status)) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).length;
-    return { leads, ativos, conv, pipeline, fechadosMes };
-  }, [clients]);
+  const { data: crmMetrics } = useMetricsCrm();
+  const kpis = {
+    leads: crmMetrics?.leads ?? 0,
+    ativos: crmMetrics?.ativos ?? 0,
+    conv: crmMetrics?.conv_pct ?? 0,
+    pipeline: crmMetrics?.pipeline_value ?? 0,
+    fechadosMes: crmMetrics?.fechados_mes ?? 0,
+  };
+
 
   const create = async () => {
     if (!form.name.trim() || !profile?.tenant_id) return;
