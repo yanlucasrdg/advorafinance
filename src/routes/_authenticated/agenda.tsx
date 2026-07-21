@@ -135,25 +135,19 @@ function Agenda() {
   const dayAfter = addDays(today, 2);
   const yesterday = addDays(today, -1);
 
-  // KPIs
+  // KPIs (from Postgres RPC — zero front-end aggregation)
+  const { data: agMetrics } = useMetricsAgenda();
   const kpis = useMemo(() => {
-    const inRange = (t: Date, s: Date, e: Date) => t >= s && t < e;
-    const audT = items.filter(d => d.kind === "audiencia" && inRange(new Date(d.due_at), today, tomorrow)).length;
-    const audY = items.filter(d => d.kind === "audiencia" && inRange(new Date(d.due_at), yesterday, today)).length;
-    const przT = items.filter(d => d.kind === "prazo" && inRange(new Date(d.due_at), today, tomorrow)).length;
-    const przY = items.filter(d => d.kind === "prazo" && inRange(new Date(d.due_at), yesterday, today)).length;
-    const cmpT = items.filter(d => (d.kind === "reuniao" || d.kind === "compromisso") && inRange(new Date(d.due_at), today, tomorrow)).length;
-    const cmpY = items.filter(d => (d.kind === "reuniao" || d.kind === "compromisso") && inRange(new Date(d.due_at), yesterday, today)).length;
-    const rskT = items.filter(d => !d.done && new Date(d.due_at).getTime() > now.getTime() && new Date(d.due_at).getTime() - now.getTime() < 48 * 3600 * 1000).length;
-    const rskY = items.filter(d => !d.done && (new Date(d.due_at).getTime() - now.getTime()) < 24 * 3600 * 1000 && (new Date(d.due_at).getTime() - now.getTime()) > -24 * 3600 * 1000).length;
+    const m = agMetrics;
     const delta = (t: number, y: number) => t === y ? "Igual ontem" : `${t > y ? "+" : ""}${t - y} vs ontem`;
     return [
-      { label: "Audiências Hoje", value: audT, delta: delta(audT, audY), icon: Gavel, tone: "text-violet-600 dark:text-violet-300", bg: "from-violet-500/15" },
-      { label: "Prazos Hoje", value: przT, delta: delta(przT, przY), icon: AlertTriangle, tone: "text-rose-600 dark:text-rose-300", bg: "from-rose-500/15" },
-      { label: "Compromissos", value: cmpT, delta: delta(cmpT, cmpY), icon: CalIcon, tone: "text-sky-600 dark:text-sky-300", bg: "from-sky-500/15" },
-      { label: "Risco de Atraso", value: rskT, delta: delta(rskT, rskY), icon: Flame, tone: "text-amber-600 dark:text-amber-300", bg: "from-amber-500/15" },
+      { label: "Audiências Hoje", value: m?.audiencias_hoje ?? 0,   delta: m ? delta(m.audiencias_hoje, m.audiencias_yday) : "",     icon: Gavel,          tone: "text-violet-600 dark:text-violet-300", bg: "from-violet-500/15" },
+      { label: "Prazos Hoje",     value: m?.prazos_hoje ?? 0,       delta: m ? delta(m.prazos_hoje, m.prazos_yday) : "",             icon: AlertTriangle,  tone: "text-rose-600 dark:text-rose-300",     bg: "from-rose-500/15" },
+      { label: "Compromissos",    value: m?.compromissos_hoje ?? 0, delta: m ? delta(m.compromissos_hoje, m.compromissos_yday) : "", icon: CalIcon,        tone: "text-sky-600 dark:text-sky-300",       bg: "from-sky-500/15" },
+      { label: "Risco de Atraso", value: m?.risco_48h ?? 0,         delta: m?.atraso ? `${m.atraso} em atraso` : "",                 icon: Flame,          tone: "text-amber-600 dark:text-amber-300",   bg: "from-amber-500/15" },
     ];
-  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agMetrics]);
+
 
   // Selected day items
   const dayItems = useMemo(() => {
