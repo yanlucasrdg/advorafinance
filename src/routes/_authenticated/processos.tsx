@@ -401,11 +401,13 @@ function Processos() {
               <div className={`size-9 rounded-xl bg-card/60 border border-border/40 grid place-items-center ${k.tone}`}>
                 <k.icon className="size-4" />
               </div>
-              <span className={`text-[10px] font-semibold tabular-nums ${k.down ? "text-rose-300" : "text-emerald-300"}`}>{k.delta}</span>
+              {k.delta && (
+                <span className={`text-[10px] font-semibold tabular-nums ${k.down ? "text-rose-300" : "text-emerald-300"}`}>{k.delta}</span>
+              )}
             </div>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">{k.label}</p>
             <p className="text-xl font-bold tabular-nums mt-0.5 truncate">{k.value}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">vs mês anterior</p>
+            {k.delta && <p className="text-[10px] text-muted-foreground mt-0.5">vs mês anterior</p>}
           </div>
         ))}
       </section>
