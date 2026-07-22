@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.metrics_financeiro(date, date);
