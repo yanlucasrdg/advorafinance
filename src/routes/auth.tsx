@@ -52,23 +52,9 @@ function AuthPage() {
   };
 
   const google = async () => {
-    try {
-      setBusy(true);
-      const res = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: `${window.location.origin}/auth/callback`,
-      });
-      if (res.error) {
-        toast.error("Falha no login com Google");
-        return;
-      }
-      toast.success("Redirecionando para o Google…");
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("Google sign-in error:", err);
-      toast.error("Erro durante o login com Google");
-    } finally {
-      setBusy(false);
-    }
+    setBusy(true);
+    const res = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+    if (res.error) { toast.error("Falha no login com Google"); setBusy(false); }
   };
 
   return (
