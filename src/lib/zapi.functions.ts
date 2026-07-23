@@ -22,50 +22,45 @@ type ZapiCreds = {
   clientToken: string;
 };
 
-// Busca as credenciais Z-API da instância pertencente ao tenant do usuário autenticado.
-// Usa o service-role client (bypassa RLS) porque zapi_token/zapi_client_token não são
-// legíveis pelo client autenticado comum (ver migration de colunas restritas).
-async function getTenantZapiCreds(userId: string): Promise<ZapiCreds> {
+async function loadTenantCreds(userId: string): Promise<ZapiCreds> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  const { data: profile, error: profileError } = await supabaseAdmin
+  const { data: profile, error: profileErr } = await supabaseAdmin
     .from("profiles")
     .select("tenant_id")
     .eq("id", userId)
-    .single();
-
-  if (profileError || !profile?.tenant_id) {
-    throw new Error("Usuário sem tenant associado.");
-  }
-
-  const { data: instance, error: instanceError } = await supabaseAdmin
-    .from("whatsapp_instances")
-    .select("zapi_instance_id, zapi_token, zapi_client_token")
-    .eq("tenant_id", profile.tenant_id)
     .maybeSingle();
 
-  if (instanceError || !instance?.zapi_instance_id || !instance?.zapi_token) {
-    throw new Error(
-      "WhatsApp não configurado para o seu escritório. Configure a integração Z-API em Configurações.",
-    );
+  if (profileErr) throw new Error(profileErr.message);
+  const tenantId = profile?.tenant_id;
+  if (!tenantId) {
+    throw new Error("WhatsApp não configurado para o seu escritório.");
+  }
+
+  const { data: inst, error: instErr } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("zapi_instance_id, zapi_token, zapi_client_token")
+    .eq("tenant_id", tenantId)
+    .not("zapi_instance_id", "is", null)
+    .not("zapi_token", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (instErr) throw new Error(instErr.message);
+  if (!inst?.zapi_instance_id || !inst?.zapi_token) {
+    throw new Error("WhatsApp não configurado para o seu escritório.");
   }
 
   return {
-    instanceId: instance.zapi_instance_id,
-    token: instance.zapi_token,
-    clientToken: instance.zapi_client_token ?? "",
+    instanceId: inst.zapi_instance_id,
+    token: inst.zapi_token,
+    clientToken: inst.zapi_client_token ?? "",
   };
 }
 
-function baseUrl(creds: ZapiCreds) {
+function buildBaseUrl(creds: ZapiCreds) {
   return `https://api.z-api.io/instances/${creds.instanceId}/token/${creds.token}`;
-}
-
-function clientHeaders(creds: ZapiCreds) {
-  return {
-    "Content-Type": "application/json",
-    "Client-Token": creds.clientToken,
-  };
 }
 
 async function zapiFetch<T>(
@@ -73,9 +68,13 @@ async function zapiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${baseUrl(creds)}${path}`, {
+  const res = await fetch(`${buildBaseUrl(creds)}${path}`, {
     ...init,
-    headers: { ...clientHeaders(creds), ...(init?.headers ?? {}) },
+    headers: {
+      "Content-Type": "application/json",
+      "Client-Token": creds.clientToken,
+      ...(init?.headers ?? {}),
+    },
   });
   const text = await res.text();
   let json: unknown = null;
@@ -98,7 +97,7 @@ export const zapiStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<ZapiStatus> => {
     try {
-      const creds = await getTenantZapiCreds(context.userId);
+      const creds = await loadTenantCreds(context.userId);
       const data = await zapiFetch<{
         connected?: boolean;
         session?: boolean;
@@ -127,7 +126,7 @@ export const zapiQrCode = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{ image: string | null; error?: string }> => {
     try {
-      const creds = await getTenantZapiCreds(context.userId);
+      const creds = await loadTenantCreds(context.userId);
       const data = await zapiFetch<{ value?: string }>(creds, "/qr-code/image");
       const value = data?.value ?? null;
       if (!value) return { image: null, error: "QR Code indisponível" };
@@ -145,7 +144,7 @@ export const zapiDevice = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<ZapiDevice | null> => {
     try {
-      const creds = await getTenantZapiCreds(context.userId);
+      const creds = await loadTenantCreds(context.userId);
       return await zapiFetch<ZapiDevice>(creds, "/device");
     } catch {
       return null;
@@ -155,7 +154,7 @@ export const zapiDevice = createServerFn({ method: "GET" })
 export const zapiDisconnect = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const creds = await getTenantZapiCreds(context.userId);
+    const creds = await loadTenantCreds(context.userId);
     await zapiFetch(creds, "/disconnect");
     return { ok: true };
   });
@@ -163,7 +162,7 @@ export const zapiDisconnect = createServerFn({ method: "POST" })
 export const zapiRestart = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const creds = await getTenantZapiCreds(context.userId);
+    const creds = await loadTenantCreds(context.userId);
     await zapiFetch(creds, "/restart");
     return { ok: true };
   });
@@ -177,8 +176,8 @@ export const zapiSendText = createServerFn({ method: "POST" })
     if (!message) throw new Error("Mensagem vazia");
     return { phone, message };
   })
-  .handler(async ({ context, data }) => {
-    const creds = await getTenantZapiCreds(context.userId);
+  .handler(async ({ data, context }) => {
+    const creds = await loadTenantCreds(context.userId);
     return await zapiFetch<{ zaapId?: string; messageId?: string; id?: string }>(
       creds,
       "/send-text",
