@@ -8,14 +8,27 @@ type Profile = {
   full_name: string | null;
   email: string | null;
   avatar_url: string | null;
+  locale: string;
+  theme: "light" | "dark";
+};
+
+export type TenantBranding = {
+  tenant_id: string;
+  brand_name: string;
+  logo_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+  default_theme: "light" | "dark";
 };
 
 type AuthCtx = {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
+  branding: TenantBranding | null;
   loading: boolean;
   refreshProfile: () => Promise<void>;
+  refreshBranding: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -25,15 +38,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [branding, setBranding] = useState<TenantBranding | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const loadBranding = async (tenantId: string) => {
+    const { data } = await supabase
+      .from("tenant_branding")
+      .select("tenant_id, brand_name, logo_url, primary_color, secondary_color, default_theme")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    setBranding(data as TenantBranding | null);
+  };
 
   const loadProfile = async (uid: string) => {
     const { data } = await supabase
       .from("profiles")
-      .select("id, tenant_id, full_name, email, avatar_url")
+      .select("id, tenant_id, full_name, email, avatar_url, locale, theme")
       .eq("id", uid)
       .maybeSingle();
-    setProfile(data as Profile | null);
+    const nextProfile = data as Profile | null;
+    setProfile(nextProfile);
+    if (nextProfile?.tenant_id) await loadBranding(nextProfile.tenant_id);
+    else setBranding(null);
   };
 
   useEffect(() => {
@@ -44,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setTimeout(() => loadProfile(sess.user.id), 0);
       } else {
         setProfile(null);
+        setBranding(null);
       }
     });
 
@@ -61,13 +88,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await loadProfile(user.id);
   };
 
+  const refreshBranding = async () => {
+    if (profile?.tenant_id) await loadBranding(profile.tenant_id);
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setBranding(null);
   };
 
   return (
-    <Ctx.Provider value={{ user, session, profile, loading, refreshProfile, signOut }}>
+    <Ctx.Provider value={{ user, session, profile, branding, loading, refreshProfile, refreshBranding, signOut }}>
       {children}
     </Ctx.Provider>
   );

@@ -14,11 +14,28 @@ export const Route = createFileRoute("/_authenticated/config")({
 });
 
 function Config() {
-  const { profile, refreshProfile } = useAuth();
+  const { profile, branding, refreshProfile, refreshBranding } = useAuth();
   const [tenant, setTenant] = useState<{ name: string; slug: string; plan: string } | null>(null);
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
+  const [brand, setBrand] = useState({
+    brand_name: "",
+    logo_url: "",
+    primary_color: "#5B4CF0",
+    secondary_color: "#7C6BFF",
+    default_theme: "dark" as "light" | "dark",
+  });
 
   useEffect(() => { setFullName(profile?.full_name ?? ""); }, [profile?.full_name]);
+  useEffect(() => {
+    if (!branding) return;
+    setBrand({
+      brand_name: branding.brand_name,
+      logo_url: branding.logo_url ?? "",
+      primary_color: branding.primary_color,
+      secondary_color: branding.secondary_color,
+      default_theme: branding.default_theme,
+    });
+  }, [branding]);
   useEffect(() => {
     if (!profile?.tenant_id) return;
     supabase.from("tenants").select("name, slug, plan").eq("id", profile.tenant_id).maybeSingle()
@@ -37,6 +54,27 @@ function Config() {
     const { error } = await supabase.from("tenants").update({ name: tenant.name }).eq("id", profile.tenant_id);
     if (error) return toast.error(error.message);
     toast.success("Escritório atualizado");
+  };
+
+  const saveBranding = async () => {
+    if (!profile?.tenant_id) return;
+    const brandName = brand.brand_name.trim();
+    const hex = /^#[0-9A-Fa-f]{6}$/;
+    if (!brandName || brandName.length > 100) return toast.error("Informe um nome de marca de ate 100 caracteres.");
+    if (!hex.test(brand.primary_color) || !hex.test(brand.secondary_color)) {
+      return toast.error("Use cores no formato hexadecimal, por exemplo #5B4CF0.");
+    }
+
+    const { error } = await supabase.from("tenant_branding").update({
+      brand_name: brandName,
+      logo_url: brand.logo_url.trim() || null,
+      primary_color: brand.primary_color.toUpperCase(),
+      secondary_color: brand.secondary_color.toUpperCase(),
+      default_theme: brand.default_theme,
+    }).eq("tenant_id", profile.tenant_id);
+    if (error) return toast.error(error.message);
+    await refreshBranding();
+    toast.success("Identidade visual atualizada");
   };
 
   return (
@@ -67,6 +105,33 @@ function Config() {
             <Button onClick={saveTenant} className="w-fit bg-[image:var(--gradient-brand)]">Salvar escritório</Button>
           </div>
         ) : <p className="text-sm text-muted-foreground">Carregando…</p>}
+      </Panel>
+
+      <Panel className="p-6 space-y-5">
+        <div>
+          <h3 className="text-sm font-semibold">White Label</h3>
+          <p className="mt-1 text-sm text-muted-foreground">A marca abaixo e aplicada a navegacao e aos elementos principais deste escritorio.</p>
+        </div>
+        <div className="grid gap-4 max-w-2xl">
+          <div><Label>Nome da marca</Label><Input value={brand.brand_name} onChange={e => setBrand({ ...brand, brand_name: e.target.value })} placeholder="Nome exibido para os usuarios" /></div>
+          <div><Label>URL do logo</Label><Input type="url" value={brand.logo_url} onChange={e => setBrand({ ...brand, logo_url: e.target.value })} placeholder="https://.../logo.png" /></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div><Label>Cor principal</Label><Input value={brand.primary_color} onChange={e => setBrand({ ...brand, primary_color: e.target.value })} placeholder="#5B4CF0" /></div>
+            <div><Label>Cor secundaria</Label><Input value={brand.secondary_color} onChange={e => setBrand({ ...brand, secondary_color: e.target.value })} placeholder="#7C6BFF" /></div>
+          </div>
+          <div>
+            <Label>Tema padrao para novos usuarios</Label>
+            <select value={brand.default_theme} onChange={e => setBrand({ ...brand, default_theme: e.target.value as "light" | "dark" })} className="mt-1 flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm">
+              <option value="dark">Escuro</option>
+              <option value="light">Claro</option>
+            </select>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+            <div className="size-10 rounded-xl" style={{ background: `linear-gradient(135deg, ${brand.primary_color}, ${brand.secondary_color})` }} />
+            <div><p className="text-sm font-semibold">{brand.brand_name || "Sua marca"}</p><p className="text-xs text-muted-foreground">Pre-visualizacao das cores</p></div>
+          </div>
+          <Button onClick={saveBranding} className="w-fit bg-[image:var(--gradient-brand)]">Salvar identidade visual</Button>
+        </div>
       </Panel>
     </div>
   );

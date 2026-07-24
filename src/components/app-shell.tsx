@@ -53,7 +53,7 @@ const labelByPath: Record<string, string> = Object.fromEntries(
 );
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { profile, signOut } = useAuth();
+  const { profile, branding, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
@@ -67,6 +67,25 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => { document.body.style.overflow = prev; };
   }, [mobileOpen]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const variableNames = ["--primary", "--primary-hover", "--primary-soft", "--secondary-brand", "--accent", "--ring", "--gradient-brand"];
+    if (!branding) {
+      variableNames.forEach((name) => root.style.removeProperty(name));
+      return;
+    }
+
+    const primary = branding.primary_color;
+    const secondary = branding.secondary_color;
+    root.style.setProperty("--primary", primary);
+    root.style.setProperty("--primary-hover", `color-mix(in oklch, ${primary} 88%, black)`);
+    root.style.setProperty("--primary-soft", `color-mix(in oklch, ${primary} 11%, transparent)`);
+    root.style.setProperty("--secondary-brand", secondary);
+    root.style.setProperty("--accent", `color-mix(in oklch, ${primary} 12%, transparent)`);
+    root.style.setProperty("--ring", primary);
+    root.style.setProperty("--gradient-brand", `linear-gradient(135deg, ${primary}, ${secondary})`);
+  }, [branding]);
+
   const initials = (profile?.full_name ?? profile?.email ?? "?")
     .split(" ").map(s => s[0]).slice(0, 2).join("").toUpperCase();
 
@@ -74,8 +93,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     const path = location.pathname;
     const root = "/" + (path.split("/")[1] || "");
     const label = labelByPath[root] ?? "Workspace";
-    return [{ label: "Advora", to: "/dashboard" }, { label, to: root }];
-  }, [location.pathname]);
+    return [{ label: branding?.brand_name ?? "Advora", to: "/dashboard" }, { label, to: root }];
+  }, [branding?.brand_name, location.pathname]);
 
   const isActive = (to: string) =>
     location.pathname === to || location.pathname.startsWith(to + "/");
@@ -85,10 +104,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Brand */}
       <div className="px-5 h-[72px] flex items-center gap-3 border-b border-sidebar-border">
         <div className="size-9 rounded-xl bg-foreground grid place-items-center overflow-hidden shrink-0">
-          <img src={advoraLogo.url} alt="Advora" className="size-6 object-contain invert" />
+          <img src={branding?.logo_url ?? advoraLogo.url} alt={branding?.brand_name ?? "Advora"} className="size-6 object-contain invert" />
         </div>
         <div className="leading-tight min-w-0 flex-1">
-          <div className="text-[15px] font-semibold tracking-tight text-foreground">Advora</div>
+          <div className="text-[15px] font-semibold tracking-tight text-foreground truncate">{branding?.brand_name ?? "Advora"}</div>
           <div className="text-[10px] text-muted-foreground font-medium tracking-wider uppercase">Legal OS</div>
         </div>
         <button

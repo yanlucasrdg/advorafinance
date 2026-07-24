@@ -39,9 +39,8 @@ export function UserMenu() {
   // Hydrate from profile once loaded
   useEffect(() => {
     if (!profile) return;
-    const p = profile as unknown as { locale?: string; theme?: Theme };
-    if (p.locale && p.locale !== i18next.language) applyLocale(p.locale);
-    if (p.theme && p.theme !== theme) { setTheme(p.theme); applyTheme(p.theme); }
+    if (profile.locale && profile.locale !== i18next.language) applyLocale(profile.locale);
+    if (profile.theme && profile.theme !== theme) { setTheme(profile.theme); applyTheme(profile.theme); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id]);
 
