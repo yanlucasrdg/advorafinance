@@ -1119,8 +1119,8 @@ function DreSettingsDialog({
 }
 
 function AuditSheet({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
-  const auditQ = useFinancialAuditEntry(entry?.id);
-  const paymentsQ = useFinancialPayments(entry?.id);
+  const auditQ = useFinancialAuditEntry(entry?.id ?? null);
+  const paymentsQ = useFinancialPayments(entry?.id ?? null);
 
   const diffs = (a: AuditRow) => {
     const before = (a.before ?? {}) as Record<string, unknown>;
