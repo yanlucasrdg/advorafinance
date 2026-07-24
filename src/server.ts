@@ -43,6 +43,9 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      // TanStack server functions execute through the Nitro handler. Keep the
+      // immutable Worker bindings available to their server-only helpers.
+      (globalThis as CloudflareRuntime).__env__ = (env ?? {}) as Record<string, unknown>;
       if (new URL(request.url).pathname === "/webhooks/whatsapp") {
         const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
         return await handleMetaWhatsAppWebhook(request, bindings);

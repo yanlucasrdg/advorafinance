@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { getServerEnv } from "@/integrations/supabase/runtime-env.server";
 
 const Schema = z.object({ prompt: z.string().min(1).max(4000) });
 
@@ -33,7 +34,7 @@ export const askCopilot = createServerFn({ method: "POST" })
       await supabase.from("ai_messages").insert({ tenant_id: tenantId, user_id: userId, role: "user", content: data.prompt });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = getServerEnv("OPENAI_API_KEY");
     if (!apiKey) {
       const fallback = `Copiloto em modo demo (sem chave AI). Resumo: ${summary}`;
       if (tenantId) await supabase.from("ai_messages").insert({ tenant_id: tenantId, user_id: userId, role: "assistant", content: fallback });
@@ -44,7 +45,7 @@ export const askCopilot = createServerFn({ method: "POST" })
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? "gpt-5-mini",
+        model: getServerEnv("OPENAI_MODEL") ?? "gpt-5-mini",
         messages: [
           { role: "system", content: `Você é o Copiloto Jurídico da Advora Legal OS, assistente para advogados brasileiros. Seja direto, prático e cite a legislação aplicável (CPC, CLT, CDC, CC) quando relevante. Contexto do escritório: ${summary}` },
           { role: "user", content: data.prompt },
