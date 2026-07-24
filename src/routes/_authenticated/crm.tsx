@@ -290,29 +290,29 @@ function CRM() {
     setAdv(a => ({ ...a, [key]: a[key].includes(v) ? a[key].filter(x => x !== v) : [...a[key], v] }));
 
   return (
-    <div className="relative p-6 lg:p-8 space-y-6">
+    <div className="relative min-h-full overflow-hidden bg-muted/30">
       {/* Background glow */}
-      <div className="pointer-events-none absolute inset-0 -z-10">
+      <div className="pointer-events-none absolute inset-0 -z-10 opacity-40">
         <div className="absolute top-0 left-1/3 w-[600px] h-[600px] rounded-full bg-violet-600/10 blur-[120px]" />
         <div className="absolute top-40 right-0 w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[120px]" />
       </div>
 
       {/* CRM header */}
-      <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fade-up">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+      <header className="flex flex-col gap-4 border-b border-border bg-card px-5 py-4 md:flex-row md:items-center md:justify-between lg:px-8">
+        <div className="min-w-0">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="rounded-md bg-primary px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary-foreground">
               Advora Legal OS
             </span>
-            <span className="text-xs text-muted-foreground">• Atendimento & Pipeline</span>
+            <span className="text-xs text-muted-foreground">CRM</span>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">CRM Jurídico Conversacional</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Gestão inteligente de oportunidades, atendimento via WhatsApp e acompanhamento de SLA em tempo real.
+          <h1 className="truncate text-xl font-bold tracking-tight text-foreground">Pipeline de clientes</h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Organize oportunidades, contatos e contratos em um só lugar.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             ref={fileRef}
             type="file"
@@ -324,15 +324,15 @@ function CRM() {
               e.target.value = "";
             }}
           />
-          <Button onClick={() => fileRef.current?.click()} variant="outline" size="sm" className="h-9 border-border/80 text-xs gap-1.5 font-medium">
+          <Button onClick={() => fileRef.current?.click()} variant="outline" size="sm" className="h-8 border-border/80 text-xs gap-1.5 font-medium">
             <Upload className="h-3.5 w-3.5" /> Importar CSV
           </Button>
-          <Button onClick={exportReport} variant="outline" size="sm" className="h-9 border-border/80 text-xs gap-1.5 font-medium">
+          <Button onClick={exportReport} variant="outline" size="sm" className="h-8 border-border/80 text-xs gap-1.5 font-medium">
             <Download className="h-3.5 w-3.5" /> Exportar Relatório
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="h-9 text-xs font-semibold gap-1.5 bg-gradient-to-r from-primary to-purple-600 text-white shadow-md hover:shadow-lg transition-all">
+              <Button size="sm" className="h-8 text-xs font-semibold gap-1.5 shadow-sm">
                 <Plus className="h-4 w-4" /> Novo Lead / Cliente
               </Button>
             </DialogTrigger>
@@ -379,7 +379,7 @@ function CRM() {
       </header>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="hidden grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         <KpiCard label="Leads Ativos" value={String(kpis.leads)} deltaLabel="Triagem e primeiro contato" icon={Users} tone="violet" />
         <KpiCard label="Clientes em Atendimento" value={String(kpis.ativos)} deltaLabel="Contrato e casos ativos" icon={UserCheck} tone="blue" />
         <KpiCard label="Taxa de Conversão" value={crmMetrics?.conv_pct != null ? `${crmMetrics.conv_pct}%` : "—"} deltaLabel="Leads para Contrato" icon={TrendingUp} tone="emerald" />
@@ -388,7 +388,7 @@ function CRM() {
       </div>
 
       {/* Main Grid: Tasks Widget + Commercial Insights */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="hidden grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <CrmTasksWidget />
         </div>
@@ -418,7 +418,7 @@ function CRM() {
       </div>
 
       {/* Filter toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card border border-border p-2.5 rounded-xl shadow-xs">
+      <div className="flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card px-5 py-3 sm:flex-row sm:items-center lg:px-8">
         {/* Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {[
@@ -431,9 +431,9 @@ function CRM() {
             <button
               key={f.id}
               onClick={() => setFilter(f.id as typeof filter)}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-all whitespace-nowrap ${
                 filter === f.id
-                  ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
               }`}
             >
@@ -445,12 +445,12 @@ function CRM() {
 
         {/* Search + View Toggle + Advanced Popover */}
         <div className="flex items-center gap-2">
-          <div className="relative min-w-[200px]">
+          <div className="relative min-w-[180px]">
             <Input
-              placeholder="Buscar por nome, CPF/CNPJ..."
+              placeholder="Pesquisar clientes..."
               value={adv.search}
               onChange={(e) => setAdv({ ...adv, search: e.target.value })}
-              className="h-8 text-xs pl-3 pr-8"
+              className="h-8 rounded-md text-xs pl-3 pr-8"
             />
           </div>
 
@@ -521,32 +521,32 @@ function CRM() {
 
       {/* Pipeline Kanban */}
       {view === "funil" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3.5 items-start">
+        <div className="flex min-h-[calc(100vh-235px)] items-start gap-3 overflow-x-auto bg-muted/60 p-4 pb-6">
           {grouped.map((col) => (
-            <div key={col.id} className="rounded-xl border border-border/80 bg-card p-3 flex flex-col min-h-[550px] shadow-xs">
+            <div key={col.id} className="flex min-h-[520px] w-[278px] shrink-0 flex-col rounded-xl bg-muted/75 p-2.5">
               {/* Stage Header */}
-              <div className="mb-3">
-                <div className="h-1 w-full rounded-full mb-2" style={{ background: col.color }} />
+              <div className="mb-3 px-1">
+                <div className="mb-2 h-1 w-full rounded-full" style={{ background: col.color }} />
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-foreground truncate">{col.label}</h3>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  <h3 className="truncate text-xs font-bold text-foreground">{col.label}</h3>
+                  <span className="rounded-full bg-card px-2 py-0.5 text-[10px] font-bold text-muted-foreground shadow-sm">
                     {col.items.length}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1">
                   <span>{col.subtitle}</span>
-                  <span className="font-semibold text-foreground">{brl(col.totalValue)}</span>
+                  <span className="rounded bg-card px-1.5 py-0.5 font-semibold text-foreground">{brl(col.totalValue)}</span>
                 </div>
               </div>
 
               {/* Cards List */}
-              <div className="space-y-3 flex-1 overflow-y-auto pr-0.5">
+              <div className="flex-1 space-y-2.5 overflow-y-auto pr-0.5">
                 {isLoading && Array.from({ length: 2 }).map((_, i) => (
                   <div key={i} className="skeleton h-28 rounded-xl" />
                 ))}
 
                 {!isLoading && col.items.length === 0 && (
-                  <div className="text-center py-12 text-[11px] text-muted-foreground/60 border border-dashed border-border/60 rounded-xl">
+                  <div className="rounded-lg border border-dashed border-border/60 py-12 text-center text-[11px] text-muted-foreground/60">
                     Nenhum lead nesta etapa
                   </div>
                 )}
