@@ -94,7 +94,7 @@ export function useClients() {
 
       // Log stage change activity if possible
       if (prevStatus && prevStatus !== status && profile?.tenant_id) {
-        await (supabase.from("client_activities") as any).insert({
+        await ((supabase as any).from("client_activities")).insert({
           tenant_id: profile.tenant_id, client_id: id,
           user_id: profile.id, kind: "stage_change",
           title: `Etapa alterada: ${oldLabel} → ${newLabel}`,
