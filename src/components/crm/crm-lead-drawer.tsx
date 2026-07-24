@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -237,7 +238,7 @@ export function CrmLeadDrawer({
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1 text-primary border-primary/30 bg-primary/5 hover:bg-primary/10">
-                  <ArrowRight className="h-3 w-3" />
+                  <ArrowUpRight className="h-3 w-3" />
                   <span>Transferir Fila</span>
                 </Button>
               </PopoverTrigger>

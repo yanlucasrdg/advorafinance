@@ -15,6 +15,7 @@ export type Case = {
   tenant_id?: string;
   last_movement_at?: string | null; datajud_synced_at?: string | null;
   clients?: { name: string } | null;
+  [key: string]: any;
 };
 
 export type Deadline = { id: string; case_id: string | null; title: string; due_at: string; done: boolean; kind: string };
@@ -74,7 +75,7 @@ export function useCases() {
   });
 
   const create = useMutation({
-    mutationFn: async (payload: Partial<Case>) => {
+    mutationFn: async (payload: any) => {
       const { data, error } = await supabase.from("cases").insert(payload as any).select("id").maybeSingle();
       if (error) throw error;
       return data;

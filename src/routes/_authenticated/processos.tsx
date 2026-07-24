@@ -164,7 +164,6 @@ function Processos() {
     if (!form.title.trim() || !profile?.tenant_id) return;
     try {
       await create.mutateAsync({
-        tenant_id: profile.tenant_id,
         title: form.title,
         number: form.number || null,
         tribunal: form.tribunal || null,
@@ -175,7 +174,7 @@ function Processos() {
         description: form.description || null,
         client_id: form.client_id || null,
         parties: form.party_names ? form.party_names.split(",").map(name => ({ name: name.trim(), role: "Parte contrária" })) : null,
-      });
+      } as any);
       setOpen(false);
       setForm({ number: "", title: "", tribunal: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "", party_names: "" });
     } catch {
