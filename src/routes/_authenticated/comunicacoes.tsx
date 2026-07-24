@@ -19,7 +19,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { useServerFn } from "@tanstack/react-start";
-import { zapiSendText } from "@/lib/zapi.functions";
+import { metaWhatsAppSendText } from "@/lib/meta-whatsapp.functions";
 import { CrmQueuesBar, type LegalQueueId } from "@/components/crm/crm-queues-bar";
 
 
@@ -109,7 +109,7 @@ function Comunicacoes() {
   const [creating, setCreating] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const sendZapi = useServerFn(zapiSendText);
+  const sendMetaWhatsApp = useServerFn(metaWhatsAppSendText);
 
   useRealtimeTables(["whatsapp_conversations", "whatsapp_messages"], ["comms:convs", "comms:msgs"]);
 
@@ -253,22 +253,16 @@ function Comunicacoes() {
     if (!current || !draft.trim() || !profile?.tenant_id) return;
     setSending(true);
     const body = draft.trim();
-    setDraft("");
-    const { error } = await supabase.from("whatsapp_messages").insert({
-      conversation_id: current.id,
-      tenant_id: profile.tenant_id,
-      direction: "outbound",
-      body,
-      status: "sent",
-    } as never);
-    if (error) toast.error(error.message);
-    // update last_message + read
-    await supabase.from("whatsapp_conversations").update({
-      last_message: body,
-      last_message_at: new Date().toISOString(),
-      unread_count: 0,
-    }).eq("id", current.id);
-    setSending(false);
+    try {
+      if (current.channel !== "whatsapp") throw new Error("Este canal ainda não está conectado.");
+      await sendMetaWhatsApp({ data: { phone: current.contact_phone ?? "", message: body } });
+      setDraft("");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível enviar a mensagem.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const validateNewContact = () => {
@@ -359,7 +353,7 @@ function Comunicacoes() {
         }
         // WhatsApp: send via Z-API
         try {
-          await sendZapi({ data: { phone: identifier.replace(/\D/g, ""), message: newContact.message.trim() } });
+          await sendMetaWhatsApp({ data: { phone: identifier.replace(/\D/g, ""), message: newContact.message.trim() } });
           await supabase.from("whatsapp_messages").insert({
             conversation_id: data.id,
             tenant_id: profile.tenant_id,

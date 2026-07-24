@@ -1,8 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, CircleAlert, Cloud, ExternalLink, MessageCircle, ShieldCheck, Zap } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, CircleAlert, Cloud, ExternalLink, Loader2, MessageCircle, ShieldCheck, Zap } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { PageHeader, Panel } from "@/components/data-table-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { metaWhatsAppConnect } from "@/lib/meta-whatsapp.functions";
 
 export const Route = createFileRoute("/_authenticated/integracoes")({
   head: () => ({ meta: [{ title: "Integrações — Advora" }] }),
@@ -10,6 +14,21 @@ export const Route = createFileRoute("/_authenticated/integracoes")({
 });
 
 function IntegracoesPage() {
+  const connectMeta = useServerFn(metaWhatsAppConnect);
+  const [connecting, setConnecting] = useState(false);
+
+  const activateMeta = async () => {
+    setConnecting(true);
+    try {
+      await connectMeta();
+      toast.success("WhatsApp Business conectado ao escritório. As mensagens recebidas aparecerão em Comunicações.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível conectar o WhatsApp Business.");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6 lg:p-8">
       <PageHeader
@@ -74,8 +93,12 @@ function IntegracoesPage() {
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
               Quando você criar o app da Meta, faremos o vínculo no Worker sem expor credenciais e sem depender de WhatsApp Web.
             </p>
+            <Button className="mt-4 w-full" size="sm" onClick={activateMeta} disabled={connecting}>
+              {connecting ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+              Ativar WhatsApp Business
+            </Button>
             <a
-              className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+              className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
               href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
               target="_blank"
               rel="noreferrer"

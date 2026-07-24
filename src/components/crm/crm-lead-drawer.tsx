@@ -20,7 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
-import { zapiSendText } from "@/lib/zapi.functions";
+import { metaWhatsAppSendText } from "@/lib/meta-whatsapp.functions";
 import type { ClientCardData } from "./crm-kanban-card";
 
 type CrmLeadDrawerProps = {
@@ -157,7 +157,7 @@ export function CrmLeadDrawer({
     }
   }
 
-  const sendTextFn = useServerFn(zapiSendText);
+  const sendTextFn = useServerFn(metaWhatsAppSendText);
 
   const handleSendMessage = async (textToSend?: string) => {
     const msg = textToSend || inputText;
