@@ -33,18 +33,18 @@ export const askCopilot = createServerFn({ method: "POST" })
       await supabase.from("ai_messages").insert({ tenant_id: tenantId, user_id: userId, role: "user", content: data.prompt });
     }
 
-    const apiKey = process.env.LOVABLE_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       const fallback = `Copiloto em modo demo (sem chave AI). Resumo: ${summary}`;
       if (tenantId) await supabase.from("ai_messages").insert({ tenant_id: tenantId, user_id: userId, role: "assistant", content: fallback });
       return { reply: fallback };
     }
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: process.env.OPENAI_MODEL ?? "gpt-5-mini",
         messages: [
           { role: "system", content: `Você é o Copiloto Jurídico da Advora Legal OS, assistente para advogados brasileiros. Seja direto, prático e cite a legislação aplicável (CPC, CLT, CDC, CC) quando relevante. Contexto do escritório: ${summary}` },
           { role: "user", content: data.prompt },
@@ -54,7 +54,7 @@ export const askCopilot = createServerFn({ method: "POST" })
 
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`AI Gateway error ${res.status}: ${txt.slice(0, 200)}`);
+      throw new Error(`OpenAI API error ${res.status}: ${txt.slice(0, 200)}`);
     }
     const json = await res.json() as { choices?: { message?: { content?: string } }[] };
     const reply = json.choices?.[0]?.message?.content ?? "Sem resposta.";

@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 
@@ -53,8 +52,11 @@ function AuthPage() {
 
   const google = async () => {
     setBusy(true);
-    const res = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: new URL("/auth/callback", window.location.origin).toString(),
+    const res = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: new URL("/auth/callback", window.location.origin).toString(),
+      },
     });
     if (res.error) { toast.error("Falha no login com Google"); setBusy(false); }
   };
