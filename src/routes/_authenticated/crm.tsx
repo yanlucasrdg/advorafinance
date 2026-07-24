@@ -115,6 +115,8 @@ function CRM() {
   const [view, setView] = useState<"funil" | "lista">("funil");
   const [selected, setSelected] = useState<Client | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [draggedClientId, setDraggedClientId] = useState<string | null>(null);
+  const [dropStageId, setDropStageId] = useState<string | null>(null);
 
   const [adv, setAdv] = useState<{ areas: string[]; stages: string[]; minValue: string; maxValue: string; hotOnly: boolean; search: string }>({
     areas: [], stages: [], minValue: "", maxValue: "", hotOnly: false, search: "",
@@ -196,6 +198,14 @@ function CRM() {
     } catch {
       // toast handled by mutation
     }
+  };
+
+  const handleDropInStage = async (stageId: string) => {
+    const client = clients.find((item) => item.id === draggedClientId);
+    setDropStageId(null);
+    setDraggedClientId(null);
+    if (!client || stageOf(client.status) === stageId) return;
+    await moveStageHandler(client.id, stageId);
   };
 
   const saveNotes = async (id: string, notesText: string) => {
@@ -523,7 +533,21 @@ function CRM() {
       {view === "funil" ? (
         <div className="flex min-h-[calc(100vh-235px)] items-start gap-3 overflow-x-auto bg-muted/60 p-4 pb-6">
           {grouped.map((col) => (
-            <div key={col.id} className="flex min-h-[520px] w-[278px] shrink-0 flex-col rounded-xl bg-muted/75 p-2.5">
+            <div
+              key={col.id}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDropStageId(col.id);
+              }}
+              onDragLeave={(event) => {
+                if (event.currentTarget === event.target) setDropStageId(null);
+              }}
+              onDrop={() => void handleDropInStage(col.id)}
+              className={`flex min-h-[520px] w-[278px] shrink-0 flex-col rounded-xl p-2.5 transition-colors ${
+                dropStageId === col.id ? "bg-primary/15 ring-1 ring-primary/40" : "bg-muted/75"
+              }`}
+            >
               {/* Stage Header */}
               <div className="mb-3 px-1">
                 <div className="mb-2 h-1 w-full rounded-full" style={{ background: col.color }} />
@@ -566,6 +590,11 @@ function CRM() {
                         } else if (action === "note") {
                           handleCardClick(cl as unknown as Client);
                         }
+                      }}
+                      onDragStart={(dragged) => setDraggedClientId(dragged.id)}
+                      onDragEnd={() => {
+                        setDraggedClientId(null);
+                        setDropStageId(null);
                       }}
                     />
                   );

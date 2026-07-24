@@ -22,6 +22,8 @@ type CrmKanbanCardProps = {
   onClick: (client: ClientCardData) => void;
   onOpenWhatsapp: (phone: string | null, clientName: string) => void;
   onQuickAction?: (action: string, client: ClientCardData) => void;
+  onDragStart?: (client: ClientCardData) => void;
+  onDragEnd?: () => void;
 };
 
 function formatBRL(amount: number) {
@@ -36,14 +38,20 @@ function getSlaInfo(updatedAtIso: string, stageId: string) {
   return { label, isOverdue };
 }
 
-export function CrmKanbanCard({ client, meta, onClick, onOpenWhatsapp, onQuickAction }: CrmKanbanCardProps) {
+export function CrmKanbanCard({ client, meta, onClick, onOpenWhatsapp, onQuickAction, onDragStart, onDragEnd }: CrmKanbanCardProps) {
   const sla = getSlaInfo(client.updated_at || client.created_at, client.status);
   const reference = client.id.slice(0, 8).toUpperCase();
 
   return (
     <article
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "move";
+        onDragStart?.(client);
+      }}
+      onDragEnd={onDragEnd}
       onClick={() => onClick(client)}
-      className={`group cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+      className={`group cursor-grab active:cursor-grabbing rounded-lg border bg-card p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
         sla.isOverdue ? "border-rose-300/80 bg-rose-500/[0.03]" : "border-border/80 hover:border-primary/40"
       }`}
     >
