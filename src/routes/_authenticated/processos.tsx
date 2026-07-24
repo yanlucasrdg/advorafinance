@@ -238,13 +238,13 @@ function Processos() {
   async function loadCaseDocuments(caseId: string) {
     setDocsLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("documents")
         .select("id, case_id, uploaded_by, file_name, file_path, file_type, file_size, document_type, description, created_at")
         .eq("case_id", caseId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setCaseDocuments((data ?? []) as Document[]);
+      setCaseDocuments(((data ?? []) as unknown) as Document[]);
     } catch (err) {
       console.error(err);
     } finally {
