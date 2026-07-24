@@ -147,7 +147,7 @@ export function useFinance() {
   const saveDreSettings = useMutation({
     mutationFn: async (payload: { apply_cogs: boolean; enabled_categories: string[]; category_map: Record<string, string> }) => {
       const { error } = await supabase.from("dre_settings").upsert({
-        tenant_id: tenantId,
+        tenant_id: tenantId as string,
         apply_cogs: payload.apply_cogs,
         enabled_categories: payload.enabled_categories,
         category_map: payload.category_map,
