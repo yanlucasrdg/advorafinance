@@ -177,7 +177,7 @@ function CRM() {
         type: form.type,
         status: form.status,
         notes: JSON.stringify({ area: form.area, value: form.value, owner: profile.full_name || "Dr. Yan", hot: true }),
-      });
+      } as any);
       setOpen(false);
       setForm({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
     } catch {
