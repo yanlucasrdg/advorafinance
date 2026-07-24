@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Mail, MoreHorizontal, Upload, Download, Users, UserCheck,
   TrendingUp, DollarSign, FileCheck2, Flame, AlertTriangle, Bot, Sparkles,
@@ -17,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { useMetricsCrm } from "@/hooks/use-metrics";
+import { STAGES, stageOf, useClients, type Client } from "@/hooks/use-clients";
 import { CrmKanbanCard, type ClientCardData } from "@/components/crm/crm-kanban-card";
 import { CrmLeadDrawer } from "@/components/crm/crm-lead-drawer";
 import { CrmTasksWidget } from "@/components/crm/crm-tasks-widget";
@@ -72,31 +74,6 @@ export const Route = createFileRoute("/_authenticated/crm")({
   component: CRM,
 });
 
-type Client = ClientCardData;
-
-const STAGES = [
-  { id: "novo_contato",      label: "Novo Contato",      subtitle: "Primeiro contato",     color: "oklch(0.70 0.18 285)", ring: "ring-violet-500/40",  bar: "bg-violet-500",  text: "text-violet-300",  bg: "bg-violet-500/10" },
-  { id: "triagem",           label: "Triagem",           subtitle: "Qualificação",         color: "oklch(0.70 0.18 250)", ring: "ring-blue-500/40",    bar: "bg-blue-500",    text: "text-blue-300",    bg: "bg-blue-500/10" },
-  { id: "consulta_agendada", label: "Consulta Agendada", subtitle: "Reunião marcada",      color: "oklch(0.78 0.14 200)", ring: "ring-cyan-500/40",    bar: "bg-cyan-500",    text: "text-cyan-300",    bg: "bg-cyan-500/10" },
-  { id: "proposta",          label: "Proposta",          subtitle: "Honorários enviados",  color: "oklch(0.80 0.15 85)",  ring: "ring-amber-500/40",   bar: "bg-amber-500",   text: "text-amber-300",   bg: "bg-amber-500/10" },
-  { id: "contrato",          label: "Contrato",          subtitle: "Assinado",             color: "oklch(0.74 0.17 130)", ring: "ring-lime-500/40",    bar: "bg-lime-500",    text: "text-lime-300",    bg: "bg-lime-500/10" },
-  { id: "em_andamento",      label: "Em Andamento",      subtitle: "Caso ativo",           color: "oklch(0.72 0.17 155)", ring: "ring-emerald-500/40", bar: "bg-emerald-500", text: "text-emerald-300", bg: "bg-emerald-500/10" },
-  { id: "encerrado",         label: "Concluído / Perdido", subtitle: "Encerrado",          color: "oklch(0.65 0.10 25)",  ring: "ring-rose-500/40",    bar: "bg-rose-500",    text: "text-rose-300",    bg: "bg-rose-500/10" },
-] as const;
-
-const LEGACY_STAGE_MAP: Record<string, string> = {
-  lead: "novo_contato",
-  prospect: "novo_contato",
-  qualificacao: "triagem",
-  reuniao: "consulta_agendada",
-  fechado: "contrato",
-  ativo: "em_andamento",
-  perdido: "encerrado",
-  inativo: "encerrado",
-};
-function stageOf(status: string): string {
-  return LEGACY_STAGE_MAP[status] ?? status;
-}
 
 const AREAS = ["Trabalhista", "Cível", "Empresarial", "Tributário", "Família", "Criminal", "Previdenciário"];
 
@@ -129,8 +106,8 @@ function getMeta(c: Client) {
 
 function CRM() {
   const { profile } = useAuth();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
+  const { clients, isLoading, create, update, moveStage } = useClients();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
   const [filter, setFilter] = useState<"all" | "PF" | "PJ" | "leads" | "ativos" | "inativos">("all");
@@ -142,15 +119,6 @@ function CRM() {
     areas: [], stages: [], minValue: "", maxValue: "", hotOnly: false, search: "",
   });
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const load = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from("clients").select("*").order("created_at", { ascending: false });
-    if (error) toast.error(error.message);
-    setClients((data ?? []) as Client[]);
-    setLoading(false);
-  };
-  useEffect(() => { if (profile?.tenant_id) load(); }, [profile?.tenant_id]);
 
   const filtered = useMemo(() => {
     const min = adv.minValue ? Number(adv.minValue) : -Infinity;
@@ -196,38 +164,46 @@ function CRM() {
     fechadosMes: crmMetrics?.fechados_mes ?? 0,
   };
 
-  const create = async () => {
+  const createClient = async () => {
     if (!form.name.trim() || !profile?.tenant_id) return;
-    const { error } = await supabase.from("clients").insert({
-      tenant_id: profile.tenant_id,
-      created_by: profile.id,
-      name: form.name, email: form.email || null, phone: form.phone || null, doc: form.doc || null,
-      type: form.type, status: form.status,
-      notes: JSON.stringify({ area: form.area, value: form.value, owner: profile.full_name || "Dr. Yan", hot: true }),
-    });
-    if (error) return toast.error(error.message);
-    toast.success("Cliente/Lead criado com sucesso!");
-    setOpen(false);
-    setForm({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
-    load();
+    try {
+      await create.mutateAsync({
+        tenant_id: profile.tenant_id,
+        created_by: profile.id,
+        name: form.name,
+        email: form.email || null,
+        phone: form.phone || null,
+        doc: form.doc || null,
+        type: form.type,
+        status: form.status,
+        notes: JSON.stringify({ area: form.area, value: form.value, owner: profile.full_name || "Dr. Yan", hot: true }),
+      });
+      setOpen(false);
+      setForm({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
+    } catch {
+      // toast handled by mutation
+    }
   };
 
-  const moveStage = async (id: string, status: string) => {
-    const nowIso = new Date().toISOString();
-    setClients(cs => cs.map(c => c.id === id ? { ...c, status, updated_at: nowIso } : c));
-    if (selected?.id === id) {
-      setSelected(prev => prev ? { ...prev, status, updated_at: nowIso } : null);
+  const moveStageHandler = async (id: string, status: string) => {
+    try {
+      await moveStage.mutateAsync({ id, status, prevStatus: clients.find((c) => c.id === id)?.status });
+      if (selected?.id === id) {
+        setSelected((prev) => prev ? { ...prev, status, updated_at: new Date().toISOString() } : null);
+      }
+      toast.success("Etapa do funil atualizada!");
+    } catch {
+      // toast handled by mutation
     }
-    const { error } = await supabase.from("clients").update({ status, updated_at: nowIso }).eq("id", id);
-    if (error) { toast.error(error.message); load(); }
-    else toast.success("Etapa do funil atualizada!");
   };
 
   const saveNotes = async (id: string, notesText: string) => {
-    setClients(cs => cs.map(c => c.id === id ? { ...c, notes: notesText } : c));
-    const { error } = await supabase.from("clients").update({ notes: notesText }).eq("id", id);
-    if (error) toast.error(error.message);
-    else toast.success("Anotações salvas!");
+    try {
+      await update.mutateAsync({ id, payload: { notes: notesText } });
+      toast.success("Anotações salvas!");
+    } catch {
+      // toast handled by mutation
+    }
   };
 
   const openWhatsapp = (phone: string | null, name: string) => {
@@ -251,29 +227,34 @@ function CRM() {
       const text = await file.text();
       const rows = parseCSV(text);
       if (!rows.length) return toast.error("CSV vazio");
-      const valid = STAGES.map(s => s.id) as readonly string[];
-      const payload = rows.map(r => {
-        const name = r.name || r.nome || "";
-        const type = (r.type || r.tipo || "PF").toUpperCase() === "PJ" ? "PJ" : "PF";
-        const status = valid.includes((r.status || "novo_contato").toLowerCase()) ? (r.status || "novo_contato").toLowerCase() : "novo_contato";
-        const area = r.area || "Cível";
-        const value = Number(r.value || r.valor || 0) || 10000;
-        return {
-          tenant_id: profile.tenant_id!,
-          created_by: profile.id,
-          name,
-          email: r.email || null,
-          phone: r.phone || r.telefone || null,
-          doc: r.doc || r.cpf || r.cnpj || null,
-          type, status,
-          notes: JSON.stringify({ area, value, owner: profile.full_name || "Dr. Yan", hot: true }),
-        };
-      }).filter(p => p.name.trim() !== "");
+      const valid = STAGES.map((s) => s.id) as readonly string[];
+      const payload = rows
+        .map((r) => {
+          const name = r.name || r.nome || "";
+          const type = (r.type || r.tipo || "PF").toUpperCase() === "PJ" ? "PJ" : "PF";
+          const status = valid.includes((r.status || "novo_contato").toLowerCase())
+            ? (r.status || "novo_contato").toLowerCase()
+            : "novo_contato";
+          const area = r.area || "Cível";
+          const value = Number(r.value || r.valor || 0) || 10000;
+          return {
+            tenant_id: profile.tenant_id!,
+            created_by: profile.id,
+            name,
+            email: r.email || null,
+            phone: r.phone || r.telefone || null,
+            doc: r.doc || r.cpf || r.cnpj || null,
+            type,
+            status,
+            notes: JSON.stringify({ area, value, owner: profile.full_name || "Dr. Yan", hot: true }),
+          };
+        })
+        .filter((p) => p.name.trim() !== "");
       if (!payload.length) return toast.error("Nenhuma linha válida (coluna 'name' obrigatória)");
       const { error } = await supabase.from("clients").insert(payload);
       if (error) return toast.error(error.message);
       toast.success(`${payload.length} cliente(s) importado(s)`);
-      load();
+      qc.invalidateQueries({ queryKey: ["clients", profile.tenant_id] });
     } catch (e) {
       toast.error("Falha ao ler CSV");
     }
@@ -281,9 +262,9 @@ function CRM() {
 
   const exportReport = () => {
     if (!filtered.length) return toast.error("Nenhum cliente para exportar");
-    const rows = filtered.map(c => {
+    const rows = filtered.map((c) => {
       const m = getMeta(c);
-      const stage = STAGES.find(s => s.id === c.status)?.label ?? c.status;
+      const stage = STAGES.find((s) => s.id === c.status)?.label ?? c.status;
       return {
         name: c.name,
         email: c.email ?? "",
@@ -389,7 +370,7 @@ function CRM() {
                     <SelectContent>{STAGES.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <Button onClick={create} className="mt-3 text-xs font-semibold">Salvar Lead e Iniciar Atendimento</Button>
+                <Button onClick={createClient} className="mt-3 text-xs font-semibold">Salvar Lead e Iniciar Atendimento</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -559,11 +540,11 @@ function CRM() {
 
               {/* Cards List */}
               <div className="space-y-3 flex-1 overflow-y-auto pr-0.5">
-                {loading && Array.from({ length: 2 }).map((_, i) => (
+                {isLoading && Array.from({ length: 2 }).map((_, i) => (
                   <div key={i} className="skeleton h-28 rounded-xl" />
                 ))}
 
-                {!loading && col.items.length === 0 && (
+                {!isLoading && col.items.length === 0 && (
                   <div className="text-center py-12 text-[11px] text-muted-foreground/60 border border-dashed border-border/60 rounded-xl">
                     Nenhum lead nesta etapa
                   </div>
@@ -669,7 +650,7 @@ function CRM() {
         onOpenChange={setDrawerOpen}
         meta={selected ? getMeta(selected) : { area: "Cível", value: 10000, owner: "Dr. Yan", hot: false }}
         stages={STAGES}
-        onUpdateStage={moveStage}
+        onUpdateStage={moveStageHandler}
         onSaveNotes={saveNotes}
       />
     </div>

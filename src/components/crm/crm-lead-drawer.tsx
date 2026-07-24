@@ -15,6 +15,8 @@ import {
   UserCheck, CheckCircle2, Flame, Zap, Paperclip, Bot, AlertTriangle, Shield,
   ArrowUpRight, RefreshCw,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { zapiSendText } from "@/lib/zapi.functions";
@@ -79,6 +81,80 @@ export function CrmLeadDrawer({
   const [sending, setSending] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const { profile } = useAuth();
+
+  const [clientDocs, setClientDocs] = useState<{
+    id: string; file_name: string; file_path: string; document_type: string; created_at: string;
+  }[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docType, setDocType] = useState("other");
+  const [docDescription, setDocDescription] = useState("");
+  const fileRef = React.useRef<HTMLInputElement | null>(null);
+
+  async function loadClientDocuments(clientId: string) {
+    setDocsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("documents")
+        .select("id, file_name, file_path, document_type, created_at")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setClientDocs((data ?? []) as any);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDocsLoading(false);
+    }
+  }
+
+  React.useEffect(() => {
+    if (!client) return;
+    loadClientDocuments(client.id);
+  }, [client?.id]);
+
+  async function uploadClientDocument(file: File) {
+    if (!profile?.tenant_id || !client) return;
+    setUploadingDoc(true);
+    try {
+      const fileName = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+      const filePath = `${profile.tenant_id}/clients/${client.id}/${fileName}`;
+      const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file, { cacheControl: "3600", upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { error: insertError } = await supabase.from("documents").insert({
+        tenant_id: profile.tenant_id,
+        client_id: client.id,
+        uploaded_by: profile.id,
+        file_name: file.name,
+        file_path: filePath,
+        file_size: file.size,
+        file_type: file.type || "application/octet-stream",
+        document_type: docType,
+        description: docDescription || null,
+      });
+      if (insertError) throw insertError;
+      setDocDescription("");
+      setDocType("other");
+      await loadClientDocuments(client.id);
+      toast.success("Documento enviado");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Falha ao enviar documento");
+    } finally {
+      setUploadingDoc(false);
+    }
+  }
+
+  async function downloadDoc(docPath: string) {
+    try {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(docPath, 60);
+      if (error) throw error;
+      if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Falha ao baixar documento");
+    }
+  }
 
   const sendTextFn = useServerFn(zapiSendText);
 
@@ -245,6 +321,11 @@ export function CrmLeadDrawer({
                 <span>Triagem IA</span>
               </TabsTrigger>
 
+              <TabsTrigger value="docs" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary text-xs gap-1.5 font-medium">
+                <FileText className="h-3.5 w-3.5" />
+                <span>Documentos</span>
+              </TabsTrigger>
+
               <TabsTrigger value="tarefas" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary text-xs gap-1.5 font-medium">
                 <Clock className="h-3.5 w-3.5" />
                 <span>Prazos & SLA</span>
@@ -382,6 +463,12 @@ export function CrmLeadDrawer({
               />
               <span className="text-[10px] text-muted-foreground mt-1 block">Salva automaticamente ao sair do campo.</span>
             </div>
+
+            <div className="pt-3 border-t border-border">
+              <Label className="text-xs text-muted-foreground">Partes vinculadas</Label>
+              <PartiesEditor client={client} onSave={(txt) => onSaveNotes(client.id, txt)} />
+              <span className="text-[10px] text-muted-foreground mt-1 block">Liste nomes de partes separadas por vírgula. Salva no campo de notas como JSON.</span>
+            </div>
           </TabsContent>
 
           {/* TAB 3: Triagem IA */}
@@ -422,6 +509,49 @@ export function CrmLeadDrawer({
             )}
           </TabsContent>
 
+          {/* TAB: Documents */}
+          <TabsContent value="docs" className="flex-1 p-4 overflow-y-auto space-y-4">
+            <div className="glass rounded-xl p-3 grid gap-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold">Documentos do cliente</p>
+                  <p className="text-xs text-muted-foreground">Uploads privados no bucket <span className="font-medium">documents</span>.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={docType} onValueChange={(v) => setDocType(v)}>
+                    <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['other', 'contrato', 'procuracao', 'rg', 'cpf', 'certidao'].map(t => <SelectItem key={t} value={t}>{t.replace(/_/g, ' ')}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" onClick={() => fileRef.current?.click()} disabled={uploadingDoc}>{uploadingDoc ? 'Enviando...' : 'Upload'}</Button>
+                </div>
+              </div>
+              <Input placeholder="Descrição opcional" value={docDescription} onChange={(e) => setDocDescription(e.target.value)} />
+              <input ref={fileRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadClientDocument(f); e.currentTarget.value = ''; }} />
+            </div>
+
+            {docsLoading ? (
+              <div className="text-sm text-muted-foreground">Carregando documentos...</div>
+            ) : clientDocs.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Nenhum documento cadastrado.</div>
+            ) : (
+              <div className="space-y-2">
+                {clientDocs.map(d => (
+                  <div key={d.id} className="glass rounded-lg p-3 flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm truncate">{d.file_name}</p>
+                      <p className="text-xs text-muted-foreground">{d.document_type} • {new Date(d.created_at).toLocaleDateString('pt-BR')}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="icon" variant="outline" onClick={() => downloadDoc(d.file_path)}><ArrowUpRight className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
           {/* TAB 4: Prazos & SLA */}
           <TabsContent value="tarefas" className="flex-1 p-4 overflow-y-auto space-y-3">
             <div className="rounded-xl border border-border bg-card p-3 space-y-2">
@@ -453,5 +583,35 @@ export function CrmLeadDrawer({
         </Tabs>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function PartiesEditor({ client, onSave }: { client: ClientCardData; onSave: (notesJson: string) => void }) {
+  const [text, setText] = React.useState("");
+  React.useEffect(() => {
+    try {
+      const m = client.notes ? JSON.parse(client.notes) : {};
+      const parties = Array.isArray(m.parties) ? m.parties.map((p: any) => p.name).join(", ") : "";
+      setText(parties);
+    } catch {
+      setText("");
+    }
+  }, [client.notes]);
+
+  const handleBlur = () => {
+    try {
+      const m = client.notes ? JSON.parse(client.notes) : {};
+      const arr = text.split(",").map(s => ({ name: s.trim() })).filter((p) => p.name);
+      m.parties = arr;
+      onSave(JSON.stringify(m));
+    } catch {
+      onSave(JSON.stringify({ parties: text.split(",").map(s => ({ name: s.trim() })).filter(p => p.name) }));
+    }
+  };
+
+  return (
+    <div className="mt-2">
+      <Textarea value={text} onChange={(e) => setText(e.target.value)} onBlur={handleBlur} rows={2} placeholder="Nome1, Nome2, Empresa X" />
+    </div>
   );
 }

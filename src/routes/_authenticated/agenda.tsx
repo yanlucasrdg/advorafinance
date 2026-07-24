@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   Plus, Trash2, AlertTriangle, CheckCircle2, Calendar as CalIcon,
@@ -11,9 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth-context";
-import { useRealtimeTables } from "@/hooks/use-realtime-table";
+import { useAgenda } from "@/hooks/use-agenda";
 import { useMetricsAgenda } from "@/hooks/use-metrics";
 import { toast } from "sonner";
 
@@ -52,13 +50,8 @@ function sameDay(a: Date, b: Date) { return a.toDateString() === b.toDateString(
 type ListFilter = "vencendo_hoje" | "amanha" | "atraso" | "concluidos_hoje" | null;
 
 function Agenda() {
-  const { profile } = useAuth();
   const navigate = useNavigate();
-  const [items, setItems] = useState<Deadline[]>([]);
-  const [cases, setCases] = useState<{ id: string; title: string; number: string | null }[]>([]);
-  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-  const [lastComms, setLastComms] = useState<Map<string, string>>(new Map());
-  const [loading, setLoading] = useState(true);
+  const { deadlines: items, cases, clients, lastComms, isLoading: loading, create, toggle, remove } = useAgenda();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"dia" | "semana" | "mes">("semana");
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
@@ -66,68 +59,6 @@ function Agenda() {
   const [form, setForm] = useState({
     title: "", kind: "prazo", due_at: "", case_id: "", client_id: "", priority: "media",
   });
-
-  const load = async () => {
-    setLoading(true);
-    const [{ data: ds }, { data: cs }, { data: cls }, { data: wl }] = await Promise.all([
-      supabase.from("deadlines")
-        .select("id, title, kind, due_at, done, priority, case_id, client_id, completed_at, cases(id, title, number), clients(id, name)")
-        .order("due_at", { ascending: true }),
-      supabase.from("cases").select("id, title, number").order("created_at", { ascending: false }).limit(500),
-      supabase.from("clients").select("id, name").order("name").limit(500),
-      supabase.from("whatsapp_logs").select("client_id, created_at").not("client_id", "is", null).order("created_at", { ascending: false }).limit(500),
-    ]);
-    setItems((ds ?? []) as unknown as Deadline[]);
-    setCases((cs ?? []) as { id: string; title: string; number: string | null }[]);
-    setClients((cls ?? []) as { id: string; name: string }[]);
-    const m = new Map<string, string>();
-    (wl ?? []).forEach((r: { client_id: string | null; created_at: string }) => {
-      if (r.client_id && !m.has(r.client_id)) m.set(r.client_id, r.created_at);
-    });
-    setLastComms(m);
-    setLoading(false);
-  };
-
-  useEffect(() => { if (profile?.tenant_id) load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [profile?.tenant_id]);
-  useRealtimeTables(["deadlines"], [["agenda-deadlines"]]);
-  // realtime reload
-  useEffect(() => {
-    if (!profile?.tenant_id) return;
-    const ch = supabase.channel(`agenda-rt-${Math.random().toString(36).slice(2, 8)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "deadlines" }, () => load())
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.tenant_id]);
-
-  const create = async () => {
-    if (!form.title.trim() || !form.due_at || !profile?.tenant_id) {
-      toast.error("Preencha título e data");
-      return;
-    }
-    const { error } = await supabase.from("deadlines").insert({
-      tenant_id: profile.tenant_id,
-      title: form.title,
-      kind: form.kind,
-      priority: form.priority,
-      due_at: new Date(form.due_at).toISOString(),
-      case_id: form.case_id || null,
-      client_id: form.client_id || null,
-    });
-    if (error) return toast.error(error.message);
-    toast.success("Evento criado");
-    setOpen(false);
-    setForm({ title: "", kind: "prazo", due_at: "", case_id: "", client_id: "", priority: "media" });
-  };
-
-  const toggle = async (d: Deadline) => {
-    const { error } = await supabase.from("deadlines").update({ done: !d.done }).eq("id", d.id);
-    if (error) toast.error(error.message);
-  };
-  const remove = async (id: string) => {
-    const { error } = await supabase.from("deadlines").delete().eq("id", id);
-    if (error) toast.error(error.message);
-  };
 
   const now = new Date();
   const today = startOfDay(now);
@@ -305,7 +236,26 @@ function Agenda() {
                       </Select>
                     </div>
                   </div>
-                  <Button onClick={create} className="mt-2 bg-[image:var(--gradient-brand)]">Criar</Button>
+                  <Button onClick={async () => {
+                    if (!form.title.trim() || !form.due_at) {
+                      toast.error("Preencha título e data");
+                      return;
+                    }
+                    try {
+                      await create({
+                        title: form.title,
+                        kind: form.kind,
+                        priority: form.priority,
+                        due_at: new Date(form.due_at).toISOString(),
+                        case_id: form.case_id || null,
+                        client_id: form.client_id || null,
+                      });
+                      setOpen(false);
+                      setForm({ title: "", kind: "prazo", due_at: "", case_id: "", client_id: "", priority: "media" });
+                    } catch {
+                      // error handled by mutation toast
+                    }
+                  }} className="mt-2 bg-[image:var(--gradient-brand)]">Criar</Button>
                 </div>
               </DialogContent>
             </Dialog>

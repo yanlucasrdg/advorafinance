@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   Plus, Trash2, Briefcase, Clock, TrendingUp, AlertTriangle, Target,
   DollarSign, Activity, Sparkles, Search, Filter, LayoutGrid, List as ListIcon,
@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { lookupDatajud, syncCaseMovements, validateCNJ } from "@/lib/datajud.functions";
 import { useMetricsProcessos, pctDelta, formatDelta } from "@/hooks/use-metrics";
+import { useCases } from "@/hooks/use-cases";
 
 function maskCNJ(raw: string): string {
   const d = (raw ?? "").replace(/\D/g, "").slice(0, 20);
@@ -49,19 +50,13 @@ export const Route = createFileRoute("/_authenticated/processos")({
   component: Processos,
 });
 
-type Case = {
-  id: string; number: string | null; title: string; court: string | null;
-  area: string | null; status: string; value_cents: number | null;
-  client_id: string | null; responsible: string | null; description: string | null;
-  updated_at: string; created_at: string;
-  tribunal?: string | null; class_name?: string | null;
-  last_movement_at?: string | null; datajud_synced_at?: string | null;
-  clients?: { name: string } | null;
+type Party = { name: string; role?: string | null };
+type Document = {
+  id: string; case_id: string; uploaded_by: string | null; file_name: string;
+  file_path: string; file_size: number; file_type: string; document_type: string;
+  description: string | null; created_at: string;
 };
-type Client = { id: string; name: string };
-type Deadline = { id: string; case_id: string | null; title: string; due_at: string; done: boolean; kind: string };
-type Entry = { id: string; case_id: string | null; amount_cents: number; status: string; kind: string };
-type Movement = { id: string; case_id: string; occurred_at: string; name: string; code: string | null; complement: string | null };
+import type { Case, Client, Deadline, Entry, Movement } from "@/hooks/use-cases";
 
 const STAGES = [
   { id: "ativo", label: "Em andamento", glow: "shadow-[0_0_24px_-8px_oklch(0.70_0.18_285/0.6)]", bar: "bg-violet-500", text: "text-violet-300", ring: "ring-violet-500/30" },
@@ -79,38 +74,24 @@ function hashSuccess(id: string) {
 
 function Processos() {
   const { profile } = useAuth();
-  const [cases, setCases] = useState<Case[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [deadlines, setDeadlines] = useState<Deadline[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { cases, clients, deadlines, entries, isLoading, create, remove } = useCases();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"kanban" | "lista" | "timeline">("kanban");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Case | null>(null);
-  const [form, setForm] = useState({ number: "", title: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "" });
+  const [caseDocuments, setCaseDocuments] = useState<Document[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docType, setDocType] = useState("other");
+  const [docDescription, setDocDescription] = useState("");
+  const docFileInputRef = useRef<HTMLInputElement>(null);
+  const [form, setForm] = useState({ number: "", title: "", tribunal: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "", party_names: "" });
   const AREAS_OPT = ["civel", "trabalhista", "tributario", "criminal", "familia", "consumidor", "empresarial"];
   const [adv, setAdv] = useState<{ areas: string[]; stages: string[]; minValue: string; maxValue: string }>({ areas: [], stages: [], minValue: "", maxValue: "" });
   const advActive = adv.areas.length + adv.stages.length + (adv.minValue ? 1 : 0) + (adv.maxValue ? 1 : 0);
   const toggleAdv = (key: "areas" | "stages", v: string) =>
     setAdv(a => ({ ...a, [key]: a[key].includes(v) ? a[key].filter(x => x !== v) : [...a[key], v] }));
   const resetAdv = () => setAdv({ areas: [], stages: [], minValue: "", maxValue: "" });
-
-  const load = async () => {
-    setLoading(true);
-    const [{ data: cs }, { data: cls }, { data: dls }, { data: fes }] = await Promise.all([
-      supabase.from("cases").select("*, clients(name)").order("created_at", { ascending: false }),
-      supabase.from("clients").select("id, name").order("name"),
-      supabase.from("deadlines").select("id, case_id, title, due_at, done, kind"),
-      supabase.from("financial_entries").select("id, case_id, amount_cents, status, kind"),
-    ]);
-    setCases((cs ?? []) as Case[]);
-    setClients((cls ?? []) as Client[]);
-    setDeadlines((dls ?? []) as Deadline[]);
-    setEntries((fes ?? []) as Entry[]);
-    setLoading(false);
-  };
-  useEffect(() => { if (profile?.tenant_id) load(); }, [profile?.tenant_id]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -179,26 +160,35 @@ function Processos() {
     return out;
   }, [metrics]);
 
-  const create = async () => {
+  const createCase = async () => {
     if (!form.title.trim() || !profile?.tenant_id) return;
-    const { data: ins, error } = await supabase.from("cases").insert({
-      tenant_id: profile.tenant_id, title: form.title, number: form.number || null,
-      court: form.court || null, area: form.area, status: form.status,
-      value_cents: form.value_cents, description: form.description || null,
-      client_id: form.client_id || null,
-    }).select("id").maybeSingle();
-    if (error) return toast.error(error.message);
-    toast.success("Processo criado");
-    setOpen(false);
-    if (ins?.id && form.number) postCreateSync(ins.id);
-    setForm({ number: "", title: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "" });
-    load();
+    try {
+      await create.mutateAsync({
+        tenant_id: profile.tenant_id,
+        title: form.title,
+        number: form.number || null,
+        tribunal: form.tribunal || null,
+        court: form.court || null,
+        area: form.area,
+        status: form.status,
+        value_cents: form.value_cents,
+        description: form.description || null,
+        client_id: form.client_id || null,
+        parties: form.party_names ? form.party_names.split(",").map(name => ({ name: name.trim(), role: "Parte contrária" })) : null,
+      });
+      setOpen(false);
+      setForm({ number: "", title: "", tribunal: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "", party_names: "" });
+    } catch {
+      // toast handled in hook
+    }
   };
 
-  const remove = async (id: string) => {
-    const { error } = await supabase.from("cases").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    load();
+  const removeCase = async (id: string) => {
+    try {
+      await remove.mutateAsync(id);
+    } catch {
+      // toast handled in hook
+    }
   };
 
   // ---- DataJud ----
@@ -222,6 +212,7 @@ function Processos() {
       setForm(f => ({
         ...f,
         number: r.number,
+        tribunal: r.tribunal ?? f.tribunal,
         title: r.className ? `${r.className} — ${r.tribunal}` : f.title || `Processo ${r.tribunal}`,
         court: r.court ?? f.court,
       }));
@@ -244,9 +235,84 @@ function Processos() {
     try { await syncFn({ data: { caseId } }); } catch { /* silencioso */ }
   }
 
+  async function loadCaseDocuments(caseId: string) {
+    setDocsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("documents")
+        .select("id, case_id, uploaded_by, file_name, file_path, file_type, file_size, document_type, description, created_at")
+        .eq("case_id", caseId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setCaseDocuments((data ?? []) as Document[]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDocsLoading(false);
+    }
+  }
+
+  async function uploadCaseDocument(file: File) {
+    if (!profile?.tenant_id || !selected) return;
+    setUploadingDoc(true);
+    try {
+      const fileName = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+      const filePath = `${profile.tenant_id}/${selected.id}/${fileName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(filePath, file, { cacheControl: "3600", upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { error: insertError } = await supabase.from("documents").insert({
+        tenant_id: profile.tenant_id,
+        case_id: selected.id,
+        uploaded_by: profile.id,
+        file_name: file.name,
+        file_path: filePath,
+        file_size: file.size,
+        file_type: file.type || "application/octet-stream",
+        document_type: docType,
+        description: docDescription || null,
+      });
+      if (insertError) throw insertError;
+
+      toast.success("Documento carregado com sucesso");
+      setDocDescription("");
+      setDocType("other");
+      await loadCaseDocuments(selected.id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Falha ao enviar documento";
+      toast.error(message);
+    } finally {
+      setUploadingDoc(false);
+    }
+  }
+
+  function handleDocFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    uploadCaseDocument(file).finally(() => { event.target.value = ""; });
+  }
+
+  async function downloadDocument(doc: Document) {
+    try {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.file_path, 60);
+      if (error) throw error;
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, "_blank");
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Falha ao baixar documento");
+    }
+  }
+
   // Carrega movimentações ao abrir o drawer
   useEffect(() => {
-    if (!selected) { setMovements([]); return; }
+    if (!selected) {
+      setMovements([]);
+      setCaseDocuments([]);
+      return;
+    }
     supabase
       .from("case_movements")
       .select("id, case_id, occurred_at, name, code, complement")
@@ -254,6 +320,7 @@ function Processos() {
       .order("occurred_at", { ascending: false })
       .limit(100)
       .then(({ data }) => setMovements((data ?? []) as Movement[]));
+    loadCaseDocuments(selected.id);
   }, [selected?.id]);
 
   async function syncSelected() {
@@ -270,7 +337,6 @@ function Processos() {
         .order("occurred_at", { ascending: false })
         .limit(100);
       setMovements((data ?? []) as Movement[]);
-      load();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao sincronizar");
     } finally {
@@ -354,7 +420,11 @@ function Processos() {
                         </Button>
                       </div>
                     </div>
-                    <div><Label>Vara / Tribunal</Label><Input value={form.court} onChange={e => setForm({ ...form, court: e.target.value })} /></div>
+                    <div><Label>Tribunal</Label><Input value={form.tribunal} onChange={e => setForm({ ...form, tribunal: e.target.value })} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Vara / Comarca</Label><Input value={form.court} onChange={e => setForm({ ...form, court: e.target.value })} /></div>
+                    <div><Label>Partes contrárias</Label><Textarea value={form.party_names} onChange={e => setForm({ ...form, party_names: e.target.value })} rows={2} placeholder="Separe por vírgula" /></div>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
@@ -384,7 +454,7 @@ function Processos() {
                     </Select>
                   </div>
                   <div><Label>Descrição</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} /></div>
-                  <Button onClick={create} className="mt-2 bg-[image:var(--gradient-brand)]">Criar processo</Button>
+                  <Button onClick={createCase} className="mt-2 bg-[image:var(--gradient-brand)]">Criar processo</Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -437,7 +507,7 @@ function Processos() {
       </div>
 
       {/* Views */}
-      {loading ? (
+      {isLoading ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton h-48" />)}
         </div>
@@ -528,7 +598,7 @@ function Processos() {
                     <td className="px-4 py-3"><Badge variant="outline" className={`${stage.text} ${stage.ring}`}>{stage.label}</Badge></td>
                     <td className="px-4 py-3 text-emerald-300 tabular-nums">{success}%</td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">{formatBRL(c.value_cents ?? 0)}</td>
-                    <td className="px-4 py-3 text-right"><Button size="icon" variant="ghost" className="size-7" onClick={e => { e.stopPropagation(); remove(c.id); }}><Trash2 className="size-3.5" /></Button></td>
+                    <td className="px-4 py-3 text-right"><Button size="icon" variant="ghost" className="size-7" onClick={e => { e.stopPropagation(); removeCase(c.id); }}><Trash2 className="size-3.5" /></Button></td>
                   </tr>
                 );
               })}
@@ -666,14 +736,49 @@ function Processos() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="docs" className="mt-4 space-y-2">
-                    {["Petição Inicial.pdf", "Procuração.pdf", "Contestação.pdf"].map(d => (
-                      <div key={d} className="glass rounded-lg p-3 flex items-center gap-3 hover-lift cursor-pointer">
-                        <FileText className="size-4 text-primary" />
-                        <span className="text-xs flex-1">{d}</span>
-                        <ChevronRight className="size-3.5 text-muted-foreground" />
+                  <TabsContent value="docs" className="mt-4 space-y-4">
+                    <div className="glass rounded-xl p-4 grid gap-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Documentos do processo</p>
+                          <p className="text-[11px] text-muted-foreground">Upload direto para o bucket privado <span className="font-semibold">documents</span>.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Select value={docType} onValueChange={v => setDocType(v)}>
+                            <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {['other', 'peticao_inicial', 'procuracao', 'sentenca', 'contrato', 'certidao', 'audiencia'].map(type => (
+                                <SelectItem key={type} value={type}>{type.replace(/_/g, ' ')}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button size="sm" onClick={() => docFileInputRef.current?.click()} disabled={uploadingDoc}>
+                            {uploadingDoc ? 'Enviando...' : 'Upload'}
+                          </Button>
+                        </div>
                       </div>
-                    ))}
+                      <Input placeholder="Descrição opcional" value={docDescription} onChange={e => setDocDescription(e.target.value)} />
+                      <input type="file" ref={docFileInputRef} className="hidden" onChange={handleDocFileChange} />
+                    </div>
+                    {docsLoading ? (
+                      <div className="glass rounded-xl p-4 text-sm text-muted-foreground">Carregando documentos...</div>
+                    ) : caseDocuments.length === 0 ? (
+                      <div className="glass rounded-xl p-4 text-sm text-muted-foreground">Nenhum documento encontrado. Faça upload para começar.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {caseDocuments.map(doc => (
+                          <div key={doc.id} className="glass rounded-xl p-3 flex items-center gap-3 justify-between">
+                            <div>
+                              <p className="text-sm font-semibold truncate">{doc.file_name}</p>
+                              <p className="text-[11px] text-muted-foreground">{doc.document_type.replace(/_/g, ' ')} • {new Date(doc.created_at).toLocaleDateString('pt-BR')}</p>
+                            </div>
+                            <Button size="icon" variant="outline" onClick={() => downloadDocument(doc)}>
+                              <Download className="size-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </TabsContent>
 
                   <TabsContent value="fin" className="mt-4 space-y-3">
@@ -689,21 +794,29 @@ function Processos() {
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="partes" className="mt-4 space-y-2">
+                  <TabsContent value="partes" className="mt-4 space-y-3">
                     <div className="glass rounded-lg p-3 flex items-center gap-3">
                       <Users className="size-4 text-primary" />
                       <div className="min-w-0">
                         <p className="text-xs font-medium">{selected.clients?.name ?? "Cliente"}</p>
-                        <p className="text-[10px] text-muted-foreground">Reclamante</p>
+                        <p className="text-[10px] text-muted-foreground">Cliente / Demandante</p>
                       </div>
                     </div>
-                    <div className="glass rounded-lg p-3 flex items-center gap-3">
-                      <Users className="size-4 text-muted-foreground" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium">Parte contrária</p>
-                        <p className="text-[10px] text-muted-foreground">Reclamada</p>
+                    {selected.parties && selected.parties.length > 0 ? (
+                      selected.parties.map((party, index) => (
+                        <div key={index} className="glass rounded-lg p-3 flex items-center gap-3">
+                          <Users className="size-4 text-muted-foreground" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium truncate">{party.name}</p>
+                            <p className="text-[10px] text-muted-foreground">{party.role ?? "Parte contrária"}</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="glass rounded-lg p-3 text-sm text-muted-foreground">
+                        Nenhuma parte contrária cadastrada. Edite o processo para adicionar no cadastro.
                       </div>
-                    </div>
+                    )}
                   </TabsContent>
                 </Tabs>
               </>

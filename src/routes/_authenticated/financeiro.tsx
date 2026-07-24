@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Trash2, TrendingUp, TrendingDown, Wallet, DollarSign, AlertCircle,
   CircleDollarSign, ArrowUpRight, ArrowDownRight, Download, Radio, Sparkles,
@@ -24,10 +24,9 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useGlobalFilters, PERIOD_LABELS, type PeriodKey } from "@/lib/global-filters";
-import { useRealtimeTables } from "@/hooks/use-realtime-table";
+import { useFinance, useFinancialPayments, useFinancialAuditEntry } from "@/hooks/use-finance";
 import { useMetricsFinanceiro } from "@/hooks/use-metrics";
 import {
   financeKpis, revenueByMonth, fmtBRL, fmtBRLCompact, pctDelta,
@@ -52,6 +51,7 @@ type PaymentRow = { id: string; entry_id: string; amount_cents: number; paid_at:
 type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
 type NotificationRow = { id: string; kind: string; title: string; body: string | null; entry_id: string | null; read_at: string | null; created_at: string };
 type DreSettingsRow = { tenant_id: string; apply_cogs: boolean; enabled_categories: string[]; category_map: Record<string, string> };
+type UseFinanceReturn = ReturnType<typeof useFinance>;
 
 const TOOLTIP_STYLE = {
   background: "#FFFFFF",
@@ -77,46 +77,23 @@ function Financeiro() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [form, setForm] = useState({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
 
-  useRealtimeTables(
-    ["financial_entries", "cases", "clients"],
-    [["fin", "entries", tenantId], ["fin", "cases", tenantId], ["fin", "clients", tenantId]],
-  );
+  const {
+    entries,
+    cases,
+    clients,
+    dreConfigData,
+    auditLogs,
+    notifications,
+    isLoading,
+    create,
+    remove,
+    markAllNotificationsRead,
+    saveDreSettings,
+    createPayment,
+    reconcile,
+  } = useFinance();
 
-  const entriesQ = useQuery({
-    queryKey: ["fin", "entries", tenantId],
-    enabled: !!tenantId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("financial_entries")
-        .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,paid_amount_cents,settlement_status,category,payment_method,clients(name)")
-        .order("due_date", { ascending: false, nullsFirst: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as Entry[];
-    },
-  });
-  const casesQ = useQuery({
-    queryKey: ["fin", "cases", tenantId],
-    enabled: !!tenantId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("cases").select("id,area,responsible");
-      if (error) throw error;
-      return (data ?? []) as CaseLite[];
-    },
-  });
-  const clientsQ = useQuery({
-    queryKey: ["fin", "clients", tenantId],
-    enabled: !!tenantId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("id,name").order("name");
-      if (error) throw error;
-      return (data ?? []) as ClientLite[];
-    },
-  });
-
-  const entries = entriesQ.data ?? [];
-  const cases = casesQ.data ?? [];
-  const clients = clientsQ.data ?? [];
-  const loading = entriesQ.isLoading || casesQ.isLoading;
+  const loading = isLoading;
 
   const caseMap = useMemo(() => new Map(cases.map((c) => [c.id, c])), [cases]);
   const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients]);
@@ -259,21 +236,11 @@ function Financeiro() {
   }, [series12]);
 
   // DRE settings (per tenant)
-  const dreCfgQ = useQuery({
-    queryKey: ["fin", "dre_settings", tenantId],
-    enabled: !!tenantId,
-    queryFn: async () => {
-      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: DreSettingsRow | null; error: unknown }> } } } })
-        .from("dre_settings").select("*").eq("tenant_id", tenantId!).maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-  const dreConfig: DreConfig = useMemo(() => dreCfgQ.data ? {
-    applyCogs: dreCfgQ.data.apply_cogs,
-    enabledCategories: dreCfgQ.data.enabled_categories,
-    categoryMap: dreCfgQ.data.category_map ?? {},
-  } : DEFAULT_DRE_CONFIG, [dreCfgQ.data]);
+  const dreConfig: DreConfig = useMemo(() => dreConfigData ? {
+    applyCogs: dreConfigData.apply_cogs,
+    enabledCategories: dreConfigData.enabled_categories,
+    categoryMap: dreConfigData.category_map ?? {},
+  } : DEFAULT_DRE_CONFIG, [dreConfigData]);
 
   // DRE + Cash Flow (period-scoped)
   const dre = useMemo(() => dreReport(filtered, range.start, range.end, dreConfig), [filtered, range.start, range.end, dreConfig]);
@@ -281,38 +248,7 @@ function Financeiro() {
   const cashIndirect = useMemo(() => cashFlowIndirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
 
   // Recent audit log
-  const auditQ = useQuery({
-    queryKey: ["fin", "audit", tenantId],
-    enabled: !!tenantId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("financial_audit_log")
-        .select("id,entry_id,action,created_at,actor_id,before,after")
-        .order("created_at", { ascending: false })
-        .limit(30);
-      if (error) throw error;
-      return (data ?? []) as unknown as AuditRow[];
-    },
-  });
-
-  // Notifications
-  const notifQ = useQuery({
-    queryKey: ["fin", "notifications", tenantId],
-    enabled: !!tenantId,
-    queryFn: async () => {
-      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { order: (k: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: NotificationRow[] | null; error: unknown }> } } } })
-        .from("notifications").select("id,kind,title,body,entry_id,read_at,created_at")
-        .order("created_at", { ascending: false }).limit(30);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-  const unreadCount = (notifQ.data ?? []).filter((n) => !n.read_at).length;
-
-  useRealtimeTables(
-    ["financial_audit_log", "financial_payments", "notifications"],
-    [["fin", "audit", tenantId], ["fin", "entries", tenantId], ["fin", "notifications", tenantId]],
-  );
+  const unreadCount = (notifications ?? []).filter((n) => !n.read_at).length;
 
   const contasReceber = useMemo(
     () => filtered.filter((e) => e.kind === "receita" && e.status !== "pago").slice(0, 12),
@@ -323,9 +259,9 @@ function Financeiro() {
     [filtered],
   );
 
-  const create = async () => {
+  const createEntry = async () => {
     if (!form.description.trim() || !tenantId) return;
-    const { error } = await supabase.from("financial_entries").insert({
+    await create.mutateAsync({
       tenant_id: tenantId,
       description: form.description,
       kind: form.kind,
@@ -336,15 +272,11 @@ function Financeiro() {
       case_id: form.case_id || null,
       category: form.category || null,
     });
-    if (error) return toast.error(error.message);
-    toast.success("Lançamento criado");
     setOpen(false);
     setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
-    qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
   };
-  const remove = async (id: string) => {
-    await supabase.from("financial_entries").delete().eq("id", id);
-    qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
+  const removeEntry = async (id: string) => {
+    await remove.mutateAsync(id);
   };
 
   const downloadCsv = (name: string, rows: (string | number)[][]) => {
@@ -438,14 +370,13 @@ function Financeiro() {
         actions={
           <div className="flex items-center gap-2">
             <NotificationsBell
-              items={notifQ.data ?? []}
+              items={notifications ?? []}
               unread={unreadCount}
-              tenantId={tenantId}
               onOpenEntry={(id: string) => {
                 const e = entries.find((x) => x.id === id);
                 if (e) setHistoryEntry(e);
               }}
-              onRefresh={() => qc.invalidateQueries({ queryKey: ["fin", "notifications", tenantId] })}
+              onMarkAllRead={() => markAllNotificationsRead.mutate()}
             />
             <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><Settings2 className="size-4 mr-1.5" /> DRE</Button>
             <Popover>
@@ -493,7 +424,7 @@ function Financeiro() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button onClick={create} className="mt-2">Criar</Button>
+                  <Button onClick={createEntry} className="mt-2">Criar</Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -807,7 +738,7 @@ function Financeiro() {
           rows={contasReceber}
           loading={loading}
           onReconcile={setReconcileEntry}
-          onDelete={remove}
+          onDelete={removeEntry}
           emptyMsg="Nenhum recebível em aberto"
         />
         <EntriesTable
@@ -816,7 +747,7 @@ function Financeiro() {
           rows={contasPagar}
           loading={loading}
           onReconcile={setReconcileEntry}
-          onDelete={remove}
+          onDelete={removeEntry}
           emptyMsg="Nenhuma despesa em aberto"
         />
       </div>
@@ -826,13 +757,13 @@ function Financeiro() {
         <div className="flex items-center gap-2 mb-3">
           <History className="size-4 text-primary" />
           <h3 className="text-sm font-semibold">Trilha de auditoria</h3>
-          <Badge variant="outline" className="text-[10px]">{auditQ.data?.length ?? 0}</Badge>
+          <Badge variant="outline" className="text-[10px]">{auditLogs.length}</Badge>
         </div>
-        {(auditQ.data ?? []).length === 0 ? (
+        {auditLogs.length === 0 ? (
           <p className="py-6 text-center text-xs text-muted-foreground">Sem eventos ainda</p>
         ) : (
           <ul className="divide-y divide-border/60">
-            {(auditQ.data ?? []).slice(0, 15).map((a) => {
+            {auditLogs.slice(0, 15).map((a) => {
               const e = a.entry_id ? entries.find((x) => x.id === a.entry_id) ?? null : null;
               return (
                 <li
@@ -855,6 +786,8 @@ function Financeiro() {
       <ReconcileDialog
         entry={reconcileEntry}
         tenantId={tenantId}
+        createPayment={createPayment}
+        reconcile={reconcile}
         onClose={() => setReconcileEntry(null)}
         onDone={() => {
           qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
@@ -869,6 +802,7 @@ function Financeiro() {
         onClose={() => setSettingsOpen(false)}
         tenantId={tenantId}
         current={dreConfig}
+        saveDreSettings={saveDreSettings}
         onSaved={() => qc.invalidateQueries({ queryKey: ["fin", "dre_settings", tenantId] })}
       />
     </div>
@@ -895,25 +829,13 @@ function RowLine({ label, value, tone, bold, big }: { label: string; value: numb
   );
 }
 
-function ReconcileDialog({ entry, tenantId, onClose, onDone }: { entry: Entry | null; tenantId: string | null; onClose: () => void; onDone: () => void }) {
+function ReconcileDialog({ entry, tenantId, createPayment, reconcile, onClose, onDone }: { entry: Entry | null; tenantId: string | null; createPayment: UseFinanceReturn['createPayment']; reconcile: UseFinanceReturn['reconcile']; onClose: () => void; onDone: () => void }) {
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState("pix");
   const [notes, setNotes] = useState("");
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const paymentsQ = useQuery({
-    queryKey: ["fin", "payments", entry?.id],
-    enabled: !!entry?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("financial_payments")
-        .select("id,entry_id,amount_cents,paid_at,method,notes")
-        .eq("entry_id", entry!.id)
-        .order("paid_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as PaymentRow[];
-    },
-  });
+  const paymentsQ = useFinancialPayments(entry?.id);
 
   const paid = entry?.paid_amount_cents ?? 0;
   const total = entry?.amount_cents ?? 0;
@@ -925,7 +847,7 @@ function ReconcileDialog({ entry, tenantId, onClose, onDone }: { entry: Entry | 
     const cents = Math.round(amount * 100);
     if (cents <= 0) return toast.error("Informe um valor maior que zero");
     if (cents > remaining) return toast.error(`Máximo permitido: ${fmtBRL(remaining)}`);
-    const { error } = await supabase.from("financial_payments").insert({
+    await createPayment.mutateAsync({
       tenant_id: tenantId,
       entry_id: entry.id,
       amount_cents: cents,
@@ -933,17 +855,13 @@ function ReconcileDialog({ entry, tenantId, onClose, onDone }: { entry: Entry | 
       notes: notes || null,
       paid_at: new Date(paidAt).toISOString(),
     });
-    if (error) return toast.error(error.message);
-    toast.success("Baixa registrada");
     setAmount(0); setNotes("");
     onDone();
   };
 
-  const reconcile = async () => {
+  const handleReconcile = async () => {
     if (!entry) return;
-    const { error } = await supabase.rpc("reconcile_financial_entry", { _entry_id: entry.id });
-    if (error) return toast.error(error.message);
-    toast.success("Lançamento conciliado");
+    await reconcile.mutateAsync(entry.id);
     onDone();
     onClose();
   };
@@ -1025,7 +943,7 @@ function ReconcileDialog({ entry, tenantId, onClose, onDone }: { entry: Entry | 
             </div>
 
             {entry.settlement_status !== "conciliado" && paid >= total && total > 0 && (
-              <Button variant="outline" onClick={reconcile} className="w-full">
+              <Button variant="outline" onClick={handleReconcile} className="w-full">
                 <ShieldCheck className="size-4 mr-1" /> Marcar como conciliado
               </Button>
             )}
@@ -1099,17 +1017,11 @@ function EntriesTable({
 }
 
 function NotificationsBell({
-  items, unread, tenantId, onOpenEntry, onRefresh,
+  items, unread, onOpenEntry, onMarkAllRead,
 }: {
-  items: NotificationRow[]; unread: number; tenantId: string | null;
-  onOpenEntry: (id: string) => void; onRefresh: () => void;
+  items: NotificationRow[]; unread: number; onOpenEntry: (id: string) => void;
+  onMarkAllRead: () => void;
 }) {
-  const markAllRead = async () => {
-    if (!tenantId) return;
-    await (supabase as unknown as { from: (t: string) => { update: (v: Record<string, unknown>) => { is: (k: string, v: unknown) => Promise<unknown> } } })
-      .from("notifications").update({ read_at: new Date().toISOString() }).is("read_at", null);
-    onRefresh();
-  };
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -1125,7 +1037,7 @@ function NotificationsBell({
       <PopoverContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <p className="text-xs font-semibold">Notificações</p>
-          <button className="text-[10px] text-primary hover:underline" onClick={markAllRead}>Marcar todas como lidas</button>
+          <button className="text-[10px] text-primary hover:underline" onClick={onMarkAllRead}>Marcar todas como lidas</button>
         </div>
         <div className="max-h-96 overflow-y-auto">
           {items.length === 0 ? (
@@ -1155,10 +1067,10 @@ function NotificationsBell({
 }
 
 function DreSettingsDialog({
-  open, onClose, tenantId, current, onSaved,
+  open, onClose, tenantId, current, saveDreSettings, onSaved,
 }: {
   open: boolean; onClose: () => void; tenantId: string | null;
-  current: DreConfig; onSaved: () => void;
+  current: DreConfig; saveDreSettings: UseFinanceReturn['saveDreSettings']; onSaved: () => void;
 }) {
   const [applyCogs, setApplyCogs] = useState(current.applyCogs);
   const [enabled, setEnabled] = useState<string[]>(current.enabledCategories);
@@ -1166,15 +1078,11 @@ function DreSettingsDialog({
   const toggle = (k: string) => setEnabled((prev) => prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]);
   const save = async () => {
     if (!tenantId) return;
-    const { error } = await (supabase as unknown as { from: (t: string) => { upsert: (v: Record<string, unknown>, o: { onConflict: string }) => Promise<{ error: unknown }> } })
-      .from("dre_settings").upsert({
-        tenant_id: tenantId,
-        apply_cogs: applyCogs,
-        enabled_categories: enabled,
-        category_map: current.categoryMap,
-      }, { onConflict: "tenant_id" });
-    if (error) return toast.error(String((error as { message?: string })?.message ?? error));
-    toast.success("Configuração do DRE atualizada");
+    await saveDreSettings.mutateAsync({
+      apply_cogs: applyCogs,
+      enabled_categories: enabled,
+      category_map: current.categoryMap,
+    });
     onSaved();
     onClose();
   };
@@ -1211,32 +1119,8 @@ function DreSettingsDialog({
 }
 
 function AuditSheet({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
-  const auditQ = useQuery({
-    queryKey: ["fin", "audit_entry", entry?.id],
-    enabled: !!entry?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("financial_audit_log")
-        .select("id,entry_id,action,created_at,actor_id,before,after")
-        .eq("entry_id", entry!.id)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as unknown as AuditRow[];
-    },
-  });
-  const paymentsQ = useQuery({
-    queryKey: ["fin", "audit_payments", entry?.id],
-    enabled: !!entry?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("financial_payments")
-        .select("id,entry_id,amount_cents,paid_at,method,notes")
-        .eq("entry_id", entry!.id)
-        .order("paid_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as PaymentRow[];
-    },
-  });
+  const auditQ = useFinancialAuditEntry(entry?.id);
+  const paymentsQ = useFinancialPayments(entry?.id);
 
   const diffs = (a: AuditRow) => {
     const before = (a.before ?? {}) as Record<string, unknown>;

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { useRealtimeTables } from "@/hooks/use-realtime-table";
 import { toast } from "sonner";
 
 export type Client = {
@@ -33,15 +34,18 @@ export function stageOf(status: string): string {
 export function useClients() {
   const { profile } = useAuth();
   const qc = useQueryClient();
+  const tenantId = profile?.tenant_id ?? null;
+
+  useRealtimeTables(["clients"], [["clients", tenantId]]);
 
   const query = useQuery({
-    queryKey: ["clients", profile?.tenant_id],
+    queryKey: ["clients", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase.from("clients").select("*").order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Client[];
     },
-    enabled: !!profile?.tenant_id,
+    enabled: !!tenantId,
   });
 
   const create = useMutation({

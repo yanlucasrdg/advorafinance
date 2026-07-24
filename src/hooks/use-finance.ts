@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
+import { useRealtimeTables } from "@/hooks/use-realtime-table";
 import { FinRow } from "@/lib/metrics";
 
 export type Entry = FinRow & {
@@ -20,6 +21,19 @@ export function useFinance() {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const tenantId = profile?.tenant_id ?? null;
+
+  useRealtimeTables(
+    ["financial_entries", "cases", "clients", "financial_audit_log", "notifications", "dre_settings", "financial_payments"],
+    [
+      ["fin", "entries", tenantId],
+      ["fin", "cases", tenantId],
+      ["fin", "clients", tenantId],
+      ["fin", "dre_settings", tenantId],
+      ["fin", "audit", tenantId],
+      ["fin", "notifications", tenantId],
+      ["fin", "payments", tenantId],
+    ],
+  );
 
   const entriesQ = useQuery({
     queryKey: ["fin", "entries", tenantId],
@@ -115,6 +129,73 @@ export function useFinance() {
     onError: (err) => toast.error(err.message),
   });
 
+  const markAllNotificationsRead = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ read_at: new Date().toISOString() })
+        .is("read_at", null);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fin", "notifications", tenantId] });
+      toast.success("Notificações marcadas como lidas");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const saveDreSettings = useMutation({
+    mutationFn: async (payload: { apply_cogs: boolean; enabled_categories: string[]; category_map: Record<string, string> }) => {
+      const { error } = await supabase.from("dre_settings").upsert({
+        tenant_id: tenantId,
+        apply_cogs: payload.apply_cogs,
+        enabled_categories: payload.enabled_categories,
+        category_map: payload.category_map,
+      }, { onConflict: "tenant_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fin", "dre_settings", tenantId] });
+      toast.success("Configuração do DRE atualizada");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const createPayment = useMutation({
+    mutationFn: async (payload: {
+      tenant_id: string;
+      entry_id: string;
+      amount_cents: number;
+      method: string;
+      notes: string | null;
+      paid_at: string;
+    }) => {
+      const { error } = await supabase.from("financial_payments").insert(payload);
+      if (error) throw error;
+    },
+    onSuccess: (_data, payload) => {
+      qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
+      qc.invalidateQueries({ queryKey: ["fin", "audit", tenantId] });
+      qc.invalidateQueries({ queryKey: ["fin", "payments", payload.entry_id] });
+      toast.success("Baixa registrada");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const reconcile = useMutation({
+    mutationFn: async (entryId: string) => {
+      const { error } = await supabase.rpc("reconcile_financial_entry", { _entry_id: entryId });
+      if (error) throw error;
+    },
+    onSuccess: (_data, entryId) => {
+      qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
+      qc.invalidateQueries({ queryKey: ["fin", "audit", tenantId] });
+      qc.invalidateQueries({ queryKey: ["fin", "payments", entryId] });
+      toast.success("Lançamento conciliado");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   return {
     entries: entriesQ.data ?? [],
     cases: casesQ.data ?? [],
@@ -125,5 +206,41 @@ export function useFinance() {
     isLoading: entriesQ.isLoading || casesQ.isLoading || clientsQ.isLoading,
     create,
     remove,
+    markAllNotificationsRead,
+    saveDreSettings,
+    createPayment,
+    reconcile,
   };
+}
+
+export function useFinancialPayments(entryId: string | null) {
+  return useQuery({
+    queryKey: ["fin", "payments", entryId],
+    enabled: !!entryId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_payments")
+        .select("id,entry_id,amount_cents,paid_at,method,notes")
+        .eq("entry_id", entryId!)
+        .order("paid_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as PaymentRow[];
+    },
+  });
+}
+
+export function useFinancialAuditEntry(entryId: string | null) {
+  return useQuery({
+    queryKey: ["fin", "audit_entry", entryId],
+    enabled: !!entryId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_audit_log")
+        .select("id,entry_id,action,created_at,actor_id,before,after")
+        .eq("entry_id", entryId!)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as AuditRow[];
+    },
+  });
 }

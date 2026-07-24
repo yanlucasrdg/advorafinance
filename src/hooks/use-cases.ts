@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { syncCaseMovements } from "@/lib/datajud.functions";
+import { useRealtimeTables } from "@/hooks/use-realtime-table";
 
 export type Case = {
   id: string; number: string | null; title: string; court: string | null;
@@ -11,6 +12,7 @@ export type Case = {
   client_id: string | null; responsible: string | null; description: string | null;
   updated_at: string; created_at: string;
   tribunal?: string | null; class_name?: string | null;
+  tenant_id?: string;
   last_movement_at?: string | null; datajud_synced_at?: string | null;
   clients?: { name: string } | null;
 };
@@ -23,10 +25,16 @@ export type Client = { id: string; name: string };
 export function useCases() {
   const { profile } = useAuth();
   const qc = useQueryClient();
+  const tenantId = profile?.tenant_id ?? null;
   const syncFn = useServerFn(syncCaseMovements);
 
+  useRealtimeTables(
+    ["cases", "deadlines", "financial_entries", "clients"],
+    [["cases", tenantId], ["clients-light", tenantId], ["deadlines-light", tenantId], ["entries-light", tenantId]],
+  );
+
   const queryCases = useQuery({
-    queryKey: ["cases", profile?.tenant_id],
+    queryKey: ["cases", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase.from("cases").select("*, clients(name)").order("created_at", { ascending: false });
       if (error) throw error;
@@ -36,33 +44,33 @@ export function useCases() {
   });
 
   const queryClients = useQuery({
-    queryKey: ["clients-light", profile?.tenant_id],
+    queryKey: ["clients-light", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase.from("clients").select("id, name").order("name");
       if (error) throw error;
       return (data ?? []) as Client[];
     },
-    enabled: !!profile?.tenant_id,
+    enabled: !!tenantId,
   });
 
   const queryDeadlines = useQuery({
-    queryKey: ["deadlines-light", profile?.tenant_id],
+    queryKey: ["deadlines-light", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase.from("deadlines").select("id, case_id, title, due_at, done, kind");
       if (error) throw error;
       return (data ?? []) as Deadline[];
     },
-    enabled: !!profile?.tenant_id,
+    enabled: !!tenantId,
   });
 
   const queryEntries = useQuery({
-    queryKey: ["entries-light", profile?.tenant_id],
+    queryKey: ["entries-light", tenantId],
     queryFn: async () => {
       const { data, error } = await supabase.from("financial_entries").select("id, case_id, amount_cents, status, kind");
       if (error) throw error;
       return (data ?? []) as Entry[];
     },
-    enabled: !!profile?.tenant_id,
+    enabled: !!tenantId,
   });
 
   const create = useMutation({
