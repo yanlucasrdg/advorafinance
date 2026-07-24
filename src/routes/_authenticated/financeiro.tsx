@@ -835,7 +835,7 @@ function ReconcileDialog({ entry, tenantId, createPayment, reconcile, onClose, o
   const [notes, setNotes] = useState("");
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const paymentsQ = useFinancialPayments(entry?.id);
+  const paymentsQ = useFinancialPayments(entry?.id ?? null);
 
   const paid = entry?.paid_amount_cents ?? 0;
   const total = entry?.amount_cents ?? 0;
