@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   Flame, Zap, Snowflake, MessageCircle, PhoneCall, Calendar, FileEdit,
   Clock, AlertTriangle, ShieldCheck, UserCheck, MoreVertical, ExternalLink,
@@ -87,7 +87,6 @@ export function CrmKanbanCard({
   onOpenWhatsapp,
   onQuickAction,
 }: CrmKanbanCardProps) {
-  const [isHovered, setIsHovered] = useState(false);
   const sla = getSlaInfo(client.updated_at || client.created_at, client.status);
 
   const areaBadgeClass =
@@ -96,8 +95,6 @@ export function CrmKanbanCard({
 
   return (
     <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={() => onClick(client)}
       className={`group relative rounded-xl border bg-card p-3.5 transition-all duration-200 cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 ${
         sla.isOverdue
@@ -188,13 +185,12 @@ export function CrmKanbanCard({
         </div>
       </div>
 
-      {/* HelenaCRM Hover Quick Action Bar */}
+      {/* Quick actions stay in the document flow so they never overlap the card below. */}
       <div
-        className={`absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-popover/95 backdrop-blur-md border border-border px-2 py-1 rounded-full shadow-lg transition-all duration-200 z-10 ${
-          isHovered ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
-        }`}
+        className="mt-0 max-h-0 overflow-hidden opacity-0 transition-all duration-200 group-hover:mt-2 group-hover:max-h-10 group-hover:opacity-100 focus-within:mt-2 focus-within:max-h-10 focus-within:opacity-100"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="flex w-full items-center justify-center gap-1 border-t border-border/60 pt-2">
         <Button
           size="icon"
           variant="ghost"
@@ -246,6 +242,7 @@ export function CrmKanbanCard({
         >
           <FileEdit className="h-3.5 w-3.5" />
         </Button>
+        </div>
       </div>
     </div>
   );
