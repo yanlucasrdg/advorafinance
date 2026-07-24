@@ -96,7 +96,7 @@ export function CrmLeadDrawer({
   async function loadClientDocuments(clientId: string) {
     setDocsLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("documents")
         .select("id, file_name, file_path, document_type, created_at")
         .eq("client_id", clientId)
