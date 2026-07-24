@@ -271,7 +271,7 @@ function Financeiro() {
       client_id: form.client_id || null,
       case_id: form.case_id || null,
       category: form.category || null,
-    });
+    } as any);
     setOpen(false);
     setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
   };
