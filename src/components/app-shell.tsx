@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, Briefcase, Calendar, DollarSign, BarChart3,
   MessageSquare, Zap, Plug, Settings, LogOut, Search, Sparkles,
-  Command, Menu, X, ChevronRight,
+  Command, Menu, X, ChevronRight, ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import advoraLogo from "@/assets/advora-logo.png.asset.json";
@@ -44,6 +44,12 @@ const navGroups: NavGroup[] = [
     items: [
       { to: "/integracoes", label: "Integrações", icon: Plug },
       { to: "/config", label: "Configurações", icon: Settings },
+    ],
+  },
+  {
+    title: "Administração",
+    items: [
+      { to: "/admin/usuarios", label: "Usuários", icon: ShieldCheck },
     ],
   },
 ];
@@ -103,8 +109,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     <>
       {/* Brand */}
       <div className="px-5 h-[72px] flex items-center gap-3 border-b border-sidebar-border">
-        <div className="size-9 rounded-xl bg-foreground grid place-items-center overflow-hidden shrink-0">
-          <img src={branding?.logo_url ?? advoraLogo.url} alt={branding?.brand_name ?? "Advora"} className="size-6 object-contain invert" />
+        <div className="size-9 rounded-xl border border-primary/20 bg-primary-soft grid place-items-center overflow-hidden shrink-0">
+          <img
+            src={branding?.logo_url ?? advoraLogo.url}
+            alt={branding?.brand_name ?? "Advora"}
+            className="size-7 object-contain"
+          />
         </div>
         <div className="leading-tight min-w-0 flex-1">
           <div className="text-[15px] font-semibold tracking-tight text-foreground truncate">{branding?.brand_name ?? "Advora"}</div>
@@ -152,7 +162,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* User */}
       <div className="p-3 border-t border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-secondary">
-          <Avatar className="size-9 shrink-0">
+          <Avatar className="size-9 shrink-0 ring-2 ring-primary/15 ring-offset-2 ring-offset-sidebar">
             {profile?.avatar_url && <AvatarImage src={profile.avatar_url} alt={profile.full_name ?? ""} />}
             <AvatarFallback className="text-xs bg-[image:var(--gradient-brand)] text-white font-semibold">{initials}</AvatarFallback>
           </Avatar>

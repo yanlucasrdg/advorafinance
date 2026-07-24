@@ -10,7 +10,7 @@ export type Case = {
   id: string; number: string | null; title: string; court: string | null;
   area: string | null; status: string; value_cents: number | null;
   client_id: string | null; responsible: string | null; description: string | null;
-  updated_at: string; created_at: string;
+  updated_at: string; created_at: string; status_version: number;
   tribunal?: string | null; class_name?: string | null;
   tenant_id?: string;
   last_movement_at?: string | null; datajud_synced_at?: string | null;
@@ -105,6 +105,41 @@ export function useCases() {
     onError: (err) => toast.error(err.message),
   });
 
+  const moveStatus = useMutation({
+    mutationFn: async ({ id, status, expectedVersion }: { id: string; status: string; expectedVersion: number }) => {
+      const { data, error } = await (supabase as any).rpc("move_case_status", {
+        p_case_id: id,
+        p_next_status: status,
+        p_expected_version: expectedVersion,
+      });
+      if (error) throw error;
+      return data as Case;
+    },
+    onMutate: async ({ id, status, expectedVersion }) => {
+      await qc.cancelQueries({ queryKey: ["cases", tenantId] });
+      const previous = qc.getQueryData<Case[]>(["cases", tenantId]);
+      qc.setQueryData<Case[]>(["cases", tenantId], (current = []) => current.map((item) =>
+        item.id === id && item.status_version === expectedVersion
+          ? { ...item, status, status_version: item.status_version + 1, updated_at: new Date().toISOString() }
+          : item
+      ));
+      return { previous };
+    },
+    onError: (err: Error, _variables, context) => {
+      if (context?.previous) qc.setQueryData(["cases", tenantId], context.previous);
+      qc.invalidateQueries({ queryKey: ["cases", tenantId] });
+      toast.error(
+        /CASE_STATUS_CONFLICT/i.test(err.message)
+          ? "Este processo foi alterado por outra pessoa. Atualizamos o quadro."
+          : "Não foi possível mover o processo."
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cases", tenantId] });
+      toast.success("Etapa do processo atualizada");
+    },
+  });
+
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("cases").delete().eq("id", id);
@@ -125,6 +160,7 @@ export function useCases() {
     isLoading: queryCases.isLoading || queryClients.isLoading || queryDeadlines.isLoading || queryEntries.isLoading,
     create,
     update,
+    moveStatus,
     remove,
   };
 }

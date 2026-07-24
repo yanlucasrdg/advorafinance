@@ -25,6 +25,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { lookupDatajud, syncCaseMovements, validateCNJ } from "@/lib/datajud.functions";
 import { useMetricsProcessos, pctDelta, formatDelta } from "@/hooks/use-metrics";
 import { useCases } from "@/hooks/use-cases";
+import { CaseKanban } from "@/components/processos/case-kanban";
 
 function maskCNJ(raw: string): string {
   const d = (raw ?? "").replace(/\D/g, "").slice(0, 20);
@@ -74,7 +75,7 @@ function hashSuccess(id: string) {
 
 function Processos() {
   const { profile } = useAuth();
-  const { cases, clients, deadlines, entries, isLoading, create, remove } = useCases();
+  const { cases, clients, deadlines, entries, isLoading, create, moveStatus, remove } = useCases();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"kanban" | "lista" | "timeline">("kanban");
   const [query, setQuery] = useState("");
@@ -188,6 +189,18 @@ function Processos() {
       await remove.mutateAsync(id);
     } catch {
       // toast handled in hook
+    }
+  };
+
+  const moveCaseStatus = async (caseItem: Case, nextStatus: string) => {
+    try {
+      await moveStatus.mutateAsync({
+        id: caseItem.id,
+        status: nextStatus,
+        expectedVersion: caseItem.status_version ?? 1,
+      });
+    } catch {
+      // The mutation restores the prior state and reports a concurrency conflict when applicable.
     }
   };
 
@@ -512,6 +525,14 @@ function Processos() {
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton h-48" />)}
         </div>
       ) : view === "kanban" ? (
+        <CaseKanban
+          stages={STAGES}
+          casesByStage={byStage}
+          deadlinesByCase={caseDeadlines}
+          onOpenCase={setSelected}
+          onMoveCase={(caseItem, nextStatus) => void moveCaseStatus(caseItem, nextStatus)}
+        />
+      ) : false ? (
         <div className="grid grid-flow-col auto-cols-[minmax(280px,1fr)] gap-4 overflow-x-auto pb-4 -mx-2 px-2">
           {STAGES.map(stage => {
             const items = byStage.get(stage.id) ?? [];
