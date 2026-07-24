@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 // API pública divulgada pelo CNJ (DataJud Wiki)
 // Header: Authorization: APIKey <key>
@@ -207,15 +209,19 @@ async function fetchFromDataJud(numero: string): Promise<DataJudResult> {
 /** Apenas consulta o DataJud (não persiste). Usada no diálogo de import. */
 export const lookupDatajud = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { numero: string }) => d)
-  .handler(async ({ data }) => fetchFromDataJud(data.numero));
+  .inputValidator((d) => z.object({ numero: z.string().min(1).max(64) }).parse(d))
+  .handler(async ({ data, context }) => {
+    await enforceRateLimit(context.supabase, "datajud_lookup");
+    return fetchFromDataJud(data.numero);
+  });
 
 /** Sincroniza movimentações de um processo já existente. */
 export const syncCaseMovements = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { caseId: string }) => d)
+  .inputValidator((d) => z.object({ caseId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    await enforceRateLimit(supabase, "datajud_sync");
     const { data: caseRow, error: caseErr } = await supabase
       .from("cases")
       .select("id, tenant_id, number")

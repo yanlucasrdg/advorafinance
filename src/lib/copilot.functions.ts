@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const Schema = z.object({ prompt: z.string().min(1).max(4000) });
 
@@ -9,6 +10,7 @@ export const askCopilot = createServerFn({ method: "POST" })
   .inputValidator((d) => Schema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    await enforceRateLimit(supabase, "copilot_prompt");
 
     // contexto do tenant: pega tenant_id e amostras pequenas
     const { data: profile } = await supabase.from("profiles").select("tenant_id, full_name").eq("id", userId).maybeSingle();

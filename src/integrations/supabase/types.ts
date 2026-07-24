@@ -1002,6 +1002,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      consume_rate_limit: {
+        Args: { _scope: string }
+        Returns: boolean
+      }
       create_tenant_with_owner: {
         Args: { _name: string; _slug: string }
         Returns: string
