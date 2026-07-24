@@ -163,7 +163,7 @@ function Processos() {
   const createCase = async () => {
     if (!form.title.trim() || !profile?.tenant_id) return;
     try {
-      await create.mutateAsync({
+      const payload: any = {
         title: form.title,
         number: form.number || null,
         tribunal: form.tribunal || null,
@@ -174,7 +174,8 @@ function Processos() {
         description: form.description || null,
         client_id: form.client_id || null,
         parties: form.party_names ? form.party_names.split(",").map(name => ({ name: name.trim(), role: "Parte contrária" })) : null,
-      } as any);
+      };
+      await (create.mutateAsync as any)(payload);
       setOpen(false);
       setForm({ number: "", title: "", tribunal: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "", party_names: "" });
     } catch {
@@ -802,7 +803,7 @@ function Processos() {
                       </div>
                     </div>
                     {selected.parties && selected.parties.length > 0 ? (
-                      selected.parties.map((party, index) => (
+                      selected.parties.map((party: Party, index: number) => (
                         <div key={index} className="glass rounded-lg p-3 flex items-center gap-3">
                           <Users className="size-4 text-muted-foreground" />
                           <div className="min-w-0">
