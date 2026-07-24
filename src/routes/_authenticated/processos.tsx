@@ -144,13 +144,13 @@ function Processos() {
       label: string; value: string; delta: string | null; down?: boolean;
       icon: typeof Briefcase; tone: string; bg: string;
     }[] = [
-      { label: "Processos Ativos", value: String(m?.active.value ?? 0), delta: m ? d(m.active.value, m.active.prev) : null, down: (m?.active.value ?? 0) < (m?.active.prev ?? 0), icon: Briefcase, tone: "text-violet-300", bg: "from-violet-500/15" },
-      { label: "Valor Total em Causa", value: formatBRL(m?.value_cause.value ?? 0), delta: m ? d(m.value_cause.value, m.value_cause.prev) : null, down: (m?.value_cause.value ?? 0) < (m?.value_cause.prev ?? 0), icon: DollarSign, tone: "text-emerald-300", bg: "from-emerald-500/15" },
-      { label: "Prazos Críticos", value: String(m?.critical.value ?? 0), delta: m ? d(m.critical.value, m.critical.prev) : null, down: (m?.critical.value ?? 0) > (m?.critical.prev ?? 0), icon: AlertTriangle, tone: "text-rose-300", bg: "from-rose-500/15" },
-      { label: "Taxa de Êxito", value: m?.success_pct != null ? `${m.success_pct}%` : "—", delta: null, icon: Target, tone: "text-sky-300", bg: "from-sky-500/15" },
-      { label: "Honorários Vinculados", value: formatBRL(m?.fees.value ?? 0), delta: m ? d(m.fees.value, m.fees.prev) : null, down: (m?.fees.value ?? 0) < (m?.fees.prev ?? 0), icon: TrendingUp, tone: "text-amber-300", bg: "from-amber-500/15" },
-      { label: "Movimentações Hoje", value: String(m?.moves_today.value ?? 0), delta: m ? d(m.moves_today.value, m.moves_today.prev) : null, down: (m?.moves_today.value ?? 0) < (m?.moves_today.prev ?? 0), icon: Activity, tone: "text-indigo-300", bg: "from-indigo-500/15" },
-    ];
+        { label: "Processos Ativos", value: String(m?.active.value ?? 0), delta: m ? d(m.active.value, m.active.prev) : null, down: (m?.active.value ?? 0) < (m?.active.prev ?? 0), icon: Briefcase, tone: "text-violet-300", bg: "from-violet-500/15" },
+        { label: "Valor Total em Causa", value: formatBRL(m?.value_cause.value ?? 0), delta: m ? d(m.value_cause.value, m.value_cause.prev) : null, down: (m?.value_cause.value ?? 0) < (m?.value_cause.prev ?? 0), icon: DollarSign, tone: "text-emerald-300", bg: "from-emerald-500/15" },
+        { label: "Prazos Críticos", value: String(m?.critical.value ?? 0), delta: m ? d(m.critical.value, m.critical.prev) : null, down: (m?.critical.value ?? 0) > (m?.critical.prev ?? 0), icon: AlertTriangle, tone: "text-rose-300", bg: "from-rose-500/15" },
+        { label: "Taxa de Êxito", value: m?.success_pct != null ? `${m.success_pct}%` : "—", delta: null, icon: Target, tone: "text-sky-300", bg: "from-sky-500/15" },
+        { label: "Honorários Vinculados", value: formatBRL(m?.fees.value ?? 0), delta: m ? d(m.fees.value, m.fees.prev) : null, down: (m?.fees.value ?? 0) < (m?.fees.prev ?? 0), icon: TrendingUp, tone: "text-amber-300", bg: "from-amber-500/15" },
+        { label: "Movimentações Hoje", value: String(m?.moves_today.value ?? 0), delta: m ? d(m.moves_today.value, m.moves_today.prev) : null, down: (m?.moves_today.value ?? 0) < (m?.moves_today.prev ?? 0), icon: Activity, tone: "text-indigo-300", bg: "from-indigo-500/15" },
+      ];
     return items;
   }, [metrics]);
 
