@@ -4,7 +4,7 @@ export type Json =
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[];
+  | Json[]
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
@@ -211,76 +211,6 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      documents: {
-        Row: {
-          id: string
-          tenant_id: string
-          client_id: string | null
-          case_id: string | null
-          uploaded_by: string | null
-          file_name: string
-          file_path: string
-          file_size: number
-          file_type: string
-          document_type: string
-          description: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          tenant_id: string
-          client_id?: string | null
-          case_id?: string | null
-          uploaded_by?: string | null
-          file_name: string
-          file_path: string
-          file_size?: number
-          file_type?: string
-          document_type?: string
-          description?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          tenant_id?: string
-          client_id?: string | null
-          case_id?: string | null
-          uploaded_by?: string | null
-          file_name?: string
-          file_path?: string
-          file_size?: number
-          file_type?: string
-          document_type?: string
-          description?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "documents_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "documents_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "documents_case_id_fkey"
-            columns: ["case_id"]
-            isOneToOne: false
-            referencedRelation: "cases"
             referencedColumns: ["id"]
           },
         ]
@@ -1260,4 +1190,4 @@ export const Constants = {
       tenant_plan: ["trial", "starter", "professional", "enterprise"],
     },
   },
-} as const;
+} as const
