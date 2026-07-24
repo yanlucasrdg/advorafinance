@@ -119,13 +119,6 @@ function Config() {
             <div><Label>Cor principal</Label><Input value={brand.primary_color} onChange={e => setBrand({ ...brand, primary_color: e.target.value })} placeholder="#5B4CF0" /></div>
             <div><Label>Cor secundaria</Label><Input value={brand.secondary_color} onChange={e => setBrand({ ...brand, secondary_color: e.target.value })} placeholder="#7C6BFF" /></div>
           </div>
-          <div>
-            <Label>Tema padrao para novos usuarios</Label>
-            <select value={brand.default_theme} onChange={e => setBrand({ ...brand, default_theme: e.target.value as "light" | "dark" })} className="mt-1 flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm">
-              <option value="dark">Escuro</option>
-              <option value="light">Claro</option>
-            </select>
-          </div>
           <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
             <div className="size-10 rounded-xl" style={{ background: `linear-gradient(135deg, ${brand.primary_color}, ${brand.secondary_color})` }} />
             <div><p className="text-sm font-semibold">{brand.brand_name || "Sua marca"}</p><p className="text-xs text-muted-foreground">Pre-visualizacao das cores</p></div>
