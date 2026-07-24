@@ -8,6 +8,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 
+const BRAND_PALETTES = [
+  { name: "Indigo", primary: "#5B4CF0", secondary: "#7C6BFF" },
+  { name: "Ocean", primary: "#0284C7", secondary: "#06B6D4" },
+  { name: "Emerald", primary: "#059669", secondary: "#22C55E" },
+  { name: "Violet", primary: "#7C3AED", secondary: "#C026D3" },
+  { name: "Rose", primary: "#E11D48", secondary: "#F97316" },
+  { name: "Slate", primary: "#334155", secondary: "#64748B" },
+] as const;
+
 export const Route = createFileRoute("/_authenticated/config")({
   head: () => ({ meta: [{ title: "Configurações — Advora" }] }),
   component: Config,
@@ -77,6 +86,10 @@ function Config() {
     toast.success("Identidade visual atualizada");
   };
 
+  const selectedPalette = BRAND_PALETTES.find(
+    (palette) => palette.primary === brand.primary_color && palette.secondary === brand.secondary_color,
+  )?.name;
+
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
       <PageHeader title="Configurações" subtitle="Perfil, escritório e plano." />
@@ -115,9 +128,25 @@ function Config() {
         <div className="grid gap-4 max-w-2xl">
           <div><Label>Nome da marca</Label><Input value={brand.brand_name} onChange={e => setBrand({ ...brand, brand_name: e.target.value })} placeholder="Nome exibido para os usuarios" /></div>
           <div><Label>URL do logo</Label><Input type="url" value={brand.logo_url} onChange={e => setBrand({ ...brand, logo_url: e.target.value })} placeholder="https://.../logo.png" /></div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><Label>Cor principal</Label><Input value={brand.primary_color} onChange={e => setBrand({ ...brand, primary_color: e.target.value })} placeholder="#5B4CF0" /></div>
-            <div><Label>Cor secundaria</Label><Input value={brand.secondary_color} onChange={e => setBrand({ ...brand, secondary_color: e.target.value })} placeholder="#7C6BFF" /></div>
+          <div>
+            <Label>Paleta de cores</Label>
+            <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {BRAND_PALETTES.map((palette) => {
+                const selected = selectedPalette === palette.name;
+                return (
+                  <button
+                    key={palette.name}
+                    type="button"
+                    onClick={() => setBrand({ ...brand, primary_color: palette.primary, secondary_color: palette.secondary })}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${selected ? "border-primary ring-2 ring-primary/20" : "border-border hover:bg-secondary"}`}
+                    aria-pressed={selected}
+                  >
+                    <span className="flex -space-x-1"><span className="size-4 rounded-full border-2 border-card" style={{ backgroundColor: palette.primary }} /><span className="size-4 rounded-full border-2 border-card" style={{ backgroundColor: palette.secondary }} /></span>
+                    <span className="font-medium">{palette.name}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
             <div className="size-10 rounded-xl" style={{ background: `linear-gradient(135deg, ${brand.primary_color}, ${brand.secondary_color})` }} />
