@@ -24,8 +24,11 @@ import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { lookupDatajud, syncCaseMovements, validateCNJ } from "@/lib/datajud.functions";
 import { useMetricsProcessos, pctDelta, formatDelta } from "@/hooks/use-metrics";
+<<<<<<< HEAD
 import { consumeCommandIntent } from "@/lib/command-intent";
 import { useCases, Case, Client, Deadline, Entry, Movement } from "@/hooks/use-cases";
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
 function maskCNJ(raw: string): string {
   const d = (raw ?? "").replace(/\D/g, "").slice(0, 20);
@@ -51,7 +54,23 @@ export const Route = createFileRoute("/_authenticated/processos")({
   component: Processos,
 });
 
+<<<<<<< HEAD
 
+=======
+type Case = {
+  id: string; number: string | null; title: string; court: string | null;
+  area: string | null; status: string; value_cents: number | null;
+  client_id: string | null; responsible: string | null; description: string | null;
+  updated_at: string; created_at: string;
+  tribunal?: string | null; class_name?: string | null;
+  last_movement_at?: string | null; datajud_synced_at?: string | null;
+  clients?: { name: string } | null;
+};
+type Client = { id: string; name: string };
+type Deadline = { id: string; case_id: string | null; title: string; due_at: string; done: boolean; kind: string };
+type Entry = { id: string; case_id: string | null; amount_cents: number; status: string; kind: string };
+type Movement = { id: string; case_id: string; occurred_at: string; name: string; code: string | null; complement: string | null };
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
 const STAGES = [
   { id: "ativo", label: "Em andamento", glow: "shadow-[0_0_24px_-8px_oklch(0.70_0.18_285/0.6)]", bar: "bg-violet-500", text: "text-violet-300", ring: "ring-violet-500/30" },
@@ -69,7 +88,15 @@ function hashSuccess(id: string) {
 
 function Processos() {
   const { profile } = useAuth();
+<<<<<<< HEAD
   const { cases, clients, deadlines, entries, isLoading: loading, create, remove } = useCases();
+=======
+  const [cases, setCases] = useState<Case[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [deadlines, setDeadlines] = useState<Deadline[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [loading, setLoading] = useState(true);
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"kanban" | "lista" | "timeline">("kanban");
   const [query, setQuery] = useState("");
@@ -82,6 +109,7 @@ function Processos() {
     setAdv(a => ({ ...a, [key]: a[key].includes(v) ? a[key].filter(x => x !== v) : [...a[key], v] }));
   const resetAdv = () => setAdv({ areas: [], stages: [], minValue: "", maxValue: "" });
 
+<<<<<<< HEAD
 
   useEffect(() => {
     if (loading) return;
@@ -96,6 +124,23 @@ function Processos() {
       if (selectedCase) setSelected(selectedCase);
     }
   }, [loading, cases]);
+=======
+  const load = async () => {
+    setLoading(true);
+    const [{ data: cs }, { data: cls }, { data: dls }, { data: fes }] = await Promise.all([
+      supabase.from("cases").select("*, clients(name)").order("created_at", { ascending: false }),
+      supabase.from("clients").select("id, name").order("name"),
+      supabase.from("deadlines").select("id, case_id, title, due_at, done, kind"),
+      supabase.from("financial_entries").select("id, case_id, amount_cents, status, kind"),
+    ]);
+    setCases((cs ?? []) as Case[]);
+    setClients((cls ?? []) as Client[]);
+    setDeadlines((dls ?? []) as Deadline[]);
+    setEntries((fes ?? []) as Entry[]);
+    setLoading(false);
+  };
+  useEffect(() => { if (profile?.tenant_id) load(); }, [profile?.tenant_id]);
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -144,6 +189,7 @@ function Processos() {
       label: string; value: string; delta: string | null; down?: boolean;
       icon: typeof Briefcase; tone: string; bg: string;
     }[] = [
+<<<<<<< HEAD
         { label: "Processos Ativos", value: String(m?.active.value ?? 0), delta: m ? d(m.active.value, m.active.prev) : null, down: (m?.active.value ?? 0) < (m?.active.prev ?? 0), icon: Briefcase, tone: "text-violet-300", bg: "from-violet-500/15" },
         { label: "Valor Total em Causa", value: formatBRL(m?.value_cause.value ?? 0), delta: m ? d(m.value_cause.value, m.value_cause.prev) : null, down: (m?.value_cause.value ?? 0) < (m?.value_cause.prev ?? 0), icon: DollarSign, tone: "text-emerald-300", bg: "from-emerald-500/15" },
         { label: "Prazos Críticos", value: String(m?.critical.value ?? 0), delta: m ? d(m.critical.value, m.critical.prev) : null, down: (m?.critical.value ?? 0) > (m?.critical.prev ?? 0), icon: AlertTriangle, tone: "text-rose-300", bg: "from-rose-500/15" },
@@ -151,6 +197,15 @@ function Processos() {
         { label: "Honorários Vinculados", value: formatBRL(m?.fees.value ?? 0), delta: m ? d(m.fees.value, m.fees.prev) : null, down: (m?.fees.value ?? 0) < (m?.fees.prev ?? 0), icon: TrendingUp, tone: "text-amber-300", bg: "from-amber-500/15" },
         { label: "Movimentações Hoje", value: String(m?.moves_today.value ?? 0), delta: m ? d(m.moves_today.value, m.moves_today.prev) : null, down: (m?.moves_today.value ?? 0) < (m?.moves_today.prev ?? 0), icon: Activity, tone: "text-indigo-300", bg: "from-indigo-500/15" },
       ];
+=======
+      { label: "Processos Ativos", value: String(m?.active.value ?? 0), delta: m ? d(m.active.value, m.active.prev) : null, down: (m?.active.value ?? 0) < (m?.active.prev ?? 0), icon: Briefcase, tone: "text-violet-300", bg: "from-violet-500/15" },
+      { label: "Valor Total em Causa", value: formatBRL(m?.value_cause.value ?? 0), delta: m ? d(m.value_cause.value, m.value_cause.prev) : null, down: (m?.value_cause.value ?? 0) < (m?.value_cause.prev ?? 0), icon: DollarSign, tone: "text-emerald-300", bg: "from-emerald-500/15" },
+      { label: "Prazos Críticos", value: String(m?.critical.value ?? 0), delta: m ? d(m.critical.value, m.critical.prev) : null, down: (m?.critical.value ?? 0) > (m?.critical.prev ?? 0), icon: AlertTriangle, tone: "text-rose-300", bg: "from-rose-500/15" },
+      { label: "Taxa de Êxito", value: m?.success_pct != null ? `${m.success_pct}%` : "—", delta: null, icon: Target, tone: "text-sky-300", bg: "from-sky-500/15" },
+      { label: "Honorários Vinculados", value: formatBRL(m?.fees.value ?? 0), delta: m ? d(m.fees.value, m.fees.prev) : null, down: (m?.fees.value ?? 0) < (m?.fees.prev ?? 0), icon: TrendingUp, tone: "text-amber-300", bg: "from-amber-500/15" },
+      { label: "Movimentações Hoje", value: String(m?.moves_today.value ?? 0), delta: m ? d(m.moves_today.value, m.moves_today.prev) : null, down: (m?.moves_today.value ?? 0) < (m?.moves_today.prev ?? 0), icon: Activity, tone: "text-indigo-300", bg: "from-indigo-500/15" },
+    ];
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     return items;
   }, [metrics]);
 
@@ -164,13 +219,20 @@ function Processos() {
     return out;
   }, [metrics]);
 
+<<<<<<< HEAD
   const handleCreate = async () => {
     if (!form.title.trim() || !profile?.tenant_id) return;
     create.mutate({
+=======
+  const create = async () => {
+    if (!form.title.trim() || !profile?.tenant_id) return;
+    const { data: ins, error } = await supabase.from("cases").insert({
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       tenant_id: profile.tenant_id, title: form.title, number: form.number || null,
       court: form.court || null, area: form.area, status: form.status,
       value_cents: form.value_cents, description: form.description || null,
       client_id: form.client_id || null,
+<<<<<<< HEAD
     } as any, {
       onSuccess: () => {
         setOpen(false);
@@ -181,6 +243,21 @@ function Processos() {
 
   const handleRemove = async (id: string) => {
     remove.mutate(id);
+=======
+    }).select("id").maybeSingle();
+    if (error) return toast.error(error.message);
+    toast.success("Processo criado");
+    setOpen(false);
+    if (ins?.id && form.number) postCreateSync(ins.id);
+    setForm({ number: "", title: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "" });
+    load();
+  };
+
+  const remove = async (id: string) => {
+    const { error } = await supabase.from("cases").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    load();
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   };
 
   // ---- DataJud ----
@@ -221,6 +298,14 @@ function Processos() {
     }
   }
 
+<<<<<<< HEAD
+=======
+  // Após criar processo com número, busca movimentações
+  async function postCreateSync(caseId: string) {
+    try { await syncFn({ data: { caseId } }); } catch { /* silencioso */ }
+  }
+
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   // Carrega movimentações ao abrir o drawer
   useEffect(() => {
     if (!selected) { setMovements([]); return; }
@@ -247,6 +332,10 @@ function Processos() {
         .order("occurred_at", { ascending: false })
         .limit(100);
       setMovements((data ?? []) as Movement[]);
+<<<<<<< HEAD
+=======
+      load();
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao sincronizar");
     } finally {
@@ -254,6 +343,10 @@ function Processos() {
     }
   }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
       <PageHeader
@@ -360,7 +453,11 @@ function Processos() {
                     </Select>
                   </div>
                   <div><Label>Descrição</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} /></div>
+<<<<<<< HEAD
                   <Button onClick={handleCreate} className="mt-2 bg-[image:var(--gradient-brand)]">Criar processo</Button>
+=======
+                  <Button onClick={create} className="mt-2 bg-[image:var(--gradient-brand)]">Criar processo</Button>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                 </div>
               </DialogContent>
             </Dialog>
@@ -504,7 +601,11 @@ function Processos() {
                     <td className="px-4 py-3"><Badge variant="outline" className={`${stage.text} ${stage.ring}`}>{stage.label}</Badge></td>
                     <td className="px-4 py-3 text-emerald-300 tabular-nums">{success}%</td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">{formatBRL(c.value_cents ?? 0)}</td>
+<<<<<<< HEAD
                     <td className="px-4 py-3 text-right"><Button size="icon" variant="ghost" className="size-7" onClick={e => { e.stopPropagation(); handleRemove(c.id); }}><Trash2 className="size-3.5" /></Button></td>
+=======
+                    <td className="px-4 py-3 text-right"><Button size="icon" variant="ghost" className="size-7" onClick={e => { e.stopPropagation(); remove(c.id); }}><Trash2 className="size-3.5" /></Button></td>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                   </tr>
                 );
               })}

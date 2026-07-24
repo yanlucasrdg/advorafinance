@@ -1,16 +1,27 @@
 import { createFileRoute } from "@tanstack/react-router";
+<<<<<<< HEAD
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+=======
+import { useEffect, useMemo, useRef, useState } from "react";
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 import {
   Plus, Mail, MoreHorizontal, Upload, Download, Users, UserCheck,
   TrendingUp, DollarSign, FileCheck2, Flame, AlertTriangle, Bot, Sparkles,
   X, MessageCircle, PhoneCall, LayoutGrid, List, Filter, ChevronDown,
+<<<<<<< HEAD
   Clock, FileText, CheckCircle2, Calendar, RotateCcw, Edit2, Save,
   StickyNote, Phone, Building2, MapPin, Star, StarOff,
+=======
+  Clock, FileText, CheckCircle2, Calendar, RotateCcw,
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+<<<<<<< HEAD
 import { Textarea } from "@/components/ui/textarea";
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -20,9 +31,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { useMetricsCrm } from "@/hooks/use-metrics";
+<<<<<<< HEAD
 import { useClients, STAGES, stageOf, Client, LEGACY_STAGE_MAP } from "@/hooks/use-clients";
 import { consumeCommandIntent } from "@/lib/command-intent";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
 /* ---------- CSV helpers ---------- */
 function parseCSV(text: string): Record<string, string>[] {
@@ -75,6 +89,7 @@ export const Route = createFileRoute("/_authenticated/crm")({
   component: CRM,
 });
 
+<<<<<<< HEAD
 
 
 type Activity = {
@@ -93,6 +108,41 @@ const ACTIVITY_KINDS = [
   { id: "meeting",  label: "Reunião",  icon: Calendar },
 ] as const;
 
+=======
+type Client = {
+  id: string; name: string; email: string | null; phone: string | null;
+  doc: string | null; type: string; status: string; notes: string | null;
+  created_at: string; updated_at: string;
+};
+
+const STAGES = [
+  { id: "novo_contato",      label: "Novo Contato",      subtitle: "Primeiro contato",     color: "oklch(0.70 0.18 285)", ring: "ring-violet-500/40",  bar: "bg-violet-500",  text: "text-violet-300",  bg: "bg-violet-500/10" },
+  { id: "triagem",           label: "Triagem",           subtitle: "Qualificação",         color: "oklch(0.70 0.18 250)", ring: "ring-blue-500/40",    bar: "bg-blue-500",    text: "text-blue-300",    bg: "bg-blue-500/10" },
+  { id: "consulta_agendada", label: "Consulta Agendada", subtitle: "Reunião marcada",      color: "oklch(0.78 0.14 200)", ring: "ring-cyan-500/40",    bar: "bg-cyan-500",    text: "text-cyan-300",    bg: "bg-cyan-500/10" },
+  { id: "proposta",          label: "Proposta",          subtitle: "Honorários enviados",  color: "oklch(0.80 0.15 85)",  ring: "ring-amber-500/40",   bar: "bg-amber-500",   text: "text-amber-300",   bg: "bg-amber-500/10" },
+  { id: "contrato",          label: "Contrato",          subtitle: "Assinado",             color: "oklch(0.74 0.17 130)", ring: "ring-lime-500/40",    bar: "bg-lime-500",    text: "text-lime-300",    bg: "bg-lime-500/10" },
+  { id: "em_andamento",      label: "Em Andamento",      subtitle: "Caso ativo",           color: "oklch(0.72 0.17 155)", ring: "ring-emerald-500/40", bar: "bg-emerald-500", text: "text-emerald-300", bg: "bg-emerald-500/10" },
+  { id: "encerrado",         label: "Concluído / Perdido", subtitle: "Encerrado",          color: "oklch(0.65 0.10 25)",  ring: "ring-rose-500/40",    bar: "bg-rose-500",    text: "text-rose-300",    bg: "bg-rose-500/10" },
+] as const;
+
+// Retrocompat: mapeia status legados dos clientes para os 7 novos estágios
+const LEGACY_STAGE_MAP: Record<string, string> = {
+  lead: "novo_contato",
+  prospect: "novo_contato",
+  qualificacao: "triagem",
+  reuniao: "consulta_agendada",
+  fechado: "contrato",
+  ativo: "em_andamento",
+  perdido: "encerrado",
+  inativo: "encerrado",
+};
+function stageOf(status: string): string {
+  return LEGACY_STAGE_MAP[status] ?? status;
+}
+
+const AREAS = ["Trabalhista", "Cível", "Empresarial", "Tributário", "Família", "Criminal", "Previdenciário"];
+
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 function brl(n: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
 }
@@ -105,15 +155,37 @@ function relTime(iso: string) {
 function initials(name: string) {
   return name.split(" ").map(s => s[0]).slice(0, 2).join("").toUpperCase();
 }
+<<<<<<< HEAD
 function leadCode(client: Client) {
   return `ADV-${client.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 }
 function clientValue(c: Client): number {
   return (c.value_cents ?? 0) / 100;
+=======
+function getMeta(c: Client) {
+  let area = "Cível", value = 10000, owner = "Dr. Yan", hot = false;
+  try {
+    const m = c.notes ? JSON.parse(c.notes) : {};
+    if (m.area) area = m.area;
+    if (typeof m.value === "number") value = m.value;
+    if (m.owner) owner = m.owner;
+    if (m.hot) hot = true;
+  } catch { /* ignore */ }
+  if (!area || area === "Cível") {
+    const seed = c.name.charCodeAt(0) + c.name.length;
+    area = AREAS[seed % AREAS.length];
+  }
+  if (value === 10000) {
+    const seed = c.name.length * 1374 + c.name.charCodeAt(0) * 91;
+    value = 3000 + (seed % 47) * 1000;
+  }
+  return { area, value, owner, hot };
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 }
 
 function CRM() {
   const { profile } = useAuth();
+<<<<<<< HEAD
   const qc = useQueryClient();
   const { clients, isLoading: loading, create, update, remove, moveStage, toggleHot } = useClients();
   const [open, setOpen] = useState(false);
@@ -122,6 +194,12 @@ function CRM() {
     status: "novo_contato", area: "Trabalhista", value: 10000,
     owner: "", address: "", city: "", state: "",
   });
+=======
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const [filter, setFilter] = useState<"all" | "PF" | "PJ" | "leads" | "ativos" | "inativos">("all");
   const [view, setView] = useState<"funil" | "lista">("funil");
   const [selected, setSelected] = useState<Client | null>(null);
@@ -129,6 +207,7 @@ function CRM() {
   const [adv, setAdv] = useState<{ areas: string[]; stages: string[]; minValue: string; maxValue: string; hotOnly: boolean; search: string }>({
     areas: [], stages: [], minValue: "", maxValue: "", hotOnly: false, search: "",
   });
+<<<<<<< HEAD
   const [dragOver, setDragOver] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -147,6 +226,22 @@ function CRM() {
   const filtered = useMemo(() => {
     const min = adv.minValue ? Number(adv.minValue) * 100 : -Infinity;
     const max = adv.maxValue ? Number(adv.maxValue) * 100 : Infinity;
+=======
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("clients").select("*").order("created_at", { ascending: false });
+    if (error) toast.error(error.message);
+    setClients((data ?? []) as Client[]);
+    setLoading(false);
+  };
+  useEffect(() => { if (profile?.tenant_id) load(); }, [profile?.tenant_id]);
+
+  const filtered = useMemo(() => {
+    const min = adv.minValue ? Number(adv.minValue) : -Infinity;
+    const max = adv.maxValue ? Number(adv.maxValue) : Infinity;
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     const q = adv.search.trim().toLowerCase();
     return clients.filter(c => {
       if (filter === "PF" && c.type !== "PF") return false;
@@ -154,11 +249,19 @@ function CRM() {
       if (filter === "leads" && !["novo_contato", "triagem"].includes(stageOf(c.status))) return false;
       if (filter === "ativos" && !["contrato", "em_andamento"].includes(stageOf(c.status))) return false;
       if (filter === "inativos" && stageOf(c.status) !== "encerrado") return false;
+<<<<<<< HEAD
       if (adv.areas.length && !adv.areas.includes(c.area ?? "")) return false;
       if (adv.stages.length && !adv.stages.includes(c.status)) return false;
       const v = c.value_cents ?? 0;
       if (v < min || v > max) return false;
       if (adv.hotOnly && !c.is_hot) return false;
+=======
+      const m = getMeta(c);
+      if (adv.areas.length && !adv.areas.includes(m.area)) return false;
+      if (adv.stages.length && !adv.stages.includes(c.status)) return false;
+      if (m.value < min || m.value > max) return false;
+      if (adv.hotOnly && !m.hot) return false;
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       if (q && !(c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.doc ?? "").toLowerCase().includes(q))) return false;
       return true;
     });
@@ -182,6 +285,7 @@ function CRM() {
     fechadosMes: crmMetrics?.fechados_mes ?? 0,
   };
 
+<<<<<<< HEAD
   const handleCreate = async () => {
     if (!String(form.name).trim() || !profile?.tenant_id) return;
     const payload: Partial<Client> = {
@@ -216,6 +320,39 @@ function CRM() {
   const handleToggleHot = async (id: string, is_hot: boolean) => {
     toggleHot.mutate({ id, is_hot });
     if (selected?.id === id) setSelected(s => s ? { ...s, is_hot } : s);
+=======
+
+
+
+  const create = async () => {
+    if (!form.name.trim() || !profile?.tenant_id) return;
+    const { error } = await supabase.from("clients").insert({
+      tenant_id: profile.tenant_id,
+      created_by: profile.id,
+      name: form.name, email: form.email || null, phone: form.phone || null, doc: form.doc || null,
+      type: form.type, status: form.status,
+      notes: JSON.stringify({ area: form.area, value: form.value, owner: profile.full_name || "Dr. Yan" }),
+    });
+    if (error) return toast.error(error.message);
+    toast.success("Cliente criado");
+    setOpen(false);
+    setForm({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
+    load();
+  };
+
+  const moveStage = async (id: string, status: string) => {
+    setClients(cs => cs.map(c => c.id === id ? { ...c, status } : c));
+    const { error } = await supabase.from("clients").update({ status }).eq("id", id);
+    if (error) { toast.error(error.message); load(); }
+    else toast.success("Etapa atualizada");
+  };
+
+  const remove = async (id: string) => {
+    const { error } = await supabase.from("clients").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    if (selected?.id === id) setSelected(null);
+    load();
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   };
 
   const onImportCSV = async (file: File) => {
@@ -230,6 +367,7 @@ function CRM() {
         const type = (r.type || r.tipo || "PF").toUpperCase() === "PJ" ? "PJ" : "PF";
         const status = valid.includes((r.status || "novo_contato").toLowerCase()) ? (r.status || "novo_contato").toLowerCase() : "novo_contato";
         const area = r.area || "Cível";
+<<<<<<< HEAD
         const value_cents = Math.round((Number(r.value || r.valor || 0) || 10000) * 100);
         return {
           tenant_id: profile.tenant_id!, created_by: profile.id,
@@ -237,25 +375,60 @@ function CRM() {
           doc: r.doc || r.cpf || r.cnpj || null, type, status, area, value_cents,
           owner: r.owner || r.responsavel || profile.full_name || "Advogado",
         } as any;
+=======
+        const value = Number(r.value || r.valor || 0) || 10000;
+        return {
+          tenant_id: profile.tenant_id!,
+          created_by: profile.id,
+          name,
+          email: r.email || null,
+          phone: r.phone || r.telefone || null,
+          doc: r.doc || r.cpf || r.cnpj || null,
+          type, status,
+          notes: JSON.stringify({ area, value, owner: profile.full_name || "Dr. Yan" }),
+        };
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       }).filter(p => p.name.trim() !== "");
       if (!payload.length) return toast.error("Nenhuma linha válida (coluna 'name' obrigatória)");
       const { error } = await supabase.from("clients").insert(payload);
       if (error) return toast.error(error.message);
       toast.success(`${payload.length} cliente(s) importado(s)`);
+<<<<<<< HEAD
       // Invalidating queries to fetch imported data
       qc.invalidateQueries({ queryKey: ["clients", profile.tenant_id] });
     } catch { toast.error("Falha ao ler CSV"); }
+=======
+      load();
+    } catch (e) {
+      toast.error("Falha ao ler CSV");
+    }
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   };
 
   const exportReport = () => {
     if (!filtered.length) return toast.error("Nenhum cliente para exportar");
     const rows = filtered.map(c => {
+<<<<<<< HEAD
       const stage = STAGES.find(s => s.id === stageOf(c.status))?.label ?? c.status;
       return {
         name: c.name, email: c.email ?? "", phone: c.phone ?? "", doc: c.doc ?? "",
         type: c.type, status: stage, area: c.area ?? "", value: clientValue(c),
         owner: c.owner ?? "", is_hot: c.is_hot ? "Sim" : "Não",
         city: c.city ?? "", state: c.state ?? "",
+=======
+      const m = getMeta(c);
+      const stage = STAGES.find(s => s.id === c.status)?.label ?? c.status;
+      return {
+        name: c.name,
+        email: c.email ?? "",
+        phone: c.phone ?? "",
+        doc: c.doc ?? "",
+        type: c.type,
+        status: stage,
+        area: m.area,
+        value: m.value,
+        owner: m.owner,
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
         created_at: new Date(c.created_at).toLocaleDateString("pt-BR"),
         updated_at: new Date(c.updated_at).toLocaleDateString("pt-BR"),
       };
@@ -269,6 +442,7 @@ function CRM() {
   const toggle = (key: "areas" | "stages", v: string) =>
     setAdv(a => ({ ...a, [key]: a[key].includes(v) ? a[key].filter(x => x !== v) : [...a[key], v] }));
 
+<<<<<<< HEAD
   // ---------- Drag & Drop ----------
   const onDragStart = (e: React.DragEvent, id: string) => {
     e.dataTransfer.setData("clientId", id);
@@ -289,6 +463,8 @@ function CRM() {
     handleMoveStage(id, stageId);
   };
 
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   return (
     <div className="relative">
       {/* Background glow */}
@@ -297,7 +473,11 @@ function CRM() {
         <div className="absolute top-40 right-0 w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[120px]" />
       </div>
 
+<<<<<<< HEAD
       <div className={`flex ${selected ? "pr-[420px]" : ""} transition-all duration-300`}>
+=======
+      <div className={`flex ${selected ? "pr-[380px]" : ""} transition-all duration-300`}>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
         <div className="flex-1 min-w-0 p-6 lg:p-8 space-y-6">
           {/* Header */}
           <header className="flex items-end justify-between gap-4 animate-fade-up">
@@ -307,13 +487,31 @@ function CRM() {
               <p className="text-sm text-muted-foreground mt-1.5">Gestão completa de clientes, leads e oportunidades do escritório.</p>
             </div>
             <div className="flex items-center gap-2">
+<<<<<<< HEAD
               <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) onImportCSV(f); e.target.value = ""; }} />
+=======
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) onImportCSV(f);
+                  e.target.value = "";
+                }}
+              />
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
               <Button onClick={() => fileRef.current?.click()} variant="outline" size="sm" className="h-9 border-border/60 bg-white/[0.02] hover:bg-white/[0.05]">
                 <Upload className="size-3.5 mr-1.5" /> Importar CSV
               </Button>
               <Button onClick={exportReport} variant="outline" size="sm" className="h-9 border-border/60 bg-white/[0.02] hover:bg-white/[0.05]">
+<<<<<<< HEAD
                 <Download className="size-3.5 mr-1.5" /> Exportar
+=======
+                <Download className="size-3.5 mr-1.5" /> Exportar Relatório
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
               </Button>
               <Dialog open={open} onOpenChange={setOpen}>
                 <DialogTrigger asChild>
@@ -321,9 +519,49 @@ function CRM() {
                     <Plus className="size-3.5 mr-1.5" /> Novo Cliente
                   </Button>
                 </DialogTrigger>
+<<<<<<< HEAD
                 <DialogContent className="glass max-w-lg">
                   <DialogHeader><DialogTitle>Cadastrar cliente</DialogTitle></DialogHeader>
                   <NewClientForm form={form} setForm={setForm} onCreate={handleCreate} />
+=======
+                <DialogContent className="glass">
+                  <DialogHeader><DialogTitle>Cadastrar cliente</DialogTitle></DialogHeader>
+                  <div className="grid gap-3">
+                    <div><Label>Nome*</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
+                      <div><Label>Telefone</Label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><Label>CPF/CNPJ</Label><Input value={form.doc} onChange={e => setForm({ ...form, doc: e.target.value })} /></div>
+                      <div>
+                        <Label>Tipo</Label>
+                        <Select value={form.type} onValueChange={v => setForm({ ...form, type: v })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="PF">Pessoa Física</SelectItem><SelectItem value="PJ">Pessoa Jurídica</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Área Jurídica</Label>
+                        <Select value={form.area} onValueChange={v => setForm({ ...form, area: v })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>{AREAS.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div><Label>Valor estimado (R$)</Label><Input type="number" value={form.value} onChange={e => setForm({ ...form, value: Number(e.target.value) })} /></div>
+                    </div>
+                    <div>
+                      <Label>Etapa</Label>
+                      <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>{STAGES.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <Button onClick={create} className="mt-2 bg-[image:var(--gradient-brand)]">Criar cliente</Button>
+                  </div>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                 </DialogContent>
               </Dialog>
             </div>
@@ -331,6 +569,7 @@ function CRM() {
 
           {/* Filters bar */}
           <div className="flex items-center justify-between gap-3 animate-fade-up">
+<<<<<<< HEAD
             <div className="flex items-center gap-1 p-1 rounded-xl glass overflow-x-auto">
               {[
                 { id: "all", label: "Todos", icon: LayoutGrid },
@@ -344,18 +583,44 @@ function CRM() {
                   className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
                     filter === f.id ? "bg-primary/15 text-foreground shadow-[inset_0_0_0_1px_oklch(0.70_0.18_285/0.3)]" : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"
                   }`}>
+=======
+            <div className="flex items-center gap-1 p-1 rounded-xl glass">
+              {[
+                { id: "all", label: "Todos", icon: LayoutGrid },
+                { id: "PF", label: "Pessoa Física", icon: Users },
+                { id: "PJ", label: "Pessoa Jurídica", icon: Users },
+                { id: "leads", label: "Leads", icon: Flame },
+                { id: "ativos", label: "Clientes Ativos", icon: UserCheck },
+                { id: "inativos", label: "Inativos", icon: X },
+              ].map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setFilter(f.id as typeof filter)}
+                  className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-all ${
+                    filter === f.id ? "bg-primary/15 text-foreground shadow-[inset_0_0_0_1px_oklch(0.70_0.18_285/0.3)]" : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"
+                  }`}
+                >
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                   <f.icon className="size-3.5" />{f.label}
                 </button>
               ))}
             </div>
+<<<<<<< HEAD
             <div className="flex items-center gap-2 shrink-0">
+=======
+            <div className="flex items-center gap-2">
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
               <div className="flex items-center p-0.5 rounded-lg glass">
                 <button onClick={() => setView("funil")} className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium ${view === "funil" ? "bg-white/[0.06] text-foreground" : "text-muted-foreground"}`}><LayoutGrid className="size-3.5" />Funil</button>
                 <button onClick={() => setView("lista")} className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium ${view === "lista" ? "bg-white/[0.06] text-foreground" : "text-muted-foreground"}`}><List className="size-3.5" />Lista</button>
               </div>
               <Popover>
                 <PopoverTrigger asChild>
+<<<<<<< HEAD
                   <Button variant="outline" size="sm" className="h-8 border-border/60 bg-white/[0.02] text-xs shrink-0">
+=======
+                  <Button variant="outline" size="sm" className="h-8 border-border/60 bg-white/[0.02] text-xs">
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                     <Filter className="size-3.5 mr-1.5" />Filtros
                     {advActive > 0 && <span className="ml-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary/20 text-primary text-[9px] font-bold">{advActive}</span>}
                     <ChevronDown className="size-3 ml-1" />
@@ -395,7 +660,11 @@ function CRM() {
                     </div>
                   </div>
                   <div>
+<<<<<<< HEAD
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor estimado (R$)</Label>
+=======
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor (R$)</Label>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                     <div className="grid grid-cols-2 gap-2 mt-1">
                       <Input type="number" placeholder="Mín" value={adv.minValue} onChange={e => setAdv({ ...adv, minValue: e.target.value })} className="h-8 text-xs" />
                       <Input type="number" placeholder="Máx" value={adv.maxValue} onChange={e => setAdv({ ...adv, maxValue: e.target.value })} className="h-8 text-xs" />
@@ -418,7 +687,11 @@ function CRM() {
             <KpiCard label="Leads" value={String(kpis.leads)} deltaLabel="novos e triagem" icon={Users} tone="violet" />
             <KpiCard label="Clientes Ativos" value={String(kpis.ativos)} deltaLabel="em contrato / andamento" icon={UserCheck} tone="blue" />
             <KpiCard label="Taxa de Conversão" value={crmMetrics?.conv_pct != null ? `${crmMetrics.conv_pct}%` : "—"} deltaLabel="ativos vs pipeline" icon={TrendingUp} tone="emerald" />
+<<<<<<< HEAD
             <KpiCard label="Receita Potencial" value={brl(kpis.pipeline / 100)} deltaLabel="em pipeline" icon={DollarSign} tone="amber" />
+=======
+            <KpiCard label="Receita Potencial" value={brl(kpis.pipeline)} deltaLabel="em pipeline" icon={DollarSign} tone="amber" />
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
             <KpiCard label="Contratos Fechados" value={String(kpis.fechadosMes)} deltaLabel="este mês" icon={FileCheck2} tone="rose" />
           </div>
 
@@ -431,6 +704,7 @@ function CRM() {
                 </div>
                 <div>
                   <h2 className="text-sm font-semibold tracking-tight">Insights Comerciais</h2>
+<<<<<<< HEAD
                   <p className="text-xs text-muted-foreground">Análise do seu funil de vendas</p>
                 </div>
               </div>
@@ -532,11 +806,76 @@ function CRM() {
                   </div>
                 ))}
               </div>
+=======
+                  <p className="text-xs text-muted-foreground">Análise inteligente do seu funil de vendas</p>
+                </div>
+              </div>
+              <button className="size-7 grid place-items-center rounded-md text-muted-foreground hover:bg-white/[0.05]"><X className="size-3.5" /></button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+              <InsightCard icon={Flame} tone="rose" title={`${Math.max(1, Math.floor(kpis.leads * 0.3))} Leads quentes`} desc="Clientes com alta chance de conversão" />
+              <InsightCard icon={AlertTriangle} tone="amber" title={`${Math.max(1, Math.floor(kpis.leads * 0.2))} Oportunidades paradas`} desc="Leads sem contato há mais de 14 dias" />
+              <InsightCard icon={DollarSign} tone="emerald" title={brl(kpis.pipeline)} desc="Receita potencial em propostas abertas" />
+              <InsightCard icon={Bot} tone="violet" title="Sugestão da IA" desc={clients[0] ? `Entre em contato com ${clients[0].name} hoje` : "Cadastre clientes para receber sugestões"} badge="82% chance" />
+            </div>
+          </section>
+
+          {/* Pipeline kanban */}
+          {view === "funil" ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 stagger">
+              {grouped.map(col => (
+                <div key={col.id} className="glass rounded-2xl p-3 flex flex-col min-h-[500px] hover-lift">
+                  <div className="h-0.5 w-full rounded-full mb-3" style={{ background: col.color, boxShadow: `0 0 12px ${col.color}` }} />
+                  <div className="flex items-center justify-between mb-1 px-1">
+                    <h3 className="text-sm font-semibold tracking-tight">{col.label}</h3>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-md ${col.bg} ${col.text}`}>{col.items.length}</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/70 mb-3 px-1">{col.subtitle}</p>
+                  <div className="space-y-2 flex-1 overflow-y-auto -mx-1 px-1">
+                    {loading && Array.from({ length: 2 }).map((_, i) => <div key={i} className="skeleton h-24 rounded-xl" />)}
+                    {!loading && col.items.length === 0 && (
+                      <div className="text-center py-8 text-[11px] text-muted-foreground/60 border border-dashed border-border/40 rounded-xl">
+                        Sem clientes
+                      </div>
+                    )}
+                    {col.items.map(c => {
+                      const m = getMeta(c);
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => setSelected(c)}
+                          className={`group w-full text-left rounded-xl bg-card/40 border border-border/40 p-3 hover:border-primary/40 hover:bg-card/70 transition-all ${selected?.id === c.id ? "ring-2 ring-primary/40 border-primary/40" : ""}`}
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <Avatar className="size-8 shrink-0 ring-1 ring-border/50">
+                              <AvatarFallback className="text-[10px] bg-[image:var(--gradient-brand)] text-white font-semibold">{initials(c.name)}</AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold truncate">{c.name}</p>
+                              <p className="text-[10px] text-muted-foreground truncate">{m.area}</p>
+                            </div>
+                            <button onClick={e => { e.stopPropagation(); remove(c.id); }} className="size-5 grid place-items-center rounded text-muted-foreground/60 opacity-0 group-hover:opacity-100 hover:bg-white/[0.06] hover:text-foreground" aria-label="Mais">
+                              <MoreHorizontal className="size-3" />
+                            </button>
+                          </div>
+                          <p className="mt-2 text-sm font-bold tracking-tight gradient-text">{brl(m.value)}</p>
+                          <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground/80 pt-2 border-t border-border/30">
+                            <span className="inline-flex items-center gap-1"><Clock className="size-2.5" />{relTime(c.updated_at)}</span>
+                            <span className="inline-flex items-center gap-1"><Users className="size-2.5" />{m.owner}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
             </div>
           ) : (
             <div className="glass rounded-2xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
+<<<<<<< HEAD
                   <tr>
                     <th className="text-left p-3 pl-4">Cliente</th>
                     <th className="text-left p-3">Área</th>
@@ -567,13 +906,31 @@ function CRM() {
                         <td className="p-3"><span className={`text-[10px] px-2 py-0.5 rounded-md ${stage.bg} ${stage.text}`}>{stage.label}</span></td>
                         <td className="p-3 text-right font-mono font-semibold">{(c.value_cents ?? 0) > 0 ? brl(clientValue(c)) : "—"}</td>
                         <td className="p-3 text-muted-foreground text-xs">{c.owner ?? "—"}</td>
+=======
+                  <tr><th className="text-left p-3 pl-4">Cliente</th><th className="text-left p-3">Área</th><th className="text-left p-3">Etapa</th><th className="text-right p-3">Valor</th><th className="text-left p-3">Atualizado</th><th className="p-3" /></tr>
+                </thead>
+                <tbody>
+                  {filtered.map(c => {
+                    const m = getMeta(c);
+                    const stage = STAGES.find(s => s.id === c.status) ?? STAGES[0];
+                    return (
+                      <tr key={c.id} className="border-b border-border/20 row-hover cursor-pointer" onClick={() => setSelected(c)}>
+                        <td className="p-3 pl-4"><div className="flex items-center gap-2.5"><Avatar className="size-7"><AvatarFallback className="text-[10px] bg-[image:var(--gradient-brand)] text-white">{initials(c.name)}</AvatarFallback></Avatar><span className="font-medium">{c.name}</span></div></td>
+                        <td className="p-3 text-muted-foreground">{m.area}</td>
+                        <td className="p-3"><span className={`text-[10px] px-2 py-0.5 rounded-md ${stage.bg} ${stage.text}`}>{stage.label}</span></td>
+                        <td className="p-3 text-right font-mono font-semibold">{brl(m.value)}</td>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                         <td className="p-3 text-muted-foreground text-xs">{relTime(c.updated_at)}</td>
                         <td className="p-3"><MoreHorizontal className="size-4 text-muted-foreground" /></td>
                       </tr>
                     );
                   })}
                   {filtered.length === 0 && (
+<<<<<<< HEAD
                     <tr><td colSpan={7} className="text-center py-12 text-muted-foreground text-sm">Nenhum cliente encontrado</td></tr>
+=======
+                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground text-sm">Nenhum cliente cadastrado</td></tr>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                   )}
                 </tbody>
               </table>
@@ -586,6 +943,7 @@ function CRM() {
           <ClientDrawer
             client={selected}
             onClose={() => setSelected(null)}
+<<<<<<< HEAD
             onMove={handleMoveStage}
             onToggleHot={handleToggleHot}
             onDelete={handleRemove}
@@ -593,6 +951,9 @@ function CRM() {
               update.mutate({ id: updated.id, payload: updated });
               setSelected(updated);
             }}
+=======
+            onMove={moveStage}
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
             tab={tab}
             setTab={setTab}
           />
@@ -602,6 +963,7 @@ function CRM() {
   );
 }
 
+<<<<<<< HEAD
 /* ---------- New Client Form ---------- */
 function NewClientForm({ form, setForm, onCreate }: {
   form: Record<string, string | number>;
@@ -659,6 +1021,10 @@ function NewClientForm({ form, setForm, onCreate }: {
 
 /* ---------- KPI card ---------- */
 function KpiCard({ label, value, deltaLabel, icon: Icon, tone }: { label: string; value: string; deltaLabel: string; icon: typeof Users; tone: "violet" | "blue" | "emerald" | "amber" | "rose" }) {
+=======
+/* ---------- KPI card ---------- */
+function KpiCard({ label, value, delta, deltaLabel, icon: Icon, tone }: { label: string; value: string; delta?: string; deltaLabel: string; icon: typeof Users; tone: "violet" | "blue" | "emerald" | "amber" | "rose" }) {
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const tones = {
     violet:  { bg: "bg-violet-500/10",  ring: "ring-violet-500/30",  text: "text-violet-300",  glow: "oklch(0.70 0.18 285 / 0.25)" },
     blue:    { bg: "bg-blue-500/10",    ring: "ring-blue-500/30",    text: "text-blue-300",    glow: "oklch(0.70 0.18 250 / 0.25)" },
@@ -673,6 +1039,10 @@ function KpiCard({ label, value, deltaLabel, icon: Icon, tone }: { label: string
         <div className={`size-10 rounded-xl ${tones.bg} ring-1 ${tones.ring} grid place-items-center`}>
           <Icon className={`size-4 ${tones.text}`} />
         </div>
+<<<<<<< HEAD
+=======
+        {delta && <span className="text-[10px] font-mono font-semibold text-emerald-400 inline-flex items-center gap-0.5"><TrendingUp className="size-2.5" />{delta}</span>}
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       </div>
       <p className="text-[11px] text-muted-foreground mt-3">{label}</p>
       <p className="text-2xl font-bold tracking-tight mt-1">{value}</p>
@@ -708,6 +1078,7 @@ function InsightCard({ icon: Icon, tone, title, desc, badge }: { icon: typeof Fl
 }
 
 /* ---------- Drawer ---------- */
+<<<<<<< HEAD
 function ClientDrawer({ client, onClose, onMove, onToggleHot, onDelete, onUpdate, tab, setTab }: {
   client: Client;
   onClose: () => void;
@@ -870,11 +1241,40 @@ function ClientDrawer({ client, onClose, onMove, onToggleHot, onDelete, onUpdate
           </div>
         </div>
         <p className="text-[10px] font-mono text-muted-foreground mt-2">{leadCode(client)}</p>
+=======
+function ClientDrawer({ client, onClose, onMove, tab, setTab }: {
+  client: Client;
+  onClose: () => void;
+  onMove: (id: string, status: string) => void;
+  tab: "resumo" | "historico" | "processos" | "financeiro" | "ia";
+  setTab: (t: "resumo" | "historico" | "processos" | "financeiro" | "ia") => void;
+}) {
+  const m = getMeta(client);
+  const stage = STAGES.find(s => s.id === client.status) ?? STAGES[0];
+  return (
+    <aside className="fixed top-16 right-0 bottom-0 w-[380px] z-20 glass border-l border-border/40 flex flex-col animate-fade-up">
+      <div className="p-4 border-b border-border/40 flex items-start justify-between">
+        <div className="flex items-start gap-3 min-w-0">
+          <Avatar className="size-12 ring-2 ring-primary/30 shrink-0">
+            <AvatarFallback className="bg-[image:var(--gradient-brand)] text-white font-semibold">{initials(client.name)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-bold truncate">{client.name}</h3>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 inline-flex items-center gap-0.5"><Flame className="size-2.5" />Lead quente</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">{m.area}</p>
+            <p className="text-sm font-bold gradient-text mt-0.5">{brl(m.value)}</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="size-7 grid place-items-center rounded-md text-muted-foreground hover:bg-white/[0.05]"><X className="size-4" /></button>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       </div>
 
       {/* Quick actions */}
       <div className="grid grid-cols-4 gap-1.5 p-3 border-b border-border/40">
         {[
+<<<<<<< HEAD
           { icon: MessageCircle, label: "WhatsApp", color: "text-emerald-400", action: openWhatsApp, disabled: !client.phone },
           { icon: Mail, label: "Email", color: "text-blue-400", action: openEmail, disabled: !client.email },
           { icon: PhoneCall, label: "Ligar", color: "text-violet-400", action: openCall, disabled: !client.phone },
@@ -886,6 +1286,14 @@ function ClientDrawer({ client, onClose, onMove, onToggleHot, onDelete, onUpdate
             disabled={a.disabled}
             className={`flex flex-col items-center gap-1 py-2 rounded-lg hover:bg-white/[0.04] transition disabled:opacity-40 disabled:cursor-not-allowed`}
           >
+=======
+          { icon: MessageCircle, label: "WhatsApp", color: "text-emerald-400" },
+          { icon: Mail, label: "Email", color: "text-blue-400" },
+          { icon: PhoneCall, label: "Ligar", color: "text-violet-400" },
+          { icon: MoreHorizontal, label: "Mais", color: "text-muted-foreground" },
+        ].map(a => (
+          <button key={a.label} className="flex flex-col items-center gap-1 py-2 rounded-lg hover:bg-white/[0.04] transition">
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
             <a.icon className={`size-4 ${a.color}`} />
             <span className="text-[9px] text-muted-foreground">{a.label}</span>
           </button>
@@ -893,9 +1301,17 @@ function ClientDrawer({ client, onClose, onMove, onToggleHot, onDelete, onUpdate
       </div>
 
       {/* Tabs */}
+<<<<<<< HEAD
       <div className="flex items-center gap-0 border-b border-border/40 px-3 overflow-x-auto shrink-0">
         {(["resumo", "historico", "processos", "financeiro", "ia"] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
+=======
+      <div className="flex items-center gap-0 border-b border-border/40 px-3 overflow-x-auto">
+        {(["resumo", "historico", "processos", "financeiro", "ia"] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
             className={`relative px-3 py-2.5 text-[11px] font-medium capitalize whitespace-nowrap transition ${tab === t ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
             {t === "ia" ? "IA" : t}
@@ -904,6 +1320,7 @@ function ClientDrawer({ client, onClose, onMove, onToggleHot, onDelete, onUpdate
         ))}
       </div>
 
+<<<<<<< HEAD
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* ---- RESUMO ---- */}
@@ -1070,11 +1487,77 @@ function ClientDrawer({ client, onClose, onMove, onToggleHot, onDelete, onUpdate
                   {p.area && <span>{p.area}</span>}
                   {(p.value_cents ?? 0) > 0 && <span>{brl((p.value_cents ?? 0) / 100)}</span>}
                 </div>
+=======
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {tab === "resumo" && (
+          <>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dados do Cliente</h4>
+                <button className="text-[10px] text-primary hover:underline">Editar</button>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <Row label="CPF/CNPJ" value={client.doc || "—"} />
+                <Row label="Telefone" value={client.phone || "—"} />
+                <Row label="Email" value={client.email || "—"} mono />
+                <Row label="Tipo" value={client.type === "PF" ? "Pessoa Física" : "Pessoa Jurídica"} />
+                <Row label="Responsável" value={m.owner} />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Etapa do Pipeline</h4>
+              <Select value={client.status} onValueChange={v => onMove(client.id, v)}>
+                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>{STAGES.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}</SelectContent>
+              </Select>
+              <div className="mt-2 h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+                <div className="h-full" style={{ width: `${((STAGES.findIndex(s => s.id === stage.id) + 1) / STAGES.length) * 100}%`, background: stage.color, boxShadow: `0 0 12px ${stage.color}` }} />
+              </div>
+            </div>
+          </>
+        )}
+
+        {tab === "historico" && (
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Timeline</h4>
+            <ol className="relative border-l border-border/40 ml-2 space-y-4">
+              {[
+                { icon: Sparkles, color: "bg-emerald-500", title: "Lead criado", date: new Date(client.created_at).toLocaleString("pt-BR") },
+                { icon: Calendar, color: "bg-blue-500", title: "Reunião realizada", date: "—" },
+                { icon: FileText, color: "bg-amber-500", title: "Proposta enviada", date: "—" },
+                { icon: CheckCircle2, color: "bg-violet-500", title: "Follow-up agendado", date: "—" },
+              ].map((e, i) => (
+                <li key={i} className="ml-4">
+                  <span className={`absolute -left-[7px] size-3 rounded-full ${e.color} ring-4 ring-background shadow-[0_0_8px_currentColor]`} />
+                  <p className="text-xs font-medium">{e.title}</p>
+                  <p className="text-[10px] text-muted-foreground">{e.date}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {tab === "processos" && (
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Processos Relacionados</h4>
+            {[
+              { num: "0001234-56.2023.8.26.0100", title: "Ação Trabalhista" },
+              { num: "0009876-12.2024.8.26.0100", title: "Reclamação Trabalhista" },
+            ].map(p => (
+              <div key={p.num} className="rounded-xl border border-border/40 bg-white/[0.02] p-3 hover:bg-white/[0.04] transition">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-mono">{p.num}</p>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">Ativo</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{p.title}</p>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
               </div>
             ))}
           </div>
         )}
 
+<<<<<<< HEAD
         {/* ---- FINANCEIRO ---- */}
         {tab === "financeiro" && (
           <div className="space-y-3">
@@ -1124,6 +1607,17 @@ function ClientDrawer({ client, onClose, onMove, onToggleHot, onDelete, onUpdate
         )}
 
         {/* ---- IA ---- */}
+=======
+        {tab === "financeiro" && (
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Financeiro</h4>
+            <Row label="Receita gerada" value={brl(0)} />
+            <Row label="Valores em aberto" value={brl(m.value)} highlight="text-amber-300" />
+            <Row label="Pagamentos recebidos" value={brl(0)} highlight="text-emerald-300" />
+          </div>
+        )}
+
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
         {tab === "ia" && (
           <div className="space-y-3">
             <div className="rounded-xl bg-violet-500/5 border border-violet-500/20 p-4">
@@ -1132,6 +1626,7 @@ function ClientDrawer({ client, onClose, onMove, onToggleHot, onDelete, onUpdate
                 <h4 className="text-xs font-semibold">Análise Inteligente</h4>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
+<<<<<<< HEAD
                 {client.area
                   ? `Cliente da área de ${client.area}. ${client.is_hot ? "Lead marcado como quente — contato prioritário." : "Acompanhe regularmente para manter o relacionamento ativo."}`
                   : "Defina a área jurídica do cliente para receber sugestões personalizadas."
@@ -1153,10 +1648,16 @@ function ClientDrawer({ client, onClose, onMove, onToggleHot, onDelete, onUpdate
                 <li className="flex items-center gap-2"><FileText className="size-3 text-blue-300 shrink-0" />Registrar todas as interações no histórico</li>
               </ul>
             </div>
+=======
+                Cliente com alto potencial de conversão. Recomendamos contato em até 48h com proposta personalizada para a área de {m.area}.
+              </p>
+            </div>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
           </div>
         )}
       </div>
 
+<<<<<<< HEAD
       {/* Footer */}
       <div className="p-3 border-t border-border/40 flex gap-2">
         <Button
@@ -1173,6 +1674,11 @@ function ClientDrawer({ client, onClose, onMove, onToggleHot, onDelete, onUpdate
           onClick={() => setTab("historico")}
         >
           <Plus className="size-3.5 mr-1" /> Nova atividade
+=======
+      <div className="p-3 border-t border-border/40">
+        <Button className="w-full h-10 bg-[image:var(--gradient-brand)] shadow-[0_4px_20px_-4px_oklch(0.70_0.18_285/0.6)] hover:shadow-[0_6px_28px_-4px_oklch(0.70_0.18_285/0.8)]">
+          <Sparkles className="size-4 mr-1.5" />Gerar resumo com IA
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
         </Button>
       </div>
     </aside>
@@ -1187,6 +1693,7 @@ function Row({ label, value, mono, highlight }: { label: string; value: string; 
     </div>
   );
 }
+<<<<<<< HEAD
 
 function StatusPill({ status }: { status: string }) {
   const s = status.toLowerCase();
@@ -1207,3 +1714,5 @@ function StatusPill({ status }: { status: string }) {
     </span>
   );
 }
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a

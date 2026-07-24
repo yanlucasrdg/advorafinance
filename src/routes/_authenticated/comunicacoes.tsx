@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+=======
+import { createFileRoute } from "@tanstack/react-router";
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -20,7 +24,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { useServerFn } from "@tanstack/react-start";
 import { zapiSendText } from "@/lib/zapi.functions";
+<<<<<<< HEAD
 import { storeCommandIntent } from "@/lib/command-intent";
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
 
 export const Route = createFileRoute("/_authenticated/comunicacoes")({
@@ -43,7 +50,10 @@ type Conversation = {
   assigned_to: string | null;
   assignment_status: AssignmentStatus | null;
   tags: string[] | null;
+<<<<<<< HEAD
   client_id: string | null;
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   archived_at: string | null;
   created_at: string;
 };
@@ -93,7 +103,10 @@ function initials(name: string | null, phone: string | null): string {
 
 function Comunicacoes() {
   const { profile, user } = useAuth();
+<<<<<<< HEAD
   const navigate = useNavigate();
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -199,6 +212,7 @@ function Comunicacoes() {
     load();
   };
 
+<<<<<<< HEAD
   const openCrmRecord = async () => {
     if (!current || !profile?.tenant_id) return;
     let clientId = current.client_id;
@@ -244,6 +258,8 @@ function Comunicacoes() {
     navigate({ to: "/crm" });
   };
 
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const addTag = async (id: string, tag: string) => {
     const t = tag.trim();
     if (!t) return;
@@ -336,6 +352,7 @@ function Comunicacoes() {
         return;
       }
 
+<<<<<<< HEAD
       let clientId: string | null = null;
 
       // Also link/create a client record by phone (WhatsApp only)
@@ -353,6 +370,20 @@ function Comunicacoes() {
           } as never).select("id").single();
           if (clientError) throw new Error(clientError.message);
           clientId = createdClient?.id ?? null;
+=======
+      // Also link/create a client record by phone (WhatsApp only)
+      if (channel === "whatsapp") {
+        const { data: cli } = await supabase.from("clients").select("id").eq("phone", identifier).maybeSingle();
+        if (!cli) {
+          await supabase.from("clients").insert({
+            tenant_id: profile.tenant_id,
+            name: newContact.name.trim(),
+            phone: identifier,
+            type: "pf",
+            status: "novo_contato",
+            created_by: user?.id ?? null,
+          } as never);
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
         }
       }
 
@@ -367,7 +398,10 @@ function Comunicacoes() {
         last_message: newContact.message.trim() || null,
         last_message_at: new Date().toISOString(),
         unread_count: 0,
+<<<<<<< HEAD
         client_id: clientId,
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       } as never).select().single();
       if (error) throw new Error(error.message);
 
@@ -713,6 +747,7 @@ function Comunicacoes() {
                 </div>
               </div>
 
+<<<<<<< HEAD
               <div className="rounded-xl border border-primary/15 bg-primary/[0.035] p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
@@ -726,6 +761,8 @@ function Comunicacoes() {
                 </Button>
               </div>
 
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
               <div className="space-y-1.5">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Tag className="size-3" /> Tags</div>
                 <div className="flex flex-wrap gap-1">

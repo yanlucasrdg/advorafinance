@@ -16,6 +16,7 @@ type ZapiDevice = {
   connected?: boolean;
 };
 
+<<<<<<< HEAD
 function baseUrl() {
   const id = process.env.ZAPI_INSTANCE_ID;
   const token = process.env.ZAPI_INSTANCE_TOKEN;
@@ -39,6 +40,67 @@ async function zapiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${baseUrl()}${path}`, {
     ...init,
     headers: { ...clientHeaders(), ...(init?.headers ?? {}) },
+=======
+type ZapiCreds = {
+  instanceId: string;
+  token: string;
+  clientToken: string;
+};
+
+async function loadTenantCreds(userId: string): Promise<ZapiCreds> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+  const { data: profile, error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .select("tenant_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileErr) throw new Error(profileErr.message);
+  const tenantId = profile?.tenant_id;
+  if (!tenantId) {
+    throw new Error("WhatsApp não configurado para o seu escritório.");
+  }
+
+  const { data: inst, error: instErr } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("zapi_instance_id, zapi_token, zapi_client_token")
+    .eq("tenant_id", tenantId)
+    .not("zapi_instance_id", "is", null)
+    .not("zapi_token", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (instErr) throw new Error(instErr.message);
+  if (!inst?.zapi_instance_id || !inst?.zapi_token) {
+    throw new Error("WhatsApp não configurado para o seu escritório.");
+  }
+
+  return {
+    instanceId: inst.zapi_instance_id,
+    token: inst.zapi_token,
+    clientToken: inst.zapi_client_token ?? "",
+  };
+}
+
+function buildBaseUrl(creds: ZapiCreds) {
+  return `https://api.z-api.io/instances/${creds.instanceId}/token/${creds.token}`;
+}
+
+async function zapiFetch<T>(
+  creds: ZapiCreds,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetch(`${buildBaseUrl(creds)}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      "Client-Token": creds.clientToken,
+      ...(init?.headers ?? {}),
+    },
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   });
   const text = await res.text();
   let json: unknown = null;
@@ -59,14 +121,24 @@ async function zapiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const zapiStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
+<<<<<<< HEAD
   .handler(async (): Promise<ZapiStatus> => {
     try {
+=======
+  .handler(async ({ context }): Promise<ZapiStatus> => {
+    try {
+      const creds = await loadTenantCreds(context.userId);
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       const data = await zapiFetch<{
         connected?: boolean;
         session?: boolean;
         smartphoneConnected?: boolean;
         error?: string | null;
+<<<<<<< HEAD
       }>("/status");
+=======
+      }>(creds, "/status");
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       return {
         connected: !!data.connected,
         session: !!data.session,
@@ -87,9 +159,16 @@ export const zapiStatus = createServerFn({ method: "GET" })
 
 export const zapiQrCode = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
+<<<<<<< HEAD
   .handler(async (): Promise<{ image: string | null; error?: string }> => {
     try {
       const data = await zapiFetch<{ value?: string }>("/qr-code/image");
+=======
+  .handler(async ({ context }): Promise<{ image: string | null; error?: string }> => {
+    try {
+      const creds = await loadTenantCreds(context.userId);
+      const data = await zapiFetch<{ value?: string }>(creds, "/qr-code/image");
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       const value = data?.value ?? null;
       if (!value) return { image: null, error: "QR Code indisponível" };
       const image = value.startsWith("data:") ? value : `data:image/png;base64,${value}`;
@@ -104,9 +183,16 @@ export const zapiQrCode = createServerFn({ method: "GET" })
 
 export const zapiDevice = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
+<<<<<<< HEAD
   .handler(async (): Promise<ZapiDevice | null> => {
     try {
       return await zapiFetch<ZapiDevice>("/device");
+=======
+  .handler(async ({ context }): Promise<ZapiDevice | null> => {
+    try {
+      const creds = await loadTenantCreds(context.userId);
+      return await zapiFetch<ZapiDevice>(creds, "/device");
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     } catch {
       return null;
     }
@@ -114,15 +200,27 @@ export const zapiDevice = createServerFn({ method: "GET" })
 
 export const zapiDisconnect = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
+<<<<<<< HEAD
   .handler(async () => {
     await zapiFetch("/disconnect");
+=======
+  .handler(async ({ context }) => {
+    const creds = await loadTenantCreds(context.userId);
+    await zapiFetch(creds, "/disconnect");
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     return { ok: true };
   });
 
 export const zapiRestart = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
+<<<<<<< HEAD
   .handler(async () => {
     await zapiFetch("/restart");
+=======
+  .handler(async ({ context }) => {
+    const creds = await loadTenantCreds(context.userId);
+    await zapiFetch(creds, "/restart");
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     return { ok: true };
   });
 
@@ -135,9 +233,22 @@ export const zapiSendText = createServerFn({ method: "POST" })
     if (!message) throw new Error("Mensagem vazia");
     return { phone, message };
   })
+<<<<<<< HEAD
   .handler(async ({ data }) => {
     return await zapiFetch<{ zaapId?: string; messageId?: string; id?: string }>("/send-text", {
       method: "POST",
       body: JSON.stringify({ phone: data.phone, message: data.message }),
     });
+=======
+  .handler(async ({ data, context }) => {
+    const creds = await loadTenantCreds(context.userId);
+    return await zapiFetch<{ zaapId?: string; messageId?: string; id?: string }>(
+      creds,
+      "/send-text",
+      {
+        method: "POST",
+        body: JSON.stringify({ phone: data.phone, message: data.message }),
+      },
+    );
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   });

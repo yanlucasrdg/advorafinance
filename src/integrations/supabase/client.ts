@@ -23,7 +23,10 @@ function createSupabaseClient() {
       storage: typeof window !== 'undefined' ? localStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
+<<<<<<< HEAD
       detectSessionInUrl: true,
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     }
   });
 }

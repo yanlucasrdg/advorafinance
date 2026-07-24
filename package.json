@@ -13,6 +13,10 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+<<<<<<< HEAD
+=======
+    "@lovable.dev/cloud-auth-js": "^1.1.2",
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -39,9 +43,13 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
+<<<<<<< HEAD
     "@supabase/server": "^1.4.1",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
+=======
+    "@supabase/supabase-js": "^2.108.2",
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/react-query": "^5.83.0",
     "@tanstack/react-router": "^1.168.25",
@@ -87,7 +95,10 @@
     "globals": "^15.15.0",
     "nitro": "3.0.260603-beta",
     "prettier": "^3.7.3",
+<<<<<<< HEAD
     "prisma": "^7.9.0",
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.16"

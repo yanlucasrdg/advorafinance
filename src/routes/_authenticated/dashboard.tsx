@@ -14,11 +14,15 @@ import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeTables } from "@/hooks/use-realtime-table";
 import { useGlobalFilters, PERIOD_LABELS, type PeriodKey } from "@/lib/global-filters";
+<<<<<<< HEAD
 import {
   financeKpis, caseKpis, clientKpis, agendaKpis,
   revenueByMonth, pctDelta, fmtBRL, fmtBRLCompact,
   type FinRow, type CaseRow, type ClientRow, type DeadlineRow,
 } from "@/lib/metrics";
+=======
+import { pctDelta, fmtBRL, fmtBRLCompact } from "@/lib/metrics";
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 import { useMetricsDashboard } from "@/hooks/use-metrics";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -37,12 +41,24 @@ const TOOLTIP_STYLE = {
   padding: "8px 12px",
 };
 
+<<<<<<< HEAD
+=======
+const MONTH_ABBR = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+function bucketLabel(bucket: string) {
+  // bucket format: "YYYY-MM"
+  const [y, m] = bucket.split("-");
+  const idx = Math.max(0, Math.min(11, Number(m) - 1));
+  return `${MONTH_ABBR[idx]}/${y.slice(2)}`;
+}
+
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 function Dashboard() {
   const { profile } = useAuth();
   const firstName = (profile?.full_name ?? "").split(" ")[0] || "advogado(a)";
   const tenantId = profile?.tenant_id ?? null;
   const { filters, setFilter } = useGlobalFilters();
 
+<<<<<<< HEAD
   // ---- Queries ----
   const finQ = useQuery({
     queryKey: ["dash", "financial", tenantId],
@@ -88,6 +104,12 @@ function Dashboard() {
     },
   });
 
+=======
+  // ---- Server-side aggregates (source of truth) ----
+  const { data: dashM, isLoading: loadingMetrics } = useMetricsDashboard();
+
+  // ---- Lists (raw rows, only for individual-record display) ----
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const upcomingQ = useQuery({
     queryKey: ["dash", "upcoming", tenantId],
     enabled: !!tenantId,
@@ -100,7 +122,11 @@ function Dashboard() {
         .order("due_at", { ascending: true })
         .limit(6);
       if (error) throw error;
+<<<<<<< HEAD
       return (data ?? []) as any as {
+=======
+      return (data ?? []) as {
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
         id: string; title: string; due_at: string; kind: string;
         cases: { number: string | null } | null;
       }[];
@@ -117,13 +143,18 @@ function Dashboard() {
         .order("updated_at", { ascending: false })
         .limit(6);
       if (error) throw error;
+<<<<<<< HEAD
       return (data ?? []) as any as {
+=======
+      return (data ?? []) as {
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
         id: string; title: string; number: string | null; status: string; area: string | null;
         clients: { name: string | null } | null;
       }[];
     },
   });
 
+<<<<<<< HEAD
   // Realtime → invalidate all dashboard queries
   useRealtimeTables(
     ["financial_entries", "cases", "clients", "deadlines"],
@@ -183,10 +214,21 @@ function Dashboard() {
   }, [fin]);
 
   // ---- KPI cards (server-side aggregates) ----
+=======
+  // Realtime for lists (metrics hook handles its own realtime)
+  useRealtimeTables(
+    ["deadlines", "cases"],
+    [["dash", "upcoming", tenantId], ["dash", "recent-cases", tenantId]],
+  );
+
+  const loading = loadingMetrics || !dashM;
+
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const F = dashM?.financeiro;
   const P = dashM?.processos;
   const C = dashM?.clientes;
   const A = dashM?.agenda;
+<<<<<<< HEAD
   const kpis = [
 
     {
@@ -194,25 +236,78 @@ function Dashboard() {
       value: fmtBRL(F?.rev_month ?? fin.revMonth),
       delta: revDelta !== null ? `${revDelta >= 0 ? "+" : ""}${revDelta.toFixed(1)}%` : null,
       deltaUp: revDelta !== null ? revDelta >= 0 : undefined,
+=======
+
+  const revDelta = F ? pctDelta(F.rev_month, F.rev_prev) : 0;
+  const revDeltaValid = F ? (F.rev_prev || F.rev_month) : false;
+
+  // Series: 12 months from server
+  const revenue12 = useMemo(() => {
+    const s = F?.series ?? [];
+    return s.map((b) => ({ label: bucketLabel(b.bucket), Receita: b.receita / 100, Despesa: b.despesa / 100 }));
+  }, [F?.series]);
+
+  const areaDist = useMemo(() => {
+    const src = P?.by_area ?? {};
+    return Object.entries(src)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, value]) => ({ name, value }));
+  }, [P?.by_area]);
+
+  const statusDist = useMemo(() => {
+    const src = P?.by_status ?? {};
+    return Object.entries(src).map(([name, value]) => ({ name, value }));
+  }, [P?.by_status]);
+
+  const respDist = useMemo(() => {
+    const src = P?.by_resp ?? {};
+    return Object.entries(src)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name, value]) => ({ name: name === "sem-responsavel" ? "Sem resp." : name, value }));
+  }, [P?.by_resp]);
+
+  const topClients = dashM?.top_clientes ?? [];
+  const totalCases = P ? Object.values(P.by_status).reduce((a, b) => a + b, 0) : 0;
+
+  const kpis = [
+    {
+      label: "Receita do mês",
+      value: fmtBRL(F?.rev_month ?? 0),
+      delta: revDeltaValid ? `${revDelta >= 0 ? "+" : ""}${revDelta.toFixed(1)}%` : null,
+      deltaUp: revDeltaValid ? revDelta >= 0 : undefined,
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       sub: "vs mês anterior",
       icon: DollarSign, iconColor: "text-success", iconBg: "bg-success/10",
     },
     {
       label: "Receita YTD",
+<<<<<<< HEAD
       value: fmtBRLCompact(F?.rev_year ?? fin.revYear),
+=======
+      value: fmtBRLCompact(F?.rev_year ?? 0),
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       delta: null, sub: "acumulado no ano",
       icon: Wallet, iconColor: "text-primary", iconBg: "bg-primary/10",
     },
     {
       label: "A Receber",
+<<<<<<< HEAD
       value: fmtBRL(F?.open_receivable ?? fin.openReceivable),
       delta: (F?.overdue_receivable ?? fin.overdueReceivable) > 0 ? fmtBRLCompact(F?.overdue_receivable ?? fin.overdueReceivable) : "0",
       deltaUp: (F?.overdue_receivable ?? fin.overdueReceivable) === 0,
+=======
+      value: fmtBRL(F?.open_receivable ?? 0),
+      delta: (F?.overdue_receivable ?? 0) > 0 ? fmtBRLCompact(F?.overdue_receivable ?? 0) : "0",
+      deltaUp: (F?.overdue_receivable ?? 0) === 0,
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       sub: "vencido",
       icon: TrendingUp, iconColor: "text-warning", iconBg: "bg-warning/10",
     },
     {
       label: "Inadimplência",
+<<<<<<< HEAD
       value: `${(F?.delinquency_pct ?? fin.delinquencyPct).toFixed(1)}%`,
       delta: null, sub: "do a receber",
       icon: AlertTriangle,
@@ -222,48 +317,89 @@ function Dashboard() {
     {
       label: "Ticket médio",
       value: fmtBRL(F?.ticket_avg ?? fin.ticketAvg),
+=======
+      value: `${(F?.delinquency_pct ?? 0).toFixed(1)}%`,
+      delta: null, sub: "do a receber",
+      icon: AlertTriangle,
+      iconColor: (F?.delinquency_pct ?? 0) > 20 ? "text-destructive" : "text-warning",
+      iconBg: (F?.delinquency_pct ?? 0) > 20 ? "bg-destructive/10" : "bg-warning/10",
+    },
+    {
+      label: "Ticket médio",
+      value: fmtBRL(F?.ticket_avg ?? 0),
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       delta: null, sub: "receita YTD",
       icon: Target, iconColor: "text-[color:oklch(0.55_0.18_240)]", iconBg: "bg-[oklch(0.55_0.18_240/0.10)]",
     },
     {
       label: "Processos ativos",
+<<<<<<< HEAD
       value: String(P?.active.value ?? cs.byStatus.ativo ?? 0),
       delta: (P?.stale_30d ?? cs.stale30) > 0 ? `${P?.stale_30d ?? cs.stale30}` : null,
       deltaUp: (P?.stale_30d ?? cs.stale30) === 0,
+=======
+      value: String(P?.active.value ?? 0),
+      delta: (P?.stale_30d ?? 0) > 0 ? `${P?.stale_30d ?? 0}` : null,
+      deltaUp: (P?.stale_30d ?? 0) === 0,
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       sub: "sem mov. 30d+",
       icon: Briefcase, iconColor: "text-primary", iconBg: "bg-primary/10",
     },
     {
       label: "Valor em causa",
+<<<<<<< HEAD
       value: fmtBRLCompact(P?.value_cause.value ?? cs.valueInCause),
       delta: null, sub: `${P ? Object.values(P.by_status).reduce((a,b)=>a+b,0) : cs.total} processos`,
+=======
+      value: fmtBRLCompact(P?.value_cause.value ?? 0),
+      delta: null, sub: `${totalCases} processos`,
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       icon: Scale, iconColor: "text-[color:oklch(0.55_0.15_180)]", iconBg: "bg-[oklch(0.55_0.15_180/0.10)]",
     },
     {
       label: "Clientes",
+<<<<<<< HEAD
       value: String(C?.total ?? cl.total),
       delta: (C?.new_month ?? cl.newMonth) ? `+${C?.new_month ?? cl.newMonth}` : "0",
       deltaUp: (C?.new_month ?? cl.newMonth) > 0,
+=======
+      value: String(C?.total ?? 0),
+      delta: (C?.new_month ?? 0) ? `+${C?.new_month ?? 0}` : "0",
+      deltaUp: (C?.new_month ?? 0) > 0,
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       sub: "novos no mês",
       icon: Users, iconColor: "text-[color:oklch(0.55_0.18_290)]", iconBg: "bg-[oklch(0.55_0.18_290/0.10)]",
     },
     {
       label: "Prazos 7d",
+<<<<<<< HEAD
       value: String(A?.proximos_7d ?? ag.next7),
       delta: (A?.atraso ?? ag.overdue) > 0 ? `${A?.atraso ?? ag.overdue}` : null,
       deltaUp: (A?.atraso ?? ag.overdue) === 0,
+=======
+      value: String(A?.proximos_7d ?? 0),
+      delta: (A?.atraso ?? 0) > 0 ? `${A?.atraso ?? 0}` : null,
+      deltaUp: (A?.atraso ?? 0) === 0,
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       sub: "vencidos",
       icon: Clock, iconColor: "text-destructive", iconBg: "bg-destructive/10",
     },
     {
       label: "Concluídos hoje",
+<<<<<<< HEAD
       value: String(A?.concluidos_hoje ?? ag.done),
+=======
+      value: String(A?.concluidos_hoje ?? 0),
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       delta: null, sub: "prazos",
       icon: CheckCircle2, iconColor: "text-success", iconBg: "bg-success/10",
     },
   ];
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const upcoming = upcomingQ.data ?? [];
   const recent = recentQ.data ?? [];
 
@@ -344,7 +480,11 @@ function Dashboard() {
           <div className="h-[240px]">
             {loading ? <div className="h-full skeleton rounded-xl" /> : (
               <ResponsiveContainer width="100%" height="100%">
+<<<<<<< HEAD
                 <AreaChart data={revenue12.map(b => ({ label: b.label, Receita: b.receita / 100, Despesa: b.despesa / 100 }))} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
+=======
+                <AreaChart data={revenue12} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                   <defs>
                     <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#5B4CF0" stopOpacity={0.4} /><stop offset="100%" stopColor="#5B4CF0" stopOpacity={0} />
@@ -401,7 +541,11 @@ function Dashboard() {
         </div>
       </section>
 
+<<<<<<< HEAD
       {/* Segunda linha: status processos + receita por advogado + clientes PF/PJ */}
+=======
+      {/* Segunda linha: status processos + processos por responsável + clientes PF/PJ */}
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="glass rounded-2xl p-5">
           <h2 className="font-semibold text-[15px] tracking-tight">Processos por status</h2>
@@ -424,6 +568,7 @@ function Dashboard() {
         </div>
 
         <div className="glass rounded-2xl p-5">
+<<<<<<< HEAD
           <h2 className="font-semibold text-[15px] tracking-tight">Receita por advogado</h2>
           <p className="text-xs text-muted-foreground mt-0.5 mb-3">Top 6 · YTD</p>
           {loading ? <div className="h-[180px] skeleton rounded-xl" /> : revByResp.length === 0 ? (
@@ -436,6 +581,20 @@ function Dashboard() {
                   <XAxis dataKey="name" stroke="#94A3B8" fontSize={10} tickLine={false} axisLine={false} interval={0} tickFormatter={(v) => String(v).split(" ")[0]} />
                   <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `R$${(v/1000).toFixed(0)}k`} width={50} />
                   <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v)} />
+=======
+          <h2 className="font-semibold text-[15px] tracking-tight">Processos por responsável</h2>
+          <p className="text-xs text-muted-foreground mt-0.5 mb-3">Top 6 · carteira ativa</p>
+          {loading ? <div className="h-[180px] skeleton rounded-xl" /> : respDist.length === 0 ? (
+            <EmptyBlock label="Sem processos com responsável" />
+          ) : (
+            <div className="h-[180px]">
+              <ResponsiveContainer>
+                <BarChart data={respDist} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+                  <CartesianGrid stroke="#E5E7EB" vertical={false} />
+                  <XAxis dataKey="name" stroke="#94A3B8" fontSize={10} tickLine={false} axisLine={false} interval={0} tickFormatter={(v) => String(v).split(" ")[0]} />
+                  <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} />
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                   <Bar dataKey="value" fill="#16A34A" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -446,6 +605,7 @@ function Dashboard() {
         <div className="glass rounded-2xl p-5">
           <h2 className="font-semibold text-[15px] tracking-tight">Clientes</h2>
           <p className="text-xs text-muted-foreground mt-0.5 mb-3">Ativos vs inativos · PF vs PJ</p>
+<<<<<<< HEAD
           {loading ? <div className="h-[180px] skeleton rounded-xl" /> : cl.total === 0 ? (
             <EmptyBlock label="Sem clientes cadastrados" />
           ) : (
@@ -454,6 +614,16 @@ function Dashboard() {
               <MiniStat label="Inativos" value={cl.inactive} tone="muted" />
               <MiniStat label="Pessoa Física" value={cl.pf} tone="primary" />
               <MiniStat label="Pessoa Jurídica" value={cl.pj} tone="violet" />
+=======
+          {loading ? <div className="h-[180px] skeleton rounded-xl" /> : (C?.total ?? 0) === 0 ? (
+            <EmptyBlock label="Sem clientes cadastrados" />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 h-full">
+              <MiniStat label="Ativos" value={C?.active ?? 0} tone="success" />
+              <MiniStat label="Inativos" value={C?.inactive ?? 0} tone="muted" />
+              <MiniStat label="Pessoa Física" value={C?.pf ?? 0} tone="primary" />
+              <MiniStat label="Pessoa Jurídica" value={C?.pj ?? 0} tone="violet" />
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
             </div>
           )}
         </div>
@@ -557,6 +727,7 @@ function Dashboard() {
             icon={revDelta >= 0 ? TrendingUp : TrendingDown}
             tone={revDelta >= 0 ? "success" : "destructive"}
             title={revDelta >= 0 ? "Receita em crescimento" : "Receita em queda"}
+<<<<<<< HEAD
             body={`Receita do mês ${revDelta >= 0 ? "subiu" : "caiu"} ${Math.abs(revDelta).toFixed(1)}% em relação ao mês anterior.`}
           />
           <InsightCard
@@ -570,12 +741,37 @@ function Dashboard() {
             tone={cs.stale30 > 0 ? "warning" : "success"}
             title="Processos parados"
             body={cs.stale30 > 0 ? `${cs.stale30} processos ativos sem movimentação há 30+ dias.` : "Todos os processos ativos tiveram movimentação recente."}
+=======
+            body={revDeltaValid
+              ? `Receita do mês ${revDelta >= 0 ? "subiu" : "caiu"} ${Math.abs(revDelta).toFixed(1)}% em relação ao mês anterior.`
+              : "Sem base histórica suficiente para comparar variação mensal."}
+          />
+          <InsightCard
+            icon={AlertTriangle}
+            tone={(F?.overdue_receivable ?? 0) > 0 ? "destructive" : "success"}
+            title="Contas vencidas"
+            body={(F?.overdue_receivable ?? 0) > 0
+              ? `${fmtBRL(F?.overdue_receivable ?? 0)} em títulos vencidos a receber.`
+              : "Nenhum título vencido. Cobrança em dia."}
+          />
+          <InsightCard
+            icon={Clock}
+            tone={(P?.stale_30d ?? 0) > 0 ? "warning" : "success"}
+            title="Processos parados"
+            body={(P?.stale_30d ?? 0) > 0
+              ? `${P?.stale_30d ?? 0} processos ativos sem movimentação há 30+ dias.`
+              : "Todos os processos ativos tiveram movimentação recente."}
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
           />
           <InsightCard
             icon={Activity}
             tone="primary"
             title="Pipeline de prazos"
+<<<<<<< HEAD
             body={`${ag.next7} prazos vencem nos próximos 7 dias · ${ag.overdue} vencidos.`}
+=======
+            body={`${A?.proximos_7d ?? 0} prazos vencem nos próximos 7 dias · ${A?.atraso ?? 0} vencidos.`}
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
           />
         </div>
 
@@ -587,9 +783,15 @@ function Dashboard() {
                 <li key={c.id} className="flex items-center justify-between py-2.5 text-sm">
                   <span className="inline-flex items-center gap-3 min-w-0">
                     <span className="size-6 rounded-md bg-primary/10 text-primary text-[11px] font-semibold grid place-items-center">{i + 1}</span>
+<<<<<<< HEAD
                     <span className="font-mono text-xs text-muted-foreground truncate">{c.name}</span>
                   </span>
                   <span className="tabular-nums font-semibold">{fmtBRL(c.value)}</span>
+=======
+                    <span className="text-xs text-foreground truncate">{c.name}</span>
+                  </span>
+                  <span className="tabular-nums font-semibold">{fmtBRL(c.total)}</span>
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                 </li>
               ))}
             </ul>

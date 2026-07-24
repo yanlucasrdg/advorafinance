@@ -1,5 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+<<<<<<< HEAD
 import { useEffect, useMemo, useState } from "react";
+=======
+import { useMemo, useState } from "react";
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Trash2, TrendingUp, TrendingDown, Wallet, DollarSign, AlertCircle,
@@ -35,14 +39,31 @@ import {
   type FinRow, type DreConfig,
 } from "@/lib/metrics";
 import { toast } from "sonner";
+<<<<<<< HEAD
 import { consumeCommandIntent } from "@/lib/command-intent";
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
 export const Route = createFileRoute("/_authenticated/financeiro")({
   head: () => ({ meta: [{ title: "Financeiro — Advora" }] }),
   component: Financeiro,
 });
 
+<<<<<<< HEAD
 import { useFinance, type Entry, type CaseLite, type ClientLite, type PaymentRow, type AuditRow, type NotificationRow, type DreSettingsRow } from "@/hooks/use-finance";
+=======
+type Entry = FinRow & {
+  id: string;
+  description: string;
+  clients?: { name: string } | null;
+};
+type CaseLite = { id: string; area: string | null; responsible: string | null };
+type ClientLite = { id: string; name: string };
+type PaymentRow = { id: string; entry_id: string; amount_cents: number; paid_at: string; method: string | null; notes: string | null };
+type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
+type NotificationRow = { id: string; kind: string; title: string; body: string | null; entry_id: string | null; read_at: string | null; created_at: string };
+type DreSettingsRow = { tenant_id: string; apply_cogs: boolean; enabled_categories: string[]; category_map: Record<string, string> };
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
 const TOOLTIP_STYLE = {
   background: "#FFFFFF",
@@ -68,17 +89,58 @@ function Financeiro() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [form, setForm] = useState({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
 
+<<<<<<< HEAD
   useEffect(() => {
     const intent = consumeCommandIntent();
     if (intent?.type === "create-entry") setOpen(true);
   }, []);
 
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   useRealtimeTables(
     ["financial_entries", "cases", "clients"],
     [["fin", "entries", tenantId], ["fin", "cases", tenantId], ["fin", "clients", tenantId]],
   );
 
+<<<<<<< HEAD
   const { entries, cases, clients, dreConfigData, auditLogs, notifications, isLoading: loading, create, remove } = useFinance();
+=======
+  const entriesQ = useQuery({
+    queryKey: ["fin", "entries", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_entries")
+        .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,paid_amount_cents,settlement_status,category,payment_method,clients(name)")
+        .order("due_date", { ascending: false, nullsFirst: false });
+      if (error) throw error;
+      return (data ?? []) as unknown as Entry[];
+    },
+  });
+  const casesQ = useQuery({
+    queryKey: ["fin", "cases", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("cases").select("id,area,responsible");
+      if (error) throw error;
+      return (data ?? []) as CaseLite[];
+    },
+  });
+  const clientsQ = useQuery({
+    queryKey: ["fin", "clients", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("clients").select("id,name").order("name");
+      if (error) throw error;
+      return (data ?? []) as ClientLite[];
+    },
+  });
+
+  const entries = entriesQ.data ?? [];
+  const cases = casesQ.data ?? [];
+  const clients = clientsQ.data ?? [];
+  const loading = entriesQ.isLoading || casesQ.isLoading;
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
   const caseMap = useMemo(() => new Map(cases.map((c) => [c.id, c])), [cases]);
   const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients]);
@@ -221,18 +283,67 @@ function Financeiro() {
   }, [series12]);
 
   // DRE settings (per tenant)
+<<<<<<< HEAD
   const dreConfig: DreConfig = useMemo(() => dreConfigData ? {
     applyCogs: dreConfigData.apply_cogs,
     enabledCategories: dreConfigData.enabled_categories,
     categoryMap: dreConfigData.category_map ?? {},
   } : DEFAULT_DRE_CONFIG, [dreConfigData]);
+=======
+  const dreCfgQ = useQuery({
+    queryKey: ["fin", "dre_settings", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: DreSettingsRow | null; error: unknown }> } } } })
+        .from("dre_settings").select("*").eq("tenant_id", tenantId!).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const dreConfig: DreConfig = useMemo(() => dreCfgQ.data ? {
+    applyCogs: dreCfgQ.data.apply_cogs,
+    enabledCategories: dreCfgQ.data.enabled_categories,
+    categoryMap: dreCfgQ.data.category_map ?? {},
+  } : DEFAULT_DRE_CONFIG, [dreCfgQ.data]);
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
   // DRE + Cash Flow (period-scoped)
   const dre = useMemo(() => dreReport(filtered, range.start, range.end, dreConfig), [filtered, range.start, range.end, dreConfig]);
   const cashDirect = useMemo(() => cashFlowDirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
   const cashIndirect = useMemo(() => cashFlowIndirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
 
+<<<<<<< HEAD
   const unreadCount = notifications.filter((n) => !n.read_at).length;
+=======
+  // Recent audit log
+  const auditQ = useQuery({
+    queryKey: ["fin", "audit", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_audit_log")
+        .select("id,entry_id,action,created_at,actor_id,before,after")
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      return (data ?? []) as unknown as AuditRow[];
+    },
+  });
+
+  // Notifications
+  const notifQ = useQuery({
+    queryKey: ["fin", "notifications", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { order: (k: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: NotificationRow[] | null; error: unknown }> } } } })
+        .from("notifications").select("id,kind,title,body,entry_id,read_at,created_at")
+        .order("created_at", { ascending: false }).limit(30);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const unreadCount = (notifQ.data ?? []).filter((n) => !n.read_at).length;
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
   useRealtimeTables(
     ["financial_audit_log", "financial_payments", "notifications"],
@@ -248,6 +359,7 @@ function Financeiro() {
     [filtered],
   );
 
+<<<<<<< HEAD
   const reconcileEntryFresh = useMemo(
     () => (reconcileEntry ? entries.find((e) => e.id === reconcileEntry.id) ?? reconcileEntry : null),
     [reconcileEntry, entries],
@@ -256,6 +368,11 @@ function Financeiro() {
   const handleCreate = async () => {
     if (!form.description.trim() || !tenantId) return;
     create.mutate({
+=======
+  const create = async () => {
+    if (!form.description.trim() || !tenantId) return;
+    const { error } = await supabase.from("financial_entries").insert({
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       tenant_id: tenantId,
       description: form.description,
       kind: form.kind,
@@ -265,6 +382,7 @@ function Financeiro() {
       client_id: form.client_id || null,
       case_id: form.case_id || null,
       category: form.category || null,
+<<<<<<< HEAD
     } as any, {
       onSuccess: () => {
         setOpen(false);
@@ -274,6 +392,18 @@ function Financeiro() {
   };
   const handleRemove = async (id: string) => {
     remove.mutate(id);
+=======
+    });
+    if (error) return toast.error(error.message);
+    toast.success("Lançamento criado");
+    setOpen(false);
+    setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
+    qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
+  };
+  const remove = async (id: string) => {
+    await supabase.from("financial_entries").delete().eq("id", id);
+    qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   };
 
   const downloadCsv = (name: string, rows: (string | number)[][]) => {
@@ -782,13 +912,20 @@ function Financeiro() {
       </div>
 
       <ReconcileDialog
+<<<<<<< HEAD
         entry={reconcileEntryFresh}
+=======
+        entry={reconcileEntry}
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
         tenantId={tenantId}
         onClose={() => setReconcileEntry(null)}
         onDone={() => {
           qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
           qc.invalidateQueries({ queryKey: ["fin", "audit", tenantId] });
+<<<<<<< HEAD
           qc.invalidateQueries({ queryKey: ["fin", "payments"] });
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
         }}
       />
 
@@ -826,12 +963,16 @@ function RowLine({ label, value, tone, bold, big }: { label: string; value: numb
 }
 
 function ReconcileDialog({ entry, tenantId, onClose, onDone }: { entry: Entry | null; tenantId: string | null; onClose: () => void; onDone: () => void }) {
+<<<<<<< HEAD
   const qc = useQueryClient();
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState("pix");
   const [notes, setNotes] = useState("");
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
 
+<<<<<<< HEAD
   useEffect(() => {
     if (!entry) return;
     setAmount(0);
@@ -840,6 +981,8 @@ function ReconcileDialog({ entry, tenantId, onClose, onDone }: { entry: Entry | 
     setPaidAt(new Date().toISOString().slice(0, 10));
   }, [entry?.id]);
 
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const paymentsQ = useQuery({
     queryKey: ["fin", "payments", entry?.id],
     enabled: !!entry?.id,
@@ -874,11 +1017,16 @@ function ReconcileDialog({ entry, tenantId, onClose, onDone }: { entry: Entry | 
     });
     if (error) return toast.error(error.message);
     toast.success("Baixa registrada");
+<<<<<<< HEAD
     setAmount(0);
     setNotes("");
     onDone();
     void qc.invalidateQueries({ queryKey: ["fin", "payments", entry.id] });
     if (paid + cents >= total && total > 0) onClose();
+=======
+    setAmount(0); setNotes("");
+    onDone();
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   };
 
   const reconcile = async () => {
@@ -922,7 +1070,10 @@ function ReconcileDialog({ entry, tenantId, onClose, onDone }: { entry: Entry | 
                     <Label>Valor (R$)</Label>
                     <Input type="number" value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} />
                     <button className="text-[10px] text-primary hover:underline mt-1" onClick={() => setAmount(remaining / 100)}>Preencher restante</button>
+<<<<<<< HEAD
                     <Button className="bg-[image:var(--gradient-brand)] hover-lift" onClick={handleCreate}>Salvar</Button>
+=======
+>>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
                   </div>
                   <div>
                     <Label>Data do pagamento</Label>
