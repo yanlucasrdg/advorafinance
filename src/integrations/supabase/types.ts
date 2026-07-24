@@ -4,12 +4,7 @@ export type Json =
   | boolean
   | null
   | { [key: string]: Json | undefined }
-<<<<<<< HEAD
   | Json[];
-
-export type Database = any;
-=======
-  | Json[]
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
@@ -1195,5 +1190,4 @@ export const Constants = {
       tenant_plan: ["trial", "starter", "professional", "enterprise"],
     },
   },
-} as const
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
+} as const;

@@ -13,10 +13,7 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
-<<<<<<< HEAD
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 import { Route as AuthenticatedRelatoriosRouteImport } from './routes/_authenticated/relatorios'
 import { Route as AuthenticatedProcessosRouteImport } from './routes/_authenticated/processos'
 import { Route as AuthenticatedIntegracoesRouteImport } from './routes/_authenticated/integracoes'
@@ -48,14 +45,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-<<<<<<< HEAD
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/callback',
   path: '/callback',
   getParentRoute: () => AuthRoute,
 } as any)
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 const AuthenticatedRelatoriosRoute = AuthenticatedRelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
@@ -116,11 +110,7 @@ const AuthenticatedAgendaRoute = AuthenticatedAgendaRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-<<<<<<< HEAD
   '/auth': typeof AuthRouteWithChildren
-=======
-  '/auth': typeof AuthRoute
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   '/onboarding': typeof OnboardingRoute
   '/agenda': typeof AuthenticatedAgendaRoute
   '/automacoes': typeof AuthenticatedAutomacoesRoute
@@ -133,18 +123,11 @@ export interface FileRoutesByFullPath {
   '/integracoes': typeof AuthenticatedIntegracoesRoute
   '/processos': typeof AuthenticatedProcessosRoute
   '/relatorios': typeof AuthenticatedRelatoriosRoute
-<<<<<<< HEAD
   '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
-=======
-}
-export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   '/onboarding': typeof OnboardingRoute
   '/agenda': typeof AuthenticatedAgendaRoute
   '/automacoes': typeof AuthenticatedAutomacoesRoute
@@ -157,20 +140,13 @@ export interface FileRoutesByTo {
   '/integracoes': typeof AuthenticatedIntegracoesRoute
   '/processos': typeof AuthenticatedProcessosRoute
   '/relatorios': typeof AuthenticatedRelatoriosRoute
-<<<<<<< HEAD
   '/auth/callback': typeof AuthCallbackRoute
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-<<<<<<< HEAD
   '/auth': typeof AuthRouteWithChildren
-=======
-  '/auth': typeof AuthRoute
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   '/onboarding': typeof OnboardingRoute
   '/_authenticated/agenda': typeof AuthenticatedAgendaRoute
   '/_authenticated/automacoes': typeof AuthenticatedAutomacoesRoute
@@ -183,10 +159,7 @@ export interface FileRoutesById {
   '/_authenticated/integracoes': typeof AuthenticatedIntegracoesRoute
   '/_authenticated/processos': typeof AuthenticatedProcessosRoute
   '/_authenticated/relatorios': typeof AuthenticatedRelatoriosRoute
-<<<<<<< HEAD
   '/auth/callback': typeof AuthCallbackRoute
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -205,10 +178,7 @@ export interface FileRouteTypes {
     | '/integracoes'
     | '/processos'
     | '/relatorios'
-<<<<<<< HEAD
     | '/auth/callback'
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -225,10 +195,7 @@ export interface FileRouteTypes {
     | '/integracoes'
     | '/processos'
     | '/relatorios'
-<<<<<<< HEAD
     | '/auth/callback'
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   id:
     | '__root__'
     | '/'
@@ -246,20 +213,13 @@ export interface FileRouteTypes {
     | '/_authenticated/integracoes'
     | '/_authenticated/processos'
     | '/_authenticated/relatorios'
-<<<<<<< HEAD
     | '/auth/callback'
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-<<<<<<< HEAD
   AuthRoute: typeof AuthRouteWithChildren
-=======
-  AuthRoute: typeof AuthRoute
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   OnboardingRoute: typeof OnboardingRoute
 }
 
@@ -293,7 +253,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-<<<<<<< HEAD
     '/auth/callback': {
       id: '/auth/callback'
       path: '/callback'
@@ -301,8 +260,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof AuthRoute
     }
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     '/_authenticated/relatorios': {
       id: '/_authenticated/relatorios'
       path: '/relatorios'
@@ -414,7 +371,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
-<<<<<<< HEAD
 interface AuthRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
 }
@@ -429,12 +385,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
-=======
-const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  AuthRoute: AuthRoute,
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   OnboardingRoute: OnboardingRoute,
 }
 export const routeTree = rootRouteImport

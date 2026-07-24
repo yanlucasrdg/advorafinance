@@ -16,31 +16,6 @@ type ZapiDevice = {
   connected?: boolean;
 };
 
-<<<<<<< HEAD
-function baseUrl() {
-  const id = process.env.ZAPI_INSTANCE_ID;
-  const token = process.env.ZAPI_INSTANCE_TOKEN;
-  if (!id || !token) {
-    throw new Error(
-      "Z-API não configurada. Defina ZAPI_INSTANCE_ID e ZAPI_INSTANCE_TOKEN.",
-    );
-  }
-  return `https://api.z-api.io/instances/${id}/token/${token}`;
-}
-
-function clientHeaders() {
-  const clientToken = process.env.ZAPI_CLIENT_TOKEN ?? "";
-  return {
-    "Content-Type": "application/json",
-    "Client-Token": clientToken,
-  };
-}
-
-async function zapiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${baseUrl()}${path}`, {
-    ...init,
-    headers: { ...clientHeaders(), ...(init?.headers ?? {}) },
-=======
 type ZapiCreds = {
   instanceId: string;
   token: string;
@@ -58,30 +33,40 @@ async function loadTenantCreds(userId: string): Promise<ZapiCreds> {
 
   if (profileErr) throw new Error(profileErr.message);
   const tenantId = profile?.tenant_id;
-  if (!tenantId) {
-    throw new Error("WhatsApp não configurado para o seu escritório.");
+
+  if (tenantId) {
+    const { data: inst, error: instErr } = await supabaseAdmin
+      .from("whatsapp_instances")
+      .select("zapi_instance_id, zapi_token, zapi_client_token")
+      .eq("tenant_id", tenantId)
+      .not("zapi_instance_id", "is", null)
+      .not("zapi_token", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (instErr) throw new Error(instErr.message);
+    if (inst?.zapi_instance_id && inst?.zapi_token) {
+      return {
+        instanceId: inst.zapi_instance_id,
+        token: inst.zapi_token,
+        clientToken: inst.zapi_client_token ?? "",
+      };
+    }
   }
 
-  const { data: inst, error: instErr } = await supabaseAdmin
-    .from("whatsapp_instances")
-    .select("zapi_instance_id, zapi_token, zapi_client_token")
-    .eq("tenant_id", tenantId)
-    .not("zapi_instance_id", "is", null)
-    .not("zapi_token", "is", null)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (instErr) throw new Error(instErr.message);
-  if (!inst?.zapi_instance_id || !inst?.zapi_token) {
-    throw new Error("WhatsApp não configurado para o seu escritório.");
+  // Fallback to process.env if available
+  const envId = process.env.ZAPI_INSTANCE_ID;
+  const envToken = process.env.ZAPI_INSTANCE_TOKEN;
+  if (envId && envToken) {
+    return {
+      instanceId: envId,
+      token: envToken,
+      clientToken: process.env.ZAPI_CLIENT_TOKEN ?? "",
+    };
   }
 
-  return {
-    instanceId: inst.zapi_instance_id,
-    token: inst.zapi_token,
-    clientToken: inst.zapi_client_token ?? "",
-  };
+  throw new Error("WhatsApp não configurado para o seu escritório.");
 }
 
 function buildBaseUrl(creds: ZapiCreds) {
@@ -100,7 +85,6 @@ async function zapiFetch<T>(
       "Client-Token": creds.clientToken,
       ...(init?.headers ?? {}),
     },
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   });
   const text = await res.text();
   let json: unknown = null;
@@ -121,24 +105,15 @@ async function zapiFetch<T>(
 
 export const zapiStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-<<<<<<< HEAD
-  .handler(async (): Promise<ZapiStatus> => {
-    try {
-=======
   .handler(async ({ context }): Promise<ZapiStatus> => {
     try {
       const creds = await loadTenantCreds(context.userId);
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       const data = await zapiFetch<{
         connected?: boolean;
         session?: boolean;
         smartphoneConnected?: boolean;
         error?: string | null;
-<<<<<<< HEAD
-      }>("/status");
-=======
       }>(creds, "/status");
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       return {
         connected: !!data.connected,
         session: !!data.session,
@@ -159,16 +134,10 @@ export const zapiStatus = createServerFn({ method: "GET" })
 
 export const zapiQrCode = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-<<<<<<< HEAD
-  .handler(async (): Promise<{ image: string | null; error?: string }> => {
-    try {
-      const data = await zapiFetch<{ value?: string }>("/qr-code/image");
-=======
   .handler(async ({ context }): Promise<{ image: string | null; error?: string }> => {
     try {
       const creds = await loadTenantCreds(context.userId);
       const data = await zapiFetch<{ value?: string }>(creds, "/qr-code/image");
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       const value = data?.value ?? null;
       if (!value) return { image: null, error: "QR Code indisponível" };
       const image = value.startsWith("data:") ? value : `data:image/png;base64,${value}`;
@@ -183,16 +152,10 @@ export const zapiQrCode = createServerFn({ method: "GET" })
 
 export const zapiDevice = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-<<<<<<< HEAD
-  .handler(async (): Promise<ZapiDevice | null> => {
-    try {
-      return await zapiFetch<ZapiDevice>("/device");
-=======
   .handler(async ({ context }): Promise<ZapiDevice | null> => {
     try {
       const creds = await loadTenantCreds(context.userId);
       return await zapiFetch<ZapiDevice>(creds, "/device");
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     } catch {
       return null;
     }
@@ -200,27 +163,17 @@ export const zapiDevice = createServerFn({ method: "GET" })
 
 export const zapiDisconnect = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-<<<<<<< HEAD
-  .handler(async () => {
-    await zapiFetch("/disconnect");
-=======
   .handler(async ({ context }) => {
     const creds = await loadTenantCreds(context.userId);
     await zapiFetch(creds, "/disconnect");
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     return { ok: true };
   });
 
 export const zapiRestart = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-<<<<<<< HEAD
-  .handler(async () => {
-    await zapiFetch("/restart");
-=======
   .handler(async ({ context }) => {
     const creds = await loadTenantCreds(context.userId);
     await zapiFetch(creds, "/restart");
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
     return { ok: true };
   });
 
@@ -233,13 +186,6 @@ export const zapiSendText = createServerFn({ method: "POST" })
     if (!message) throw new Error("Mensagem vazia");
     return { phone, message };
   })
-<<<<<<< HEAD
-  .handler(async ({ data }) => {
-    return await zapiFetch<{ zaapId?: string; messageId?: string; id?: string }>("/send-text", {
-      method: "POST",
-      body: JSON.stringify({ phone: data.phone, message: data.message }),
-    });
-=======
   .handler(async ({ data, context }) => {
     const creds = await loadTenantCreds(context.userId);
     return await zapiFetch<{ zaapId?: string; messageId?: string; id?: string }>(
@@ -250,5 +196,4 @@ export const zapiSendText = createServerFn({ method: "POST" })
         body: JSON.stringify({ phone: data.phone, message: data.message }),
       },
     );
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   });

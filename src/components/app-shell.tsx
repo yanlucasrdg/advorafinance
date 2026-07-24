@@ -10,10 +10,6 @@ import advoraLogo from "@/assets/advora-logo.png.asset.json";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserMenu } from "@/components/user-menu";
 import { NotificationsPopover } from "@/components/notifications-popover";
-<<<<<<< HEAD
-import { GlobalCommandMenu } from "@/components/global-command-menu";
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard };
@@ -62,10 +58,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
-<<<<<<< HEAD
-  const [commandOpen, setCommandOpen] = useState(false);
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
   useEffect(() => {
@@ -74,19 +66,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, [mobileOpen]);
-<<<<<<< HEAD
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setCommandOpen(value => !value);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 
   const initials = (profile?.full_name ?? profile?.email ?? "?")
     .split(" ").map(s => s[0]).slice(0, 2).join("").toUpperCase();
@@ -222,10 +201,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Search className="size-[15px] text-muted-foreground shrink-0" />
             <input
               value={q}
-<<<<<<< HEAD
-              onFocus={() => setCommandOpen(true)}
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
               onChange={e => setQ(e.target.value)}
               placeholder="Buscar processos, clientes, documentos…"
               className="bg-transparent flex-1 min-w-0 outline-none text-[13.5px] placeholder:text-muted-foreground"
@@ -258,14 +233,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
-<<<<<<< HEAD
-      <GlobalCommandMenu open={commandOpen} onOpenChange={setCommandOpen} />
-    </div>
-  );
-}
-=======
     </div>
   );
 }
 
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a

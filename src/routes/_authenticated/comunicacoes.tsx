@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-=======
 import { createFileRoute } from "@tanstack/react-router";
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -24,10 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { useServerFn } from "@tanstack/react-start";
 import { zapiSendText } from "@/lib/zapi.functions";
-<<<<<<< HEAD
-import { storeCommandIntent } from "@/lib/command-intent";
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
+import { CrmQueuesBar, type LegalQueueId } from "@/components/crm/crm-queues-bar";
 
 
 export const Route = createFileRoute("/_authenticated/comunicacoes")({
@@ -50,10 +43,6 @@ type Conversation = {
   assigned_to: string | null;
   assignment_status: AssignmentStatus | null;
   tags: string[] | null;
-<<<<<<< HEAD
-  client_id: string | null;
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   archived_at: string | null;
   created_at: string;
 };
@@ -103,10 +92,6 @@ function initials(name: string | null, phone: string | null): string {
 
 function Comunicacoes() {
   const { profile, user } = useAuth();
-<<<<<<< HEAD
-  const navigate = useNavigate();
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -166,6 +151,30 @@ function Comunicacoes() {
     return () => { supabase.removeChannel(ch); };
   }, [selected]);
 
+  const [selectedQueue, setSelectedQueue] = useState<LegalQueueId>("todas");
+
+  const queueCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      triagem: 0,
+      juridico: 0,
+      financeiro: 0,
+      secretaria: 0,
+    };
+    convs.forEach((c) => {
+      const tags = c.tags || [];
+      if (tags.includes("Financeiro") || tags.includes("Cobrança")) {
+        counts.financeiro += 1;
+      } else if (tags.includes("Secretaria") || tags.includes("Prazos")) {
+        counts.secretaria += 1;
+      } else if (tags.includes("Jurídico") || c.assignment_status === "assigned") {
+        counts.juridico += 1;
+      } else {
+        counts.triagem += 1;
+      }
+    });
+    return counts;
+  }, [convs]);
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     return convs.filter((c) => {
@@ -173,13 +182,22 @@ function Comunicacoes() {
       if (statusFilter !== "all" && c.assignment_status !== statusFilter) return false;
       if (assignedFilter === "me" && c.assigned_to !== user?.id) return false;
       if (assignedFilter === "unassigned" && c.assigned_to) return false;
+
+      if (selectedQueue !== "todas") {
+        const tags = c.tags || [];
+        if (selectedQueue === "financeiro" && !(tags.includes("Financeiro") || tags.includes("Cobrança"))) return false;
+        if (selectedQueue === "secretaria" && !(tags.includes("Secretaria") || tags.includes("Prazos"))) return false;
+        if (selectedQueue === "juridico" && !(tags.includes("Jurídico") || c.assignment_status === "assigned")) return false;
+        if (selectedQueue === "triagem" && (tags.includes("Financeiro") || tags.includes("Secretaria") || tags.includes("Jurídico"))) return false;
+      }
+
       if (term) {
         const hay = `${c.contact_name ?? ""} ${c.contact_phone ?? ""} ${c.last_message ?? ""}`.toLowerCase();
         if (!hay.includes(term)) return false;
       }
       return true;
     });
-  }, [convs, q, channelFilter, statusFilter, assignedFilter, user?.id]);
+  }, [convs, q, channelFilter, statusFilter, assignedFilter, selectedQueue, user?.id]);
 
   const { data: metrics } = useMetricsComunicacoes();
   const kpis = {
@@ -212,54 +230,6 @@ function Comunicacoes() {
     load();
   };
 
-<<<<<<< HEAD
-  const openCrmRecord = async () => {
-    if (!current || !profile?.tenant_id) return;
-    let clientId = current.client_id;
-
-    if (!clientId) {
-      const { data: existingClient, error: existingError } = await supabase
-        .from("clients")
-        .select("id")
-        .eq("phone", current.contact_phone ?? "")
-        .maybeSingle();
-      if (existingError) return toast.error(existingError.message);
-
-      clientId = existingClient?.id ?? null;
-      if (!clientId) {
-        const { data: newClient, error: createError } = await supabase
-          .from("clients")
-          .insert({
-            tenant_id: profile.tenant_id,
-            created_by: user?.id ?? null,
-            name: current.contact_name || current.contact_phone || "Novo contato",
-            phone: current.contact_phone,
-            type: "PF",
-            status: "novo_contato",
-          } as never)
-          .select("id")
-          .single();
-        if (createError) return toast.error(createError.message);
-        clientId = newClient?.id ?? null;
-      }
-
-      if (clientId) {
-        const { error: linkError } = await supabase
-          .from("whatsapp_conversations")
-          .update({ client_id: clientId })
-          .eq("id", current.id);
-        if (linkError) return toast.error(linkError.message);
-        setConvs(items => items.map(item => item.id === current.id ? { ...item, client_id: clientId } : item));
-      }
-    }
-
-    if (!clientId) return toast.error("NÃ£o foi possÃ­vel preparar o contato no CRM.");
-    storeCommandIntent({ type: "open-client", id: clientId });
-    navigate({ to: "/crm" });
-  };
-
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
   const addTag = async (id: string, tag: string) => {
     const t = tag.trim();
     if (!t) return;
@@ -352,25 +322,6 @@ function Comunicacoes() {
         return;
       }
 
-<<<<<<< HEAD
-      let clientId: string | null = null;
-
-      // Also link/create a client record by phone (WhatsApp only)
-      if (channel === "whatsapp") {
-        const { data: cli } = await supabase.from("clients").select("id").eq("phone", identifier).maybeSingle();
-        clientId = cli?.id ?? null;
-        if (!clientId) {
-          const { data: createdClient, error: clientError } = await supabase.from("clients").insert({
-            tenant_id: profile.tenant_id,
-            name: newContact.name.trim(),
-            phone: identifier,
-            type: "PF",
-            status: "novo_contato",
-            created_by: user?.id ?? null,
-          } as never).select("id").single();
-          if (clientError) throw new Error(clientError.message);
-          clientId = createdClient?.id ?? null;
-=======
       // Also link/create a client record by phone (WhatsApp only)
       if (channel === "whatsapp") {
         const { data: cli } = await supabase.from("clients").select("id").eq("phone", identifier).maybeSingle();
@@ -383,7 +334,6 @@ function Comunicacoes() {
             status: "novo_contato",
             created_by: user?.id ?? null,
           } as never);
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
         }
       }
 
@@ -398,10 +348,6 @@ function Comunicacoes() {
         last_message: newContact.message.trim() || null,
         last_message_at: new Date().toISOString(),
         unread_count: 0,
-<<<<<<< HEAD
-        client_id: clientId,
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
       } as never).select().single();
       if (error) throw new Error(error.message);
 
@@ -452,9 +398,50 @@ function Comunicacoes() {
           <div>
             <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70 font-medium mb-1.5">Módulo · Atendimento</p>
             <h1 className="text-3xl font-bold tracking-tight">Central de Atendimento</h1>
-            <p className="text-sm text-muted-foreground mt-1.5">Omnichannel — WhatsApp, Instagram e Messenger em um só lugar.</p>
+            <p className="text-sm text-muted-foreground mt-1.5 mb-3">Omnichannel — WhatsApp, Instagram e Messenger em um só lugar.</p>
           </div>
-          <Dialog open={openNew} onOpenChange={(o) => { if (!o) closeNewModal(); else setOpenNew(true); }}>
+
+          <div className="flex items-center gap-2">
+            <Dialog open={openNew} onOpenChange={(o) => { if (!o) closeNewModal(); else setOpenNew(true); }}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="h-9 bg-[image:var(--gradient-brand)]" onClick={() => setOpenNew(true)}>
+                  <MessageSquare className="size-3.5 mr-1.5" /> Nova conversa
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="glass" onEscapeKeyDown={(e) => { e.preventDefault(); closeNewModal(); }} onPointerDownOutside={(e) => { e.preventDefault(); closeNewModal(); }}>
+                <DialogHeader><DialogTitle>Iniciar nova conversa</DialogTitle></DialogHeader>
+                <div className="grid gap-3">
+                  <div>
+                    <Label>Nome do contato</Label>
+                    <Input value={newContact.name} onChange={e => setNewContact(v => ({ ...v, name: e.target.value }))} className={newErrors.name ? "border-destructive" : ""} />
+                    {newErrors.name && <p className="text-[11px] text-destructive mt-1">{newErrors.name}</p>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>{newContact.channel === "whatsapp" ? "Telefone" : "Telefone / ID"}</Label>
+                      <Input
+                        value={newContact.phone}
+                        onChange={e => setNewContact(v => ({ ...v, phone: e.target.value }))}
+                        placeholder={newContact.channel === "whatsapp" ? "+55 11 99999-9999" : newContact.channel ? "@usuario ou ID" : ""}
+                        className={newErrors.phone ? "border-destructive text-xs" : "text-xs"}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+
+        {/* Legal Service Queues Bar */}
+        <div className="mt-3">
+          <CrmQueuesBar
+            selectedQueue={selectedQueue}
+            onSelectQueue={setSelectedQueue}
+            queueCounts={queueCounts}
+          />
+        </div>
+      </div>
             <DialogTrigger asChild>
               <Button size="sm" className="h-9 bg-[image:var(--gradient-brand)]" onClick={() => setOpenNew(true)}>
                 <MessageSquare className="size-3.5 mr-1.5" /> Nova conversa
@@ -747,22 +734,6 @@ function Comunicacoes() {
                 </div>
               </div>
 
-<<<<<<< HEAD
-              <div className="rounded-xl border border-primary/15 bg-primary/[0.035] p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">CRM do contato</div>
-                    <p className="mt-1 text-xs font-medium">{current.client_id ? "Lead vinculado ao pipeline" : "Transforme esta conversa em lead"}</p>
-                  </div>
-                  <div className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary"><UserPlus className="size-4" /></div>
-                </div>
-                <Button size="sm" variant="outline" className="mt-3 h-8 w-full border-primary/20 bg-background/50 text-xs hover:bg-primary hover:text-primary-foreground" onClick={openCrmRecord}>
-                  {current.client_id ? "Abrir no CRM" : "Criar lead e abrir CRM"}
-                </Button>
-              </div>
-
-=======
->>>>>>> 97ca1a37c320e1ea1e082597c17bc3ec7c1ae17a
               <div className="space-y-1.5">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Tag className="size-3" /> Tags</div>
                 <div className="flex flex-wrap gap-1">
