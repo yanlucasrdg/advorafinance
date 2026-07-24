@@ -558,13 +558,13 @@ function CRM() {
                       key={client.id}
                       client={client}
                       meta={m}
-                      onClick={handleCardClick}
+                      onClick={handleCardClick as (client: ClientCardData) => void}
                       onOpenWhatsapp={openWhatsapp}
                       onQuickAction={(action, cl) => {
                         if (action === "schedule") {
                           toast.info(`Agendamento iniciado para ${cl.name}`);
                         } else if (action === "note") {
-                          handleCardClick(cl);
+                          handleCardClick(cl as unknown as Client);
                         }
                       }}
                     />
