@@ -19,6 +19,7 @@ import { Route as AuthenticatedRelatoriosRouteImport } from './routes/_authentic
 import { Route as AuthenticatedProcessosRouteImport } from './routes/_authenticated/processos'
 import { Route as AuthenticatedIntegracoesRouteImport } from './routes/_authenticated/integracoes'
 import { Route as AuthenticatedFinanceiroRouteImport } from './routes/_authenticated/financeiro'
+import { Route as AuthenticatedExportarDadosRouteImport } from './routes/_authenticated/exportar-dados'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCrmRouteImport } from './routes/_authenticated/crm'
 import { Route as AuthenticatedCopilotoRouteImport } from './routes/_authenticated/copiloto'
@@ -77,6 +78,12 @@ const AuthenticatedFinanceiroRoute = AuthenticatedFinanceiroRouteImport.update({
   path: '/financeiro',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedExportarDadosRoute =
+  AuthenticatedExportarDadosRouteImport.update({
+    id: '/exportar-dados',
+    path: '/exportar-dados',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -125,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/copiloto': typeof AuthenticatedCopilotoRoute
   '/crm': typeof AuthenticatedCrmRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/exportar-dados': typeof AuthenticatedExportarDadosRoute
   '/financeiro': typeof AuthenticatedFinanceiroRoute
   '/integracoes': typeof AuthenticatedIntegracoesRoute
   '/processos': typeof AuthenticatedProcessosRoute
@@ -142,6 +150,7 @@ export interface FileRoutesByTo {
   '/copiloto': typeof AuthenticatedCopilotoRoute
   '/crm': typeof AuthenticatedCrmRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/exportar-dados': typeof AuthenticatedExportarDadosRoute
   '/financeiro': typeof AuthenticatedFinanceiroRoute
   '/integracoes': typeof AuthenticatedIntegracoesRoute
   '/processos': typeof AuthenticatedProcessosRoute
@@ -162,6 +171,7 @@ export interface FileRoutesById {
   '/_authenticated/copiloto': typeof AuthenticatedCopilotoRoute
   '/_authenticated/crm': typeof AuthenticatedCrmRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/exportar-dados': typeof AuthenticatedExportarDadosRoute
   '/_authenticated/financeiro': typeof AuthenticatedFinanceiroRoute
   '/_authenticated/integracoes': typeof AuthenticatedIntegracoesRoute
   '/_authenticated/processos': typeof AuthenticatedProcessosRoute
@@ -182,6 +192,7 @@ export interface FileRouteTypes {
     | '/copiloto'
     | '/crm'
     | '/dashboard'
+    | '/exportar-dados'
     | '/financeiro'
     | '/integracoes'
     | '/processos'
@@ -199,6 +210,7 @@ export interface FileRouteTypes {
     | '/copiloto'
     | '/crm'
     | '/dashboard'
+    | '/exportar-dados'
     | '/financeiro'
     | '/integracoes'
     | '/processos'
@@ -218,6 +230,7 @@ export interface FileRouteTypes {
     | '/_authenticated/copiloto'
     | '/_authenticated/crm'
     | '/_authenticated/dashboard'
+    | '/_authenticated/exportar-dados'
     | '/_authenticated/financeiro'
     | '/_authenticated/integracoes'
     | '/_authenticated/processos'
@@ -305,6 +318,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFinanceiroRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/exportar-dados': {
+      id: '/_authenticated/exportar-dados'
+      path: '/exportar-dados'
+      fullPath: '/exportar-dados'
+      preLoaderRoute: typeof AuthenticatedExportarDadosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -365,6 +385,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCopilotoRoute: typeof AuthenticatedCopilotoRoute
   AuthenticatedCrmRoute: typeof AuthenticatedCrmRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedExportarDadosRoute: typeof AuthenticatedExportarDadosRoute
   AuthenticatedFinanceiroRoute: typeof AuthenticatedFinanceiroRoute
   AuthenticatedIntegracoesRoute: typeof AuthenticatedIntegracoesRoute
   AuthenticatedProcessosRoute: typeof AuthenticatedProcessosRoute
@@ -379,6 +400,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCopilotoRoute: AuthenticatedCopilotoRoute,
   AuthenticatedCrmRoute: AuthenticatedCrmRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedExportarDadosRoute: AuthenticatedExportarDadosRoute,
   AuthenticatedFinanceiroRoute: AuthenticatedFinanceiroRoute,
   AuthenticatedIntegracoesRoute: AuthenticatedIntegracoesRoute,
   AuthenticatedProcessosRoute: AuthenticatedProcessosRoute,

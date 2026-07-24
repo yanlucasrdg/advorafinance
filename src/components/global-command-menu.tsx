@@ -5,6 +5,7 @@ import {
   Briefcase,
   Calendar,
   CircleDollarSign,
+  Download,
   FilePlus2,
   LayoutDashboard,
   MessageSquare,
@@ -99,6 +100,12 @@ const navigation: CommandLink[] = [
     description: "Preferências do escritório",
     to: "/config",
     icon: Settings,
+  },
+  {
+    label: "Exportar dados",
+    description: "Baixar os dados do escritório em JSON",
+    to: "/exportar-dados",
+    icon: Download,
   },
 ];
 

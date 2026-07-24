@@ -16,6 +16,15 @@ function RouteComponent() {
     let active = true
 
     const completeSignIn = async () => {
+      // With an implicit OAuth response, supabase-js may consume the URL hash
+      // before this component runs. In that case the session is already stored
+      // and there is no PKCE `code` left in the address bar.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        navigate({ to: '/dashboard', replace: true })
+        return
+      }
+
       const code = new URLSearchParams(window.location.search).get('code')
 
       if (!code) {

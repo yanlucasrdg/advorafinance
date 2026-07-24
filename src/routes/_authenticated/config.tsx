@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
 import { PageHeader, Panel } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,6 +155,19 @@ function Config() {
           </div>
           <Button onClick={saveBranding} className="w-fit bg-[image:var(--gradient-brand)]">Salvar identidade visual</Button>
         </div>
+      </Panel>
+
+      <Panel className="p-6 space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold">Exportar dados</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Baixe os dados deste escritório em um arquivo JSON para portabilidade e migração.</p>
+        </div>
+        <Button asChild variant="outline" className="w-fit">
+          <Link to="/exportar-dados">
+            <Download className="size-4" />
+            Abrir exportação de dados
+          </Link>
+        </Button>
       </Panel>
     </div>
   );
