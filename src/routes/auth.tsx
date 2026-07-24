@@ -53,7 +53,9 @@ function AuthPage() {
 
   const google = async () => {
     setBusy(true);
-    const res = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+    const res = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: new URL("/auth/callback", window.location.origin).toString(),
+    });
     if (res.error) { toast.error("Falha no login com Google"); setBusy(false); }
   };
 
