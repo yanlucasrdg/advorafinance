@@ -6,6 +6,7 @@
 -- may only edit their own presentation fields.
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can update own profile fields" ON public.profiles;
 
 REVOKE INSERT, UPDATE ON public.profiles FROM authenticated;
 GRANT UPDATE (full_name, avatar_url, phone) ON public.profiles TO authenticated;
