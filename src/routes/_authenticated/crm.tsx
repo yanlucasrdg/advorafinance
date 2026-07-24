@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
@@ -177,7 +178,7 @@ function CRM() {
         type: form.type,
         status: form.status,
         notes: JSON.stringify({ area: form.area, value: form.value, owner: profile.full_name || "Dr. Yan", hot: true }),
-      });
+      } as any);
       setOpen(false);
       setForm({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
     } catch {
@@ -557,13 +558,13 @@ function CRM() {
                       key={client.id}
                       client={client}
                       meta={m}
-                      onClick={handleCardClick}
+                      onClick={handleCardClick as (client: ClientCardData) => void}
                       onOpenWhatsapp={openWhatsapp}
                       onQuickAction={(action, cl) => {
                         if (action === "schedule") {
                           toast.info(`Agendamento iniciado para ${cl.name}`);
                         } else if (action === "note") {
-                          handleCardClick(cl);
+                          handleCardClick(cl as unknown as Client);
                         }
                       }}
                     />

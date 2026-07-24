@@ -238,13 +238,13 @@ function Processos() {
   async function loadCaseDocuments(caseId: string) {
     setDocsLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("documents")
         .select("id, case_id, uploaded_by, file_name, file_path, file_type, file_size, document_type, description, created_at")
         .eq("case_id", caseId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setCaseDocuments((data ?? []) as Document[]);
+      setCaseDocuments(((data ?? []) as unknown) as Document[]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -263,7 +263,7 @@ function Processos() {
         .upload(filePath, file, { cacheControl: "3600", upsert: false });
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from("documents").insert({
+      const { error: insertError } = await (supabase as any).from("documents").insert({
         tenant_id: profile.tenant_id,
         case_id: selected.id,
         uploaded_by: profile.id,
