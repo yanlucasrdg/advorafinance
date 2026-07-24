@@ -680,47 +680,6 @@ export type Database = {
           },
         ]
       }
-      tenant_branding: {
-        Row: {
-          brand_name: string
-          created_at: string
-          default_theme: string
-          logo_url: string | null
-          primary_color: string
-          secondary_color: string
-          tenant_id: string
-          updated_at: string
-        }
-        Insert: {
-          brand_name: string
-          created_at?: string
-          default_theme?: string
-          logo_url?: string | null
-          primary_color?: string
-          secondary_color?: string
-          tenant_id: string
-          updated_at?: string
-        }
-        Update: {
-          brand_name?: string
-          created_at?: string
-          default_theme?: string
-          logo_url?: string | null
-          primary_color?: string
-          secondary_color?: string
-          tenant_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_branding_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: true
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       tenants: {
         Row: {
           created_at: string
@@ -1043,10 +1002,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      consume_rate_limit: {
-        Args: { _scope: string }
-        Returns: boolean
-      }
       create_tenant_with_owner: {
         Args: { _name: string; _slug: string }
         Returns: string
