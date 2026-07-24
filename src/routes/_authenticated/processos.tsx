@@ -263,7 +263,7 @@ function Processos() {
         .upload(filePath, file, { cacheControl: "3600", upsert: false });
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from("documents").insert({
+      const { error: insertError } = await (supabase as any).from("documents").insert({
         tenant_id: profile.tenant_id,
         case_id: selected.id,
         uploaded_by: profile.id,
