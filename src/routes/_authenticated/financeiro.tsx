@@ -271,7 +271,7 @@ function Financeiro() {
       client_id: form.client_id || null,
       case_id: form.case_id || null,
       category: form.category || null,
-    });
+    } as any);
     setOpen(false);
     setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
   };
@@ -835,7 +835,7 @@ function ReconcileDialog({ entry, tenantId, createPayment, reconcile, onClose, o
   const [notes, setNotes] = useState("");
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const paymentsQ = useFinancialPayments(entry?.id);
+  const paymentsQ = useFinancialPayments(entry?.id ?? null);
 
   const paid = entry?.paid_amount_cents ?? 0;
   const total = entry?.amount_cents ?? 0;
@@ -1119,8 +1119,8 @@ function DreSettingsDialog({
 }
 
 function AuditSheet({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
-  const auditQ = useFinancialAuditEntry(entry?.id);
-  const paymentsQ = useFinancialPayments(entry?.id);
+  const auditQ = useFinancialAuditEntry(entry?.id ?? null);
+  const paymentsQ = useFinancialPayments(entry?.id ?? null);
 
   const diffs = (a: AuditRow) => {
     const before = (a.before ?? {}) as Record<string, unknown>;

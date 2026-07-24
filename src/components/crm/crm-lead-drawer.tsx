@@ -96,7 +96,7 @@ export function CrmLeadDrawer({
   async function loadClientDocuments(clientId: string) {
     setDocsLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("documents")
         .select("id, file_name, file_path, document_type, created_at")
         .eq("client_id", clientId)
@@ -124,7 +124,7 @@ export function CrmLeadDrawer({
       const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file, { cacheControl: "3600", upsert: false });
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from("documents").insert({
+      const { error: insertError } = await (supabase as any).from("documents").insert({
         tenant_id: profile.tenant_id,
         client_id: client.id,
         uploaded_by: profile.id,
