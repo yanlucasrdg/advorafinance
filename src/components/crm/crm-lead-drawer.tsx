@@ -207,7 +207,7 @@ export function CrmLeadDrawer({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-2xl p-0 flex flex-col h-full bg-card border-l border-border shadow-2xl">
-        {/* HelenaCRM Drawer Header */}
+        {/* Drawer header */}
         <div className="p-4 border-b border-border/80 bg-muted/20 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <Avatar className="h-10 w-10 ring-2 ring-primary/20">
@@ -303,7 +303,7 @@ export function CrmLeadDrawer({
           </div>
         </div>
 
-        {/* Helena Tabs Header */}
+        {/* Tabs header */}
         <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="flex-1 flex flex-col overflow-hidden">
           <div className="px-4 border-b border-border bg-card">
             <TabsList className="bg-transparent h-11 space-x-2">
@@ -334,7 +334,7 @@ export function CrmLeadDrawer({
             </TabsList>
           </div>
 
-          {/* TAB 1: WhatsApp Chat Conversacional estilo HelenaCRM */}
+          {/* TAB 1: Conversational WhatsApp chat */}
           <TabsContent value="chat" className="flex-1 flex flex-col p-0 m-0 overflow-hidden">
             {/* Quick Templates Bar */}
             <div className="p-2.5 bg-muted/30 border-b border-border flex items-center gap-1.5 overflow-x-auto no-scrollbar">

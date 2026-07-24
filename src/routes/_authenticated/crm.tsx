@@ -297,12 +297,12 @@ function CRM() {
         <div className="absolute top-40 right-0 w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[120px]" />
       </div>
 
-      {/* Helena Header */}
+      {/* CRM header */}
       <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fade-up">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-              HelenaCRM Legal OS
+              Advora Legal OS
             </span>
             <span className="text-xs text-muted-foreground">• Atendimento & Pipeline</span>
           </div>
@@ -378,7 +378,7 @@ function CRM() {
         </div>
       </header>
 
-      {/* Helena KPI Cards Row */}
+      {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <KpiCard label="Leads Ativos" value={String(kpis.leads)} deltaLabel="Triagem e primeiro contato" icon={Users} tone="violet" />
         <KpiCard label="Clientes em Atendimento" value={String(kpis.ativos)} deltaLabel="Contrato e casos ativos" icon={UserCheck} tone="blue" />
@@ -402,10 +402,10 @@ function CRM() {
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-foreground">Insights de Atendimento Conversacional</h3>
-                  <p className="text-[10px] text-muted-foreground">Qualificação em tempo real estilo HelenaCRM</p>
+                  <p className="text-[10px] text-muted-foreground">Qualificação em tempo real</p>
                 </div>
               </div>
-              <Badge variant="outline" className="text-[10px] text-purple-600 border-purple-500/30">IA Helena Ativa</Badge>
+              <Badge variant="outline" className="text-[10px] text-purple-600 border-purple-500/30">IA ativa</Badge>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -417,7 +417,7 @@ function CRM() {
         </div>
       </div>
 
-      {/* Helena Filter Toolbar */}
+      {/* Filter toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card border border-border p-2.5 rounded-xl shadow-xs">
         {/* Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
@@ -519,7 +519,7 @@ function CRM() {
         </div>
       </div>
 
-      {/* Helena Pipeline Kanban */}
+      {/* Pipeline Kanban */}
       {view === "funil" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3.5 items-start">
           {grouped.map((col) => (
@@ -644,7 +644,7 @@ function CRM() {
         </div>
       )}
 
-      {/* Helena Conversational & CRM Drawer */}
+      {/* Conversational CRM drawer */}
       <CrmLeadDrawer
         client={selected}
         open={drawerOpen}
