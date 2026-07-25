@@ -9,6 +9,7 @@ import {
 import { PageHeader, formatBRL } from "@/components/data-table-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -406,10 +407,10 @@ function Processos() {
                   </div>
                 </div>
                 <div>
-                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor em causa (R$)</Label>
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor em causa</Label>
                   <div className="grid grid-cols-2 gap-2 mt-1">
-                    <Input type="number" placeholder="Mín" value={adv.minValue} onChange={e => setAdv({ ...adv, minValue: e.target.value })} className="h-8 text-xs" />
-                    <Input type="number" placeholder="Máx" value={adv.maxValue} onChange={e => setAdv({ ...adv, maxValue: e.target.value })} className="h-8 text-xs" />
+                    <CurrencyInput placeholder="Mín" valueInCents={adv.minValue ? Math.round(Number(adv.minValue) * 100) : undefined} onValueChange={value => setAdv({ ...adv, minValue: value == null ? "" : String(value / 100) })} className="h-8 text-xs" />
+                    <CurrencyInput placeholder="Máx" valueInCents={adv.maxValue ? Math.round(Number(adv.maxValue) * 100) : undefined} onValueChange={value => setAdv({ ...adv, maxValue: value == null ? "" : String(value / 100) })} className="h-8 text-xs" />
                   </div>
                 </div>
                 <div className="pt-2 border-t border-border/40 text-[10px] text-muted-foreground">
@@ -457,7 +458,7 @@ function Processos() {
                         <SelectContent>{STAGES.map(s => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
-                    <div><Label>Valor (R$)</Label><Input type="number" value={form.value_cents / 100} onChange={e => setForm({ ...form, value_cents: Math.round(Number(e.target.value) * 100) })} /></div>
+                    <div><Label>Valor</Label><CurrencyInput valueInCents={form.value_cents} onValueChange={value => setForm({ ...form, value_cents: value ?? 0 })} /></div>
                   </div>
                   <div>
                     <Label>Cliente</Label>

@@ -132,7 +132,7 @@ const actions: CommandLink[] = [
     intent: { type: "create-entry" },
   },
   {
-    label: "Abrir Copiloto Advora",
+    label: "Abrir Pergunte à IA",
     description: "Analisar e executar com inteligência artificial",
     to: "/copiloto",
     icon: Sparkles,

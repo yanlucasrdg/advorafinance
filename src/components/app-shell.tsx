@@ -254,7 +254,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="inline-flex items-center gap-2 h-9 px-3.5 rounded-lg text-[13px] font-semibold text-primary-foreground bg-[image:var(--gradient-brand)] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)]"
             >
               <Sparkles className="size-3.5" />
-              <span className="hidden sm:inline">Copiloto</span>
+              <span className="hidden sm:inline">Pergunte à IA</span>
             </Link>
             <div className="hidden sm:block w-px h-6 bg-border mx-1.5" />
             <UserMenu />

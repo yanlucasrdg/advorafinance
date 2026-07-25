@@ -299,7 +299,7 @@ function Dashboard() {
                   </defs>
                   <CartesianGrid stroke="#E5E7EB" vertical={false} />
                   <XAxis dataKey="label" stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `R$${(v/1000).toFixed(0)}k`} width={52} />
+                  <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => fmtBRLCompact(v)} width={62} />
                   <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v)} />
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
                   <Area type="monotone" dataKey="Receita" stroke="#5B4CF0" strokeWidth={2.5} fill="url(#rev)" />

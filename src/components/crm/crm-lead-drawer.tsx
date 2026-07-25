@@ -477,7 +477,7 @@ export function CrmLeadDrawer({
             <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                <h4 className="text-sm font-bold text-foreground">Copiloto Jurídico de Triagem</h4>
+                <h4 className="text-sm font-bold text-foreground">IA Jurídica de Triagem</h4>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Utilize o motor de IA para realizar o enquadramento jurídico inicial, calcular a probabilidade de vitória e gerar sugestões de honorários.

@@ -6,6 +6,29 @@ import { getServerEnv } from "@/integrations/supabase/runtime-env.server";
 
 const Schema = z.object({ prompt: z.string().min(1).max(4000) });
 
+export const clearCopilotHistory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("tenant_id")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profileError || !profile?.tenant_id) throw new Error("Não foi possível identificar o escritório atual.");
+
+    // A exclusão usa a credencial de servidor depois de confirmar a sessão e
+    // o tenant do usuário. Assim, uma política RLS sem DELETE não faz a tela
+    // aparentar que limpou algo que continuará salvo no banco.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("ai_messages")
+      .delete()
+      .eq("tenant_id", profile.tenant_id);
+    if (error) throw new Error("Não foi possível limpar o histórico agora.");
+    return { cleared: true };
+  });
+
 export const askCopilot = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => Schema.parse(d))

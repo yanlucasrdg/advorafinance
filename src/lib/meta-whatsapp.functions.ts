@@ -11,6 +11,26 @@ function configuredPhoneNumberId() {
   return value;
 }
 
+function configuredBusinessAccountId() {
+  const value = getServerEnv("META_WHATSAPP_BUSINESS_ACCOUNT_ID")?.trim();
+  if (!value) throw new Error("Falta configurar META_WHATSAPP_BUSINESS_ACCOUNT_ID nos Secrets do Worker.");
+  return value;
+}
+
+async function subscribeAppToBusinessAccount() {
+  const accessToken = getServerEnv("META_WHATSAPP_ACCESS_TOKEN")?.trim();
+  if (!accessToken) throw new Error("Falta configurar META_WHATSAPP_ACCESS_TOKEN nos Secrets do Worker.");
+  const businessAccountId = configuredBusinessAccountId();
+  const response = await fetch(`https://graph.facebook.com/v25.0/${businessAccountId}/subscribed_apps`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(payload.error?.message ?? "Não foi possível assinar os webhooks da conta WhatsApp Business.");
+  }
+}
+
 async function loadOrCreateChannel(userId: string): Promise<MetaChannel> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const phoneNumberId = configuredPhoneNumberId();
@@ -62,6 +82,14 @@ export const metaWhatsAppConnect = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const channel = await loadOrCreateChannel(context.userId);
+    try {
+      await subscribeAppToBusinessAccount();
+    } catch (error) {
+      // The Meta dashboard can already own this subscription. Temporary test
+      // tokens frequently cannot call subscribed_apps, so do not block the
+      // tenant-to-phone mapping when the dashboard field is already enabled.
+      console.warn("Meta WABA subscription check skipped", error);
+    }
     return { connected: true, phoneNumberId: channel.phoneNumberId };
   });
 

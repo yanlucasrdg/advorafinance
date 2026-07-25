@@ -167,6 +167,10 @@ export async function handleMetaWhatsAppWebhook(request: Request, env: WorkerBin
     return new Response("Invalid payload", { status: 400 });
   }
 
+  const receivedMessages = (payload.entry ?? []).flatMap((entry) => entry.changes ?? [])
+    .reduce((total, change) => total + (change.value?.messages?.length ?? 0), 0);
+  console.log("Meta WhatsApp webhook received", { entries: payload.entry?.length ?? 0, messages: receivedMessages });
+
   try {
     await persistWebhookEvents(payload, env);
   } catch (error) {

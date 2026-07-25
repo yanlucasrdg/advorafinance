@@ -202,9 +202,12 @@ export function fmtBRL(cents: number) {
 
 export function fmtBRLCompact(cents: number) {
   const v = (cents ?? 0) / 100;
-  if (Math.abs(v) >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(v) >= 1_000) return `R$ ${(v / 1_000).toFixed(1)}k`;
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    notation: "compact",
+    maximumFractionDigits: Math.abs(v) >= 1_000 ? 1 : 0,
+  }).format(v);
 }
 
 // ---------- DRE (Demonstração do Resultado do Exercício) ----------

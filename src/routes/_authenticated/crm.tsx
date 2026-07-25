@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -372,7 +373,7 @@ function CRM() {
                       <SelectContent>{AREAS.map(a => <SelectItem key={a} value={a} className="text-xs">{a}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div><Label className="text-xs">Honorário Estimado (R$)</Label><Input className="text-xs mt-1 h-9" type="number" value={form.value} onChange={e => setForm({ ...form, value: Number(e.target.value) })} /></div>
+                  <div><Label className="text-xs">Honorário estimado</Label><CurrencyInput className="text-xs mt-1 h-9" valueInCents={Math.round(form.value * 100)} onValueChange={value => setForm({ ...form, value: (value ?? 0) / 100 })} /></div>
                 </div>
                 <div>
                   <Label className="text-xs">Etapa Inicial</Label>
@@ -518,10 +519,10 @@ function CRM() {
               </div>
 
               <div>
-                <Label className="text-[10px] uppercase font-semibold text-muted-foreground">Faixa de Valor (R$)</Label>
+                <Label className="text-[10px] uppercase font-semibold text-muted-foreground">Faixa de valor</Label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
-                  <Input type="number" placeholder="Mín" value={adv.minValue} onChange={e => setAdv({ ...adv, minValue: e.target.value })} className="h-8 text-xs" />
-                  <Input type="number" placeholder="Máx" value={adv.maxValue} onChange={e => setAdv({ ...adv, maxValue: e.target.value })} className="h-8 text-xs" />
+                  <CurrencyInput placeholder="Mín" valueInCents={adv.minValue ? Math.round(Number(adv.minValue) * 100) : undefined} onValueChange={value => setAdv({ ...adv, minValue: value == null ? "" : String(value / 100) })} className="h-8 text-xs" />
+                  <CurrencyInput placeholder="Máx" valueInCents={adv.maxValue ? Math.round(Number(adv.maxValue) * 100) : undefined} onValueChange={value => setAdv({ ...adv, maxValue: value == null ? "" : String(value / 100) })} className="h-8 text-xs" />
                 </div>
               </div>
             </PopoverContent>
