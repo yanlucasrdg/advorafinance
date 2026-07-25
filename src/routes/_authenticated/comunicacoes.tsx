@@ -29,6 +29,8 @@ export const Route = createFileRoute("/_authenticated/comunicacoes")({
 
 type Channel = "whatsapp" | "instagram" | "messenger";
 type AssignmentStatus = "new" | "assigned" | "archived";
+type InboxTab = "new" | "mine" | "other";
+type ServiceQueue = "triagem" | "juridico" | "financeiro" | "secretaria";
 
 type Conversation = {
   id: string;
@@ -43,6 +45,7 @@ type Conversation = {
   channel: Channel | null;
   assigned_to: string | null;
   assignment_status: AssignmentStatus | null;
+  category: ServiceQueue | null;
   tags: string[] | null;
   archived_at: string | null;
   created_at: string;
@@ -69,7 +72,34 @@ const STATUS_META: Record<AssignmentStatus, { label: string; color: string; dot:
   archived: { label: "Arquivada", color: "text-muted-foreground", dot: "bg-muted-foreground/60" },
 };
 
-const QUICK_TAGS = ["Urgente", "Triagem", "Suporte", "Comercial", "Pós-venda", "Cobrança"];
+const QUICK_TAGS = ["Urgente", "Suporte", "Comercial", "Pós-venda", "Cobrança"];
+
+const QUEUE_META: Record<ServiceQueue, { label: string; dot: string; text: string }> = {
+  triagem: { label: "Triagem", dot: "bg-violet-400", text: "text-violet-300" },
+  juridico: { label: "Jurídico", dot: "bg-blue-400", text: "text-blue-300" },
+  financeiro: { label: "Financeiro", dot: "bg-emerald-400", text: "text-emerald-300" },
+  secretaria: { label: "Secretaria", dot: "bg-amber-400", text: "text-amber-300" },
+};
+
+const LEGACY_QUEUE_TAGS: Record<ServiceQueue, string[]> = {
+  triagem: ["Triagem"],
+  juridico: ["Jurídico", "Juridico"],
+  financeiro: ["Financeiro", "Cobrança"],
+  secretaria: ["Secretaria", "Prazos"],
+};
+
+function getConversationQueue(conversation: Pick<Conversation, "category" | "tags">): ServiceQueue {
+  if (conversation.category && conversation.category in QUEUE_META) return conversation.category;
+  for (const queue of Object.keys(LEGACY_QUEUE_TAGS) as ServiceQueue[]) {
+    if ((conversation.tags ?? []).some((tag) => LEGACY_QUEUE_TAGS[queue].includes(tag))) return queue;
+  }
+  return "triagem";
+}
+
+function visibleTags(conversation: Pick<Conversation, "tags">) {
+  const queueTags = new Set(Object.values(LEGACY_QUEUE_TAGS).flat());
+  return (conversation.tags ?? []).filter((tag) => !queueTags.has(tag));
+}
 
 function timeAgo(iso: string | null): string {
   if (!iso) return "";
@@ -101,6 +131,8 @@ function Comunicacoes() {
   const [channelFilter, setChannelFilter] = useState<"all" | Channel>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | AssignmentStatus>("all");
   const [assignedFilter, setAssignedFilter] = useState<"all" | "me" | "unassigned">("all");
+  const [inboxTab, setInboxTab] = useState<InboxTab>("new");
+  const [quickPhone, setQuickPhone] = useState("");
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState("");
   const [newTag, setNewTag] = useState("");
@@ -162,16 +194,8 @@ function Comunicacoes() {
       secretaria: 0,
     };
     convs.forEach((c) => {
-      const tags = c.tags || [];
-      if (tags.includes("Financeiro") || tags.includes("Cobrança")) {
-        counts.financeiro += 1;
-      } else if (tags.includes("Secretaria") || tags.includes("Prazos")) {
-        counts.secretaria += 1;
-      } else if (tags.includes("Jurídico") || c.assignment_status === "assigned") {
-        counts.juridico += 1;
-      } else {
-        counts.triagem += 1;
-      }
+      if (c.assignment_status === "archived") return;
+      counts[getConversationQueue(c)] += 1;
     });
     return counts;
   }, [convs]);
@@ -185,11 +209,7 @@ function Comunicacoes() {
       if (assignedFilter === "unassigned" && c.assigned_to) return false;
 
       if (selectedQueue !== "todas") {
-        const tags = c.tags || [];
-        if (selectedQueue === "financeiro" && !(tags.includes("Financeiro") || tags.includes("Cobrança"))) return false;
-        if (selectedQueue === "secretaria" && !(tags.includes("Secretaria") || tags.includes("Prazos"))) return false;
-        if (selectedQueue === "juridico" && !(tags.includes("Jurídico") || c.assignment_status === "assigned")) return false;
-        if (selectedQueue === "triagem" && (tags.includes("Financeiro") || tags.includes("Secretaria") || tags.includes("Jurídico"))) return false;
+        if (getConversationQueue(c) !== selectedQueue) return false;
       }
 
       if (term) {
@@ -228,6 +248,40 @@ function Comunicacoes() {
     if (error) return toast.error(error.message);
     toast.success("Conversa arquivada");
     if (selected === id) setSelected(null);
+    load();
+  };
+
+  const inboxCounts = useMemo(() => ({
+    new: convs.filter(c => (c.assignment_status ?? "new") === "new").length,
+    mine: convs.filter(c => c.assigned_to === user?.id && c.assignment_status !== "archived").length,
+    other: convs.filter(c => c.assigned_to && c.assigned_to !== user?.id && c.assignment_status !== "archived").length,
+  }), [convs, user?.id]);
+
+  const inboxConversations = useMemo(() => filtered.filter((conversation) => {
+    // Arquivadas é um filtro transversal: não pertence às abas de trabalho
+    // ativo (Novos, Meus e Outros), mas precisa continuar acessível.
+    if (statusFilter === "archived") return conversation.assignment_status === "archived";
+    if (inboxTab === "new") return (conversation.assignment_status ?? "new") === "new";
+    if (inboxTab === "mine") return conversation.assigned_to === user?.id && conversation.assignment_status !== "archived";
+  return conversation.assigned_to !== user?.id &&
+    (conversation.assignment_status ?? "new") !== "new" &&
+    conversation.assignment_status !== "archived";
+  }), [filtered, inboxTab, statusFilter, user?.id]);
+
+  const reopen = async (id: string) => {
+    const { error } = await supabase.from("whatsapp_conversations")
+      .update({ assignment_status: "assigned" as AssignmentStatus, archived_at: null }).eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Atendimento reaberto");
+    load();
+  };
+
+  const moveToQueue = async (id: string, queue: ServiceQueue) => {
+    const { error } = await supabase.from("whatsapp_conversations")
+      .update({ category: queue, archived_at: null })
+      .eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success(`Atendimento movido para ${QUEUE_META[queue].label}.`);
     load();
   };
 
@@ -304,6 +358,25 @@ function Comunicacoes() {
         : newContact.phone.trim().replace(/^@/, "");
       let clientId: string | null = null;
 
+      if (channel !== "whatsapp") {
+        setNewErrors({ submit: "Este canal ainda não está conectado. Use WhatsApp ou configure a integração antes de iniciar uma conversa." });
+        return;
+      }
+
+      const { data: activeInstance, error: instanceError } = await supabase
+        .from("whatsapp_instances")
+        .select("id")
+        .eq("tenant_id", profile.tenant_id)
+        .eq("status", "connected")
+        .order("last_connected_at", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+      if (instanceError) throw new Error(instanceError.message);
+      if (!activeInstance?.id) {
+        setNewErrors({ submit: "Conecte o WhatsApp Business deste escritório em Integrações antes de iniciar uma conversa." });
+        return;
+      }
+
       // Dedupe check: existing conversation with same channel + identifier
       const { data: existing } = await supabase
         .from("whatsapp_conversations")
@@ -339,13 +412,14 @@ function Comunicacoes() {
 
       const { data, error } = await supabase.from("whatsapp_conversations").insert({
         tenant_id: profile.tenant_id,
-        instance_id: null as unknown as string,
+        instance_id: activeInstance.id,
         contact_name: newContact.name.trim(),
         contact_phone: identifier,
         client_id: clientId,
         channel,
         assigned_to: null,
         assignment_status: "new" as AssignmentStatus,
+        category: "triagem" as ServiceQueue,
         tags: ["Triagem"],
         last_message: newContact.message.trim() || null,
         last_message_at: new Date().toISOString(),
@@ -380,21 +454,8 @@ function Comunicacoes() {
       }
 
       if (newContact.message.trim() && data) {
-        if (channel === "instagram" || channel === "messenger") {
-          setNewErrors({ submit: `Não foi possível enviar via ${channel === "instagram" ? "Instagram" : "Messenger"}. Verifique a integração.` });
-          setCreating(false);
-          return;
-        }
-        // WhatsApp: send via Z-API
         try {
           await sendMetaWhatsApp({ data: { phone: identifier.replace(/\D/g, ""), message: newContact.message.trim() } });
-          await supabase.from("whatsapp_messages").insert({
-            conversation_id: data.id,
-            tenant_id: profile.tenant_id,
-            direction: "outbound",
-            body: newContact.message.trim(),
-            status: "sent",
-          } as never);
         } catch (e) {
           setNewErrors({ submit: `Não foi possível enviar via WhatsApp. ${e instanceof Error ? e.message : "Verifique a integração."}` });
           setCreating(false);
@@ -415,13 +476,13 @@ function Comunicacoes() {
 
 
   return (
-    <div className="relative h-[calc(100vh-72px)] overflow-hidden">
+    <div className="relative flex h-[calc(100vh-72px)] flex-col overflow-hidden">
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute top-0 left-1/4 w-[500px] h-[500px] rounded-full bg-violet-600/10 blur-[120px]" />
       </div>
 
       {/* Header */}
-      <div className="px-6 lg:px-8 pt-6 pb-4 animate-fade-up">
+      <div className="shrink-0 px-6 lg:px-8 pt-6 pb-4 animate-fade-up">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70 font-medium mb-1.5">Módulo · Atendimento</p>
@@ -529,9 +590,20 @@ function Comunicacoes() {
       </div>
 
       {/* Split view */}
-      <div className="px-6 lg:px-8 pb-6 grid grid-cols-1 lg:grid-cols-[minmax(300px,380px)_1fr_minmax(260px,320px)] gap-4 h-[calc(100%-220px)] min-h-0">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 px-6 pb-6 lg:grid-cols-[minmax(300px,380px)_1fr_minmax(260px,320px)] lg:px-8">
         {/* ---------- Column 1: Conversations list ---------- */}
         <aside className="glass rounded-2xl flex flex-col min-h-0 overflow-hidden animate-fade-up">
+          <div className="grid grid-cols-3 gap-1 border-b border-border/40 p-2">
+            {([
+              ["new", "Novos", inboxCounts.new],
+              ["mine", "Meus", inboxCounts.mine],
+              ["other", "Outros", inboxCounts.other],
+            ] as const).map(([tab, label, count]) => (
+              <button key={tab} onClick={() => setInboxTab(tab)} className={`flex h-9 items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors ${inboxTab === tab ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-white/[0.04]"}`}>
+                {label}<span className={`grid size-5 place-items-center rounded-full text-[10px] font-bold ${inboxTab === tab ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>{count}</span>
+              </button>
+            ))}
+          </div>
           <div className="p-3 border-b border-border/40 space-y-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
@@ -583,10 +655,10 @@ function Comunicacoes() {
           <div className="flex-1 overflow-y-auto">
             {loading ? (
               <div className="p-8 grid place-items-center text-muted-foreground"><Loader2 className="size-5 animate-spin" /></div>
-            ) : filtered.length === 0 ? (
+            ) : inboxConversations.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma conversa encontrada.</div>
             ) : (
-              filtered.map((c) => {
+              inboxConversations.map((c) => {
                 const M = c.channel ? CHANNEL_META[c.channel] : CHANNEL_META.whatsapp;
                 const active = c.id === selected;
                 const st = c.assignment_status ?? "new";
@@ -617,9 +689,9 @@ function Comunicacoes() {
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground truncate mt-1">{c.last_message || "—"}</div>
-                      {c.tags && c.tags.length > 0 && (
+                      {visibleTags(c).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
-                          {c.tags.slice(0, 3).map(t => (
+                          {visibleTags(c).slice(0, 3).map(t => (
                             <span key={t} className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/[0.06] text-muted-foreground">{t}</span>
                           ))}
                         </div>
@@ -629,6 +701,15 @@ function Comunicacoes() {
                 );
               })
             )}
+          </div>
+          <div className="border-t border-border/40 p-3">
+            <div className="flex gap-2">
+              <Input value={quickPhone} onChange={event => setQuickPhone(event.target.value)} placeholder="Telefone para nova conversa" className="h-9 bg-white/[0.02] text-xs" />
+              <Button size="sm" className="h-9 shrink-0 bg-[image:var(--gradient-brand)]" onClick={() => {
+                setNewContact(current => ({ ...current, phone: quickPhone.replace(/\D/g, ""), channel: "whatsapp" }));
+                setOpenNew(true);
+              }}>Conversar</Button>
+            </div>
           </div>
         </aside>
 
@@ -666,8 +747,8 @@ function Comunicacoes() {
                       <UserPlus className="size-3.5 mr-1" /> Atribuir a mim
                     </Button>
                   )}
-                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => archive(current.id)}>
-                    <Archive className="size-3.5 mr-1" /> Arquivar
+                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => current.assignment_status === "archived" ? reopen(current.id) : archive(current.id)}>
+                    <Archive className="size-3.5 mr-1" /> {current.assignment_status === "archived" ? "Reabrir atendimento" : "Arquivar"}
                   </Button>
                 </div>
               </div>
@@ -733,9 +814,26 @@ function Comunicacoes() {
               </div>
 
               <div className="space-y-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Fila de atendimento</div>
+                <select
+                  value={getConversationQueue(current)}
+                  onChange={(event) => void moveToQueue(current.id, event.target.value as ServiceQueue)}
+                  className="h-8 w-full rounded-md border border-border/60 bg-white/[0.03] px-2 text-xs outline-none focus:border-primary"
+                >
+                  {(Object.entries(QUEUE_META) as Array<[ServiceQueue, typeof QUEUE_META[ServiceQueue]]>).map(([queue, meta]) => (
+                    <option key={queue} value={queue}>{meta.label}</option>
+                  ))}
+                </select>
+                <div className={`flex items-center gap-1.5 text-xs ${QUEUE_META[getConversationQueue(current)].text}`}>
+                  <span className={`size-1.5 rounded-full ${QUEUE_META[getConversationQueue(current)].dot}`} />
+                  Esta conversa está na fila de {QUEUE_META[getConversationQueue(current)].label}.
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Tag className="size-3" /> Tags</div>
                 <div className="flex flex-wrap gap-1">
-                  {(current.tags ?? []).map(t => (
+                  {visibleTags(current).map(t => (
                     <span key={t} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/[0.06]">
                       {t}
                       <button onClick={() => removeTag(current.id, t)} className="text-muted-foreground hover:text-foreground"><X className="size-2.5" /></button>
@@ -749,7 +847,7 @@ function Comunicacoes() {
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => addTag(current.id, newTag)}>+</Button>
                 </div>
                 <div className="flex flex-wrap gap-1 pt-1">
-                  {QUICK_TAGS.filter(t => !(current.tags ?? []).includes(t)).map(t => (
+                  {QUICK_TAGS.filter(t => !visibleTags(current).includes(t)).map(t => (
                     <button key={t} onClick={() => addTag(current.id, t)} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.03] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground transition-colors">
                       + {t}
                     </button>

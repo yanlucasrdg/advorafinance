@@ -24,17 +24,39 @@ export const Route = createFileRoute("/_authenticated/integracoes")({
 
 function loadMetaSdk(appId: string) {
   return new Promise<void>((resolve, reject) => {
-    if (window.FB) return resolve();
-    window.fbAsyncInit = () => {
-      window.FB?.init({ appId, cookie: true, xfbml: false, version: "v25.0" });
-      resolve();
+    let completed = false;
+    let timeout: number;
+    const finish = (error?: Error) => {
+      if (completed) return;
+      completed = true;
+      window.clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve();
     };
-    const existing = document.getElementById("meta-facebook-sdk");
-    if (existing) return;
+    const initialize = () => {
+      if (!window.FB) {
+        finish(new Error("O SDK da Meta não foi inicializado. Atualize a página e tente novamente."));
+        return;
+      }
+      window.FB.init({ appId, cookie: true, xfbml: false, version: "v25.0" });
+      finish();
+    };
+    timeout = window.setTimeout(() => finish(new Error("O SDK da Meta não respondeu. Atualize a página e tente novamente.")), 12_000);
+    if (window.FB) {
+      initialize();
+      return;
+    }
+    window.fbAsyncInit = initialize;
+    const existing = document.getElementById("meta-facebook-sdk") as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("error", () => finish(new Error("Não foi possível carregar a conexão segura da Meta.")), { once: true });
+      return;
+    }
     const script = document.createElement("script");
     script.id = "meta-facebook-sdk";
     script.async = true;
     script.src = "https://connect.facebook.net/pt_BR/sdk.js";
+    script.onload = initialize;
     script.onerror = () => reject(new Error("Não foi possível carregar a conexão segura da Meta."));
     document.head.appendChild(script);
   });
@@ -70,6 +92,14 @@ function IntegracoesPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const appId = status?.embeddedSignup.appId;
+    if (!status?.embeddedSignup.ready || !appId) return;
+    void loadMetaSdk(appId).catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Não foi possível preparar a conexão com a Meta.");
+    });
+  }, [status?.embeddedSignup.ready, status?.embeddedSignup.appId]);
+
   const finishSignup = async () => {
     if (!pendingCode.current || !signupDetails.current) return;
     const code = pendingCode.current;
@@ -99,9 +129,13 @@ function IntegracoesPage() {
     return () => window.removeEventListener("message", receiveMetaEvent);
   }, []);
 
-  const connectWhatsApp = async () => {
+  const connectWhatsApp = () => {
     if (!status?.embeddedSignup.ready || !status.embeddedSignup.appId || !status.embeddedSignup.configId) {
       toast.error("A conexão profissional ainda está sendo preparada pelo administrador do Advora.");
+      return;
+    }
+    if (!window.FB) {
+      toast.error("A conexão com a Meta ainda está sendo preparada. Aguarde alguns segundos e tente novamente.");
       return;
     }
     setConnecting(true);
@@ -109,9 +143,7 @@ function IntegracoesPage() {
       stopConnecting();
       toast.error("A Meta não respondeu a tempo. Feche a janela e tente novamente.");
     }, 120000);
-    try {
-      await loadMetaSdk(status.embeddedSignup.appId);
-      window.FB?.login((response) => {
+    window.FB.login((response) => {
         const code = response.authResponse?.code;
         if (!code) { stopConnecting(); toast.error("A conexão foi cancelada ou não foi autorizada pela Meta."); return; }
         pendingCode.current = code;
@@ -122,10 +154,6 @@ function IntegracoesPage() {
         override_default_response_type: true,
         extras: { setup: {} },
       });
-    } catch (error) {
-      stopConnecting();
-      toast.error(error instanceof Error ? error.message : "Não foi possível iniciar a conexão com a Meta.");
-    }
   };
 
   const connection = status?.connection;
@@ -153,8 +181,7 @@ function IntegracoesPage() {
           </div>
 
           <aside className="rounded-xl border bg-background p-4">
-            {loading ? <div className="grid min-h-36 place-items-center"><Loader2 className="size-5 animate-spin text-primary" /></div> : isConnected ? <><CheckCircle2 className="size-5 text-emerald-500" /><h3 className="mt-3 text-sm font-semibold">WhatsApp conectado</h3><p className="mt-1 text-xs leading-relaxed text-muted-foreground">O número está pronto para enviar e receber mensagens deste escritório.</p><dl className="mt-4 space-y-2 rounded-lg bg-muted/35 p-3 text-xs"><div className="flex justify-between gap-3"><dt className="text-muted-foreground">Número</dt><dd className="font-medium">{connection.phone_number_id}</dd></div><div className="flex justify-between gap-3"><dt className="text-muted-foreground">Conectado em</dt><dd className="font-medium">{connection.connected_at ? new Date(connection.connected_at).toLocaleDateString("pt-BR") : "—"}</dd></div></dl></> : <><ShieldCheck className="size-5 text-primary" /><h3 className="mt-3 text-sm font-semibold">Conecte em poucos minutos</h3><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Use a conta Meta da empresa e escolha o número que atenderá seus clientes.</p><Button className="mt-4 w-full" size="sm" onClick={connectWhatsApp} disabled={connecting}>{connecting ? <Loader2 className="size-3.5 animate-spin" /> : <MessageCircle className="size-3.5" />}Conectar WhatsApp</Button></>}
-            {connecting && !loading && !isConnected && <Button className="mt-2 w-full" size="sm" variant="ghost" onClick={stopConnecting}>Cancelar conexão</Button>}
+            {loading ? <div className="grid min-h-36 place-items-center"><Loader2 className="size-5 animate-spin text-primary" /></div> : isConnected ? <><CheckCircle2 className="size-5 text-emerald-500" /><h3 className="mt-3 text-sm font-semibold">WhatsApp conectado</h3><p className="mt-1 text-xs leading-relaxed text-muted-foreground">O número está pronto para enviar e receber mensagens deste escritório.</p><dl className="mt-4 space-y-2 rounded-lg bg-muted/35 p-3 text-xs"><div className="flex justify-between gap-3"><dt className="text-muted-foreground">Número</dt><dd className="font-medium">{connection.phone_number_id}</dd></div><div className="flex justify-between gap-3"><dt className="text-muted-foreground">Conectado em</dt><dd className="font-medium">{connection.connected_at ? new Date(connection.connected_at).toLocaleDateString("pt-BR") : "—"}</dd></div></dl></> : <><ShieldCheck className="size-5 text-primary" /><h3 className="mt-3 text-sm font-semibold">Conecte em poucos minutos</h3><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Use a conta Meta da empresa e escolha o número que atenderá seus clientes.</p><Button className="mt-4 w-full" size="sm" onClick={connecting ? stopConnecting : connectWhatsApp}>{connecting ? <><Loader2 className="size-3.5 animate-spin" />Cancelar conexão</> : <><MessageCircle className="size-3.5" />Conectar WhatsApp</>}</Button></>}
           </aside>
         </div>
       </Panel>

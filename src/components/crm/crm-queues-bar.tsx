@@ -82,7 +82,7 @@ export function CrmQueuesBar({
   onSelectQueue,
   queueCounts = {},
 }: CrmQueuesBarProps) {
-  const totalCount = Object.values(queueCounts).reduce((a, b) => a + b, 0) || 20;
+  const totalCount = Object.values(queueCounts).reduce((a, b) => a + b, 0);
 
   return (
     <div className="bg-card border border-border rounded-xl p-2.5 shadow-xs">
@@ -121,7 +121,7 @@ export function CrmQueuesBar({
         {/* Specific Legal Queues */}
         {LEGAL_QUEUES.map((q) => {
           const Icon = q.icon;
-          const count = queueCounts[q.id] ?? q.count;
+          const count = queueCounts[q.id] ?? 0;
           const isSelected = selectedQueue === q.id;
 
           return (

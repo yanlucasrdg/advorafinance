@@ -219,20 +219,11 @@ export function CrmLeadDrawer({
       toast.error("Inicie uma conversa no WhatsApp antes de transferir o atendimento.");
       return;
     }
-    const queueLabels: Record<string, string> = {
-      triagem: "Triagem",
-      juridico: "Jurídico",
-      financeiro: "Financeiro",
-      secretaria: "Secretaria",
-    };
-    const { data, error: readError } = await supabase.from("whatsapp_conversations").select("tags").eq("id", conversationId).maybeSingle();
-    if (readError || !data) { toast.error("Não foi possível localizar o atendimento."); return; }
-    const knownTags = Object.values(queueLabels);
-    const tags = [...((data.tags ?? []).filter((tag: string) => !knownTags.includes(tag))), queueLabels[queue] ?? queue];
     const { error } = await supabase.from("whatsapp_conversations")
-      .update({ tags, assignment_status: queue === "triagem" ? "new" : "assigned" })
+      .update({ category: queue })
       .eq("id", conversationId);
     if (error) { toast.error(error.message); return; }
+    const queueLabels: Record<string, string> = { triagem: "Triagem", juridico: "Jurídico", financeiro: "Financeiro", secretaria: "Secretaria" };
     toast.success(`Atendimento transferido para ${queueLabels[queue] ?? queue}.`);
   };
 

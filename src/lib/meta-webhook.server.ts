@@ -58,7 +58,15 @@ function messageBody(message: MetaWebhookMessage) {
   return `Mensagem ${message.type ?? "recebida"}`;
 }
 
-type Qualification = { queue: "Triagem" | "Jurídico" | "Financeiro" | "Secretaria"; urgent: boolean };
+type ServiceQueue = "triagem" | "juridico" | "financeiro" | "secretaria";
+type Qualification = { queue: ServiceQueue; urgent: boolean };
+
+const QUEUE_LABELS: Record<ServiceQueue, string> = {
+  triagem: "Triagem",
+  juridico: "Jurídico",
+  financeiro: "Financeiro",
+  secretaria: "Secretaria",
+};
 
 /**
  * A conservative first-pass classifier. It never sends a reply or assigns a
@@ -71,15 +79,15 @@ function qualifyInboundMessage(body: string): Qualification {
   const urgent = includesAny(["urgente", "urgencia", "hoje", "agora", "liminar", "audiencia", "prazo vence", "prisao", "preso"]);
 
   if (includesAny(["boleto", "pagamento", "cobranca", "cobrar", "fatura", "pix", "honorario", "reembolso", "nota fiscal"])) {
-    return { queue: "Financeiro", urgent };
+    return { queue: "financeiro", urgent };
   }
   if (includesAny(["agendar", "agenda", "consulta", "horario", "documento", "procuracao", "endereco", "atendimento presencial"])) {
-    return { queue: "Secretaria", urgent };
+    return { queue: "secretaria", urgent };
   }
   if (includesAny(["processo", "trabalhista", "previdenci", "criminal", "divorcio", "familia", "inventario", "contrato", "imovel", "indenizacao", "advogado", "demissao", "beneficio", "recurso"])) {
-    return { queue: "Jurídico", urgent };
+    return { queue: "juridico", urgent };
   }
-  return { queue: "Triagem", urgent };
+  return { queue: "triagem", urgent };
 }
 
 async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBindings) {
@@ -116,18 +124,26 @@ async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBind
         const phone = message.from?.replace(/\D/g, "");
         if (!phone || !message.id) continue;
 
-        const { data: conversation, error: conversationError } = await supabase
+        const { data: existingConversation, error: existingConversationError } = await supabase
           .from("whatsapp_conversations")
-          .upsert({
+          .select("id, tags, assignment_status, category")
+          .eq("tenant_id", instance.tenant_id)
+          .eq("instance_id", instance.id)
+          .eq("contact_phone", phone)
+          .maybeSingle();
+        if (existingConversationError) continue;
+
+        const { data: conversation, error: conversationError } = existingConversation
+          ? { data: existingConversation, error: null }
+          : await supabase.from("whatsapp_conversations").insert({
             tenant_id: instance.tenant_id,
             instance_id: instance.id,
             contact_phone: phone,
             contact_name: contacts.get(message.from) ?? null,
             channel: "whatsapp",
             assignment_status: "new",
-          }, { onConflict: "instance_id,contact_phone" })
-          .select("id, tags, assignment_status")
-          .single();
+            category: "triagem",
+          }).select("id, tags, assignment_status, category").single();
         if (conversationError || !conversation) continue;
 
         const body = messageBody(message);
@@ -147,19 +163,17 @@ async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBind
           const qualification = qualifyInboundMessage(body);
           const knownQueues = ["Triagem", "Jurídico", "Financeiro", "Secretaria"];
           const currentTags = conversation.tags ?? [];
-          const manuallyRouted = currentTags.some((tag: string) => knownQueues.includes(tag) && tag !== "Triagem");
-          const nextTags = manuallyRouted
-            ? currentTags
-            : Array.from(new Set([
-              ...currentTags.filter((tag: string) => !knownQueues.includes(tag)),
-              qualification.queue,
-              ...(qualification.urgent ? ["Urgente"] : []),
-            ]));
+          const manuallyRouted = conversation.category && conversation.category !== "triagem";
+          const nextTags = Array.from(new Set([
+            ...currentTags.filter((tag: string) => !knownQueues.includes(tag)),
+            ...(qualification.urgent ? ["Urgente"] : []),
+          ]));
           await supabase.from("whatsapp_conversations").update({
             last_message: body,
             last_message_at: message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : new Date().toISOString(),
             unread_count: 1,
             tags: nextTags,
+            category: manuallyRouted ? conversation.category : qualification.queue,
           }).eq("id", conversation.id);
 
           if (qualification.urgent) {
@@ -168,7 +182,7 @@ async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBind
               kind: "atendimento_urgente",
               severity: "warning",
               title: "Novo atendimento com indício de urgência",
-              body: `A conversa foi encaminhada para ${qualification.queue}. Revise a mensagem e assuma o atendimento.`,
+              body: `A conversa foi encaminhada para ${QUEUE_LABELS[manuallyRouted ? conversation.category as ServiceQueue : qualification.queue]}. Revise a mensagem e assuma o atendimento.`,
               link_action: "/comunicacoes",
             });
           }
