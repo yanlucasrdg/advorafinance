@@ -173,6 +173,10 @@ function UsersAdmin() {
         <div className="flex gap-3"><UsersRound className="mt-0.5 size-5 text-primary" /><div><h2 className="text-sm font-semibold">Governança de acesso</h2><p className="mt-1 text-sm text-muted-foreground">Cada pessoa recebe uma função única. Proprietários preservam o controle do escritório; administradores, advogados, secretárias e estagiários recebem permissões proporcionais ao trabalho.</p></div></div>
       </Panel>
 
+      <div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 text-sm text-muted-foreground">
+        <span className="font-semibold text-foreground">Observação:</span> após solicitar um novo usuário, entre em contato com o suporte para solicitar a troca de senha e liberar o login com o e-mail do próprio usuário.
+      </div>
+
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader><SheetTitle>Novo usuário</SheetTitle><SheetDescription>O convite é enviado por e-mail e o perfil de acesso é configurado para este escritório.</SheetDescription></SheetHeader>
