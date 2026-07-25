@@ -1,9 +1,26 @@
+/**
+ * use-finance.ts — Hook Financeiro com validação Zod e correções de auditoria
+ *
+ * Correções desta versão (Auditoria 2026-07-25):
+ * - Validação Zod em create, createPayment
+ * - markAllNotificationsRead agora filtra por tenant_id (fix crítico)
+ * - Limite de 500 registros por query
+ * - Tipagens explícitas sem `as any`
+ */
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { useRealtimeTables } from "@/hooks/use-realtime-table";
 import { FinRow } from "@/lib/metrics";
+import {
+  financialEntryCreateSchema,
+  financialPaymentCreateSchema,
+  parseOrThrow,
+  type FinancialEntryCreate,
+  type FinancialPaymentCreate,
+} from "@/lib/validators";
 
 export type Entry = FinRow & {
   id: string;
@@ -42,8 +59,9 @@ export function useFinance() {
       const { data, error } = await supabase
         .from("financial_entries")
         .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,paid_amount_cents,settlement_status,category,payment_method,clients(name)")
-        .order("due_date", { ascending: false, nullsFirst: false });
-      if (error) throw error;
+        .order("due_date", { ascending: false, nullsFirst: false })
+        .limit(500);
+      if (error) throw new Error(error.message);
       return (data ?? []) as unknown as Entry[];
     },
   });
@@ -52,8 +70,8 @@ export function useFinance() {
     queryKey: ["fin", "cases", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
-      const { data, error } = await supabase.from("cases").select("id,area,responsible");
-      if (error) throw error;
+      const { data, error } = await supabase.from("cases").select("id,area,responsible").limit(500);
+      if (error) throw new Error(error.message);
       return (data ?? []) as CaseLite[];
     },
   });
@@ -62,8 +80,8 @@ export function useFinance() {
     queryKey: ["fin", "clients", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("id,name").order("name");
-      if (error) throw error;
+      const { data, error } = await supabase.from("clients").select("id,name").order("name").limit(500);
+      if (error) throw new Error(error.message);
       return (data ?? []) as ClientLite[];
     },
   });
@@ -72,9 +90,16 @@ export function useFinance() {
     queryKey: ["fin", "dre_settings", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: DreSettingsRow | null; error: unknown }> } } } })
-        .from("dre_settings").select("*").eq("tenant_id", tenantId!).maybeSingle();
-      if (error) throw error;
+      const { data, error } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (k: string, v: string) => {
+              maybeSingle: () => Promise<{ data: DreSettingsRow | null; error: { message: string } | null }>;
+            };
+          };
+        };
+      }).from("dre_settings").select("*").eq("tenant_id", tenantId!).maybeSingle();
+      if (error) throw new Error(error.message);
       return data;
     },
   });
@@ -87,8 +112,8 @@ export function useFinance() {
         .from("financial_audit_log")
         .select("id,entry_id,action,created_at,actor_id,before,after")
         .order("created_at", { ascending: false })
-        .limit(30);
-      if (error) throw error;
+        .limit(50);
+      if (error) throw new Error(error.message);
       return (data ?? []) as unknown as AuditRow[];
     },
   });
@@ -97,81 +122,105 @@ export function useFinance() {
     queryKey: ["fin", "notifications", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { order: (k: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: NotificationRow[] | null; error: unknown }> } } } })
-        .from("notifications").select("id,kind,title,body,entry_id,read_at,created_at")
-        .order("created_at", { ascending: false }).limit(30);
-      if (error) throw error;
+      const { data, error } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (k: string, v: string) => {
+              order: (k: string, o: { ascending: boolean }) => {
+                limit: (n: number) => Promise<{ data: NotificationRow[] | null; error: { message: string } | null }>;
+              };
+            };
+          };
+        };
+      }).from("notifications").select("id,kind,title,body,entry_id,read_at,created_at")
+        .eq("tenant_id", tenantId!)
+        .order("created_at", { ascending: false }).limit(50);
+      if (error) throw new Error(error.message);
       return data ?? [];
     },
   });
 
   const create = useMutation({
-    mutationFn: async (payload: Partial<Entry>) => {
-      const { error } = await supabase.from("financial_entries").insert(payload as any);
-      if (error) throw error;
+    mutationFn: async (raw: Partial<Entry>) => {
+      // ✅ Valida schema antes de inserir — elimina mass assignment
+      const payload: FinancialEntryCreate = parseOrThrow(financialEntryCreateSchema, raw, "Criar Lançamento");
+      const { error } = await supabase.from("financial_entries").insert({
+        ...payload,
+        tenant_id: tenantId,
+      } as never);
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
       toast.success("Lançamento criado");
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("financial_entries").delete().eq("id", id);
-      if (error) throw error;
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
       toast.success("Lançamento removido");
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const markAllNotificationsRead = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("notifications")
+      if (!tenantId) throw new Error("Sessão expirada.");
+      // ✅ Agora filtra por tenant_id (fix crítico de auditoria)
+      const { error } = await (supabase as unknown as {
+        from: (t: string) => {
+          update: (v: Record<string, string>) => {
+            eq: (k: string, v: string) => {
+              is: (k: string, v: null) => Promise<{ error: { message: string } | null }>;
+            };
+          };
+        };
+      }).from("notifications")
         .update({ read_at: new Date().toISOString() })
+        .eq("tenant_id", tenantId)
         .is("read_at", null);
-      if (error) throw error;
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fin", "notifications", tenantId] });
       toast.success("Notificações marcadas como lidas");
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const saveDreSettings = useMutation({
     mutationFn: async (payload: { apply_cogs: boolean; enabled_categories: string[]; category_map: Record<string, string> }) => {
+      if (!tenantId) throw new Error("Sessão expirada.");
       const { error } = await supabase.from("dre_settings").upsert({
-        tenant_id: tenantId as string,
-        apply_cogs: payload.apply_cogs,
+        tenant_id:          tenantId,
+        apply_cogs:         payload.apply_cogs,
         enabled_categories: payload.enabled_categories,
-        category_map: payload.category_map,
+        category_map:       payload.category_map,
       }, { onConflict: "tenant_id" });
-      if (error) throw error;
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fin", "dre_settings", tenantId] });
       toast.success("Configuração do DRE atualizada");
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const createPayment = useMutation({
-    mutationFn: async (payload: {
-      tenant_id: string;
-      entry_id: string;
-      amount_cents: number;
-      method: string;
-      notes: string | null;
-      paid_at: string;
+    mutationFn: async (raw: {
+      tenant_id: string; entry_id: string; amount_cents: number;
+      method: string; notes: string | null; paid_at: string;
     }) => {
-      const { error } = await supabase.from("financial_payments").insert(payload);
-      if (error) throw error;
+      // ✅ Valida antes de inserir
+      const payload: FinancialPaymentCreate = parseOrThrow(financialPaymentCreateSchema, raw, "Registrar Baixa");
+      const { error } = await supabase.from("financial_payments").insert(payload as never);
+      if (error) throw new Error(error.message);
     },
     onSuccess: (_data, payload) => {
       qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
@@ -179,13 +228,13 @@ export function useFinance() {
       qc.invalidateQueries({ queryKey: ["fin", "payments", payload.entry_id] });
       toast.success("Baixa registrada");
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const reconcile = useMutation({
     mutationFn: async (entryId: string) => {
       const { error } = await supabase.rpc("reconcile_financial_entry", { _entry_id: entryId });
-      if (error) throw error;
+      if (error) throw new Error(error.message);
     },
     onSuccess: (_data, entryId) => {
       qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
@@ -193,17 +242,19 @@ export function useFinance() {
       qc.invalidateQueries({ queryKey: ["fin", "payments", entryId] });
       toast.success("Lançamento conciliado");
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   return {
-    entries: entriesQ.data ?? [],
-    cases: casesQ.data ?? [],
-    clients: clientsQ.data ?? [],
+    entries:       entriesQ.data ?? [],
+    cases:         casesQ.data ?? [],
+    clients:       clientsQ.data ?? [],
     dreConfigData: dreCfgQ.data,
-    auditLogs: auditQ.data ?? [],
+    auditLogs:     auditQ.data ?? [],
     notifications: notifQ.data ?? [],
-    isLoading: entriesQ.isLoading || casesQ.isLoading || clientsQ.isLoading,
+    isLoading:     entriesQ.isLoading || casesQ.isLoading || clientsQ.isLoading,
+    isError:       entriesQ.isError,
+    error:         entriesQ.error,
     create,
     remove,
     markAllNotificationsRead,
@@ -223,7 +274,7 @@ export function useFinancialPayments(entryId: string | null) {
         .select("id,entry_id,amount_cents,paid_at,method,notes")
         .eq("entry_id", entryId!)
         .order("paid_at", { ascending: false });
-      if (error) throw error;
+      if (error) throw new Error(error.message);
       return (data ?? []) as PaymentRow[];
     },
   });
@@ -239,8 +290,8 @@ export function useFinancialAuditEntry(entryId: string | null) {
         .select("id,entry_id,action,created_at,actor_id,before,after")
         .eq("entry_id", entryId!)
         .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as AuditRow[];
+      if (error) throw new Error(error.message);
+      return (data ?? []) as unknown as AuditRow[];
     },
   });
 }
