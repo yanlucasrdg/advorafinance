@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { metaWhatsAppSendText } from "@/lib/meta-whatsapp.functions";
+import { askCopilot } from "@/lib/copilot.functions";
 import type { ClientCardData } from "./crm-kanban-card";
 
 type CrmLeadDrawerProps = {
@@ -61,23 +62,9 @@ export function CrmLeadDrawer({
   onUpdateStage,
   onSaveNotes,
 }: CrmLeadDrawerProps) {
-  if (!client) return null;
-
-  const [activeTab, setActiveTab] = useState<"chat" | "ficha" | "ia" | "tarefas">("chat");
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "1",
-      sender: "client",
-      text: `Olá, preciso de atendimento jurídico sobre uma questão de ${meta.area}.`,
-      time: "10:14",
-    },
-    {
-      id: "2",
-      sender: "system",
-      text: `Lead qualificado automaticamente via triagem. Área atribuída: ${meta.area}.`,
-      time: "10:15",
-    },
-  ]);
+  const [activeTab, setActiveTab] = useState<"chat" | "ficha" | "ia" | "docs" | "tarefas">("chat");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
@@ -91,7 +78,67 @@ export function CrmLeadDrawer({
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docType, setDocType] = useState("other");
   const [docDescription, setDocDescription] = useState("");
+  const [officeNotes, setOfficeNotes] = useState("");
   const fileRef = React.useRef<HTMLInputElement | null>(null);
+
+  const formatChatTime = (value: string) => new Date(value).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+  const loadMessages = async (id: string) => {
+    const { data, error } = await supabase
+      .from("whatsapp_messages")
+      .select("id, direction, body, created_at")
+      .eq("conversation_id", id)
+      .order("created_at", { ascending: true })
+      .limit(300);
+    if (error) throw error;
+    setMessages((data ?? []).map((message: any) => ({
+      id: message.id,
+      sender: message.direction === "inbound" ? "client" : "lawyer",
+      text: message.body,
+      time: formatChatTime(message.created_at),
+    })));
+  };
+
+  React.useEffect(() => {
+    let active = true;
+    const loadConversation = async () => {
+      setMessages([]);
+      setConversationId(null);
+      if (!client?.id) return;
+      const { data, error } = await supabase
+        .from("whatsapp_conversations")
+        .select("id")
+        .eq("client_id", client.id)
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+      if (error || !data || !active) return;
+      setConversationId(data.id);
+      try { await loadMessages(data.id); } catch (err) { console.error(err); }
+    };
+    void loadConversation();
+    return () => { active = false; };
+  }, [client?.id]);
+
+  React.useEffect(() => {
+    if (!conversationId) return;
+    const channel = supabase.channel(`crm-client-conversation:${conversationId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_messages", filter: `conversation_id=eq.${conversationId}` }, () => {
+        void loadMessages(conversationId);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [conversationId]);
+
+  React.useEffect(() => {
+    if (!client) { setOfficeNotes(""); return; }
+    try {
+      const parsed = client.notes ? JSON.parse(client.notes) : {};
+      setOfficeNotes(typeof parsed.office_notes === "string" ? parsed.office_notes : "");
+    } catch {
+      setOfficeNotes(client.notes ?? "");
+    }
+  }, [client?.id, client?.notes]);
 
   async function loadClientDocuments(clientId: string) {
     setDocsLoading(true);
@@ -159,49 +206,66 @@ export function CrmLeadDrawer({
 
   const sendTextFn = useServerFn(metaWhatsAppSendText);
 
+  if (!client) return null;
+
+  const saveOfficeNotes = async () => {
+    let current: Record<string, unknown> = {};
+    try { current = client.notes ? JSON.parse(client.notes) : {}; } catch { current = {}; }
+    await onSaveNotes(client.id, JSON.stringify({ ...current, office_notes: officeNotes }));
+  };
+
+  const transferQueue = async (queue: string) => {
+    if (!conversationId) {
+      toast.error("Inicie uma conversa no WhatsApp antes de transferir o atendimento.");
+      return;
+    }
+    const queueLabels: Record<string, string> = {
+      triagem: "Triagem",
+      juridico: "Jurídico",
+      financeiro: "Financeiro",
+      secretaria: "Secretaria",
+    };
+    const { data, error: readError } = await supabase.from("whatsapp_conversations").select("tags").eq("id", conversationId).maybeSingle();
+    if (readError || !data) { toast.error("Não foi possível localizar o atendimento."); return; }
+    const knownTags = Object.values(queueLabels);
+    const tags = [...((data.tags ?? []).filter((tag: string) => !knownTags.includes(tag))), queueLabels[queue] ?? queue];
+    const { error } = await supabase.from("whatsapp_conversations")
+      .update({ tags, assignment_status: queue === "triagem" ? "new" : "assigned" })
+      .eq("id", conversationId);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Atendimento transferido para ${queueLabels[queue] ?? queue}.`);
+  };
+
   const handleSendMessage = async (textToSend?: string) => {
     const msg = textToSend || inputText;
     if (!msg.trim()) return;
-
-    const newMsg: ChatMessage = {
-      id: String(Date.now()),
-      sender: "lawyer",
-      text: msg,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    setMessages((prev) => [...prev, newMsg]);
-    if (!textToSend) setInputText("");
     setSending(true);
 
     try {
-      if (client.phone) {
-        await sendTextFn({ data: { phone: client.phone, message: msg } });
-        toast.success("Mensagem enviada no WhatsApp!");
-      } else {
-        toast.info("Mensagem simulada no chat (telefone não cadastrado).");
-      }
+      if (!client.phone) throw new Error("Telefone não cadastrado para este cliente.");
+      const result = await sendTextFn({ data: { phone: client.phone, message: msg, clientId: client.id } });
+      setInputText("");
+      setConversationId(result.conversationId);
+      await loadMessages(result.conversationId);
+      toast.success("Mensagem enviada no WhatsApp.");
     } catch (err: any) {
-      toast.error(err?.message || "Não foi possível enviar via WhatsApp Z-API (modo demonstração mantido).");
+      toast.error(err?.message || "Não foi possível enviar a mensagem pelo WhatsApp.");
     } finally {
       setSending(false);
     }
   };
 
-  const handleRunAiAnalysis = () => {
+  const handleRunAiAnalysis = async () => {
     setAiAnalyzing(true);
-    setTimeout(() => {
-      setAiAnalysis(`
-🤖 **Resumo Executivo da IA**:
-• **Demanda Jurídica**: Potencial caso na área de **${meta.area}**.
-• **Nível de Urgência**: High (Lead Quente 🔥).
-• **Probabilidade de Conversão**: ~85%.
-• **Recomendação**: Agendar consulta presencial ou por vídeochamada nas próximas 24 horas.
-• **Honorários Sugeridos**: ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(meta.value)}.
-      `);
+    try {
+      const result = await askCopilot({ data: { prompt: `Faça uma triagem jurídica inicial do cliente ${client.name}. Área provável: ${meta.area}. Dados disponíveis: e-mail ${client.email ?? "não informado"}; telefone ${client.phone ?? "não informado"}. Responda em tópicos com urgência, próximos passos, informações faltantes e uma abordagem profissional. Não invente fatos.` } });
+      setAiAnalysis(result.reply);
+      toast.success("Triagem por IA concluída.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Não foi possível executar a triagem por IA.");
+    } finally {
       setAiAnalyzing(false);
-      toast.success("Triagem por IA concluída com sucesso!");
-    }, 1000);
+    }
   };
 
   return (
@@ -251,25 +315,7 @@ export function CrmLeadDrawer({
                   <Label className="text-[11px] text-muted-foreground">Nova Fila Jurídica</Label>
                   <Select
                     defaultValue="juridico"
-                    onValueChange={(q) => {
-                      const qNames: Record<string, string> = {
-                        triagem: "Triagem & Recepção",
-                        juridico: "Atendimento Jurídico",
-                        financeiro: "Financeiro & Honorários",
-                        secretaria: "Secretaria & Prazos",
-                      };
-                      const queueLabel = qNames[q] || q;
-                      setMessages((prev) => [
-                        ...prev,
-                        {
-                          id: String(Date.now()),
-                          sender: "system",
-                          text: `Atendimento transferido para a Fila de "${queueLabel}". Handoff registrado com sucesso.`,
-                          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                        },
-                      ]);
-                      toast.success(`Atendimento transferido para a fila de ${queueLabel}!`);
-                    }}
+                    onValueChange={(queue) => { void transferQueue(queue); }}
                   >
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="Selecione a fila" />
@@ -305,8 +351,8 @@ export function CrmLeadDrawer({
 
         {/* Tabs header */}
         <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-4 border-b border-border bg-card">
-            <TabsList className="bg-transparent h-11 space-x-2">
+          <div className="px-3 sm:px-4 border-b border-border bg-card overflow-x-auto no-scrollbar">
+            <TabsList className="bg-transparent h-11 min-w-max space-x-1.5">
               <TabsTrigger value="chat" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary text-xs gap-1.5 font-medium">
                 <MessageCircle className="h-3.5 w-3.5" />
                 <span>WhatsApp Chat</span>
@@ -354,6 +400,15 @@ export function CrmLeadDrawer({
 
             {/* Chat Messages List */}
             <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-muted/10">
+              {messages.length === 0 && (
+                <div className="h-full min-h-40 grid place-items-center text-center px-6">
+                  <div>
+                    <MessageCircle className="size-8 text-primary/50 mx-auto mb-2" />
+                    <p className="text-sm font-medium">Nenhuma conversa vinculada</p>
+                    <p className="text-xs text-muted-foreground mt-1">Envie uma mensagem para iniciar o atendimento oficial por WhatsApp.</p>
+                  </div>
+                </div>
+              )}
               {messages.map((msg) => (
                 <div
                   key={msg.id}
@@ -458,11 +513,12 @@ export function CrmLeadDrawer({
               <Label className="text-xs text-muted-foreground">Anotações do Escritório</Label>
               <Textarea
                 className="mt-1 text-xs min-h-[120px]"
-                defaultValue={client.notes || ""}
+                value={officeNotes}
                 placeholder="Insira observações relevantes sobre a negociação..."
-                onBlur={(e) => onSaveNotes(client.id, e.target.value)}
+                onChange={(e) => setOfficeNotes(e.target.value)}
+                onBlur={() => void saveOfficeNotes()}
               />
-              <span className="text-[10px] text-muted-foreground mt-1 block">Salva automaticamente ao sair do campo.</span>
+              <span className="text-[10px] text-muted-foreground mt-1 block">Salva automaticamente sem apagar área, valor ou partes vinculadas.</span>
             </div>
 
             <div className="pt-3 border-t border-border">

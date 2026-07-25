@@ -59,18 +59,22 @@ async function loadOrCreateChannel(userId: string): Promise<MetaChannel> {
   return { id: created.id, tenantId: created.tenant_id, phoneNumberId };
 }
 
-async function findOrCreateConversation(channel: MetaChannel, phone: string) {
+async function findOrCreateConversation(channel: MetaChannel, phone: string, clientId?: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const normalizedPhone = phone.replace(/\D/g, "");
   const { data: existing, error: existingError } = await supabaseAdmin
     .from("whatsapp_conversations").select("id").eq("instance_id", channel.id)
     .in("contact_phone", [normalizedPhone, `+${normalizedPhone}`]).maybeSingle();
   if (existingError) throw new Error(existingError.message);
-  if (existing) return existing.id;
+  if (existing) {
+    if (clientId) await supabaseAdmin.from("whatsapp_conversations").update({ client_id: clientId }).eq("id", existing.id);
+    return existing.id;
+  }
   const { data: created, error: createError } = await supabaseAdmin.from("whatsapp_conversations").insert({
     tenant_id: channel.tenantId,
     instance_id: channel.id,
     contact_phone: normalizedPhone,
+    client_id: clientId ?? null,
     channel: "whatsapp",
     assignment_status: "new",
   }).select("id").single();
@@ -95,13 +99,14 @@ export const metaWhatsAppConnect = createServerFn({ method: "POST" })
 
 export const metaWhatsAppSendText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { phone: string; message: string }) => {
+  .inputValidator((input: { phone: string; message: string; clientId?: string }) => {
     const phone = String(input?.phone ?? "").replace(/\D/g, "");
     const message = String(input?.message ?? "").trim();
     if (phone.length < 10 || phone.length > 15) throw new Error("Telefone inválido. Use DDI, DDD e número.");
     if (!message) throw new Error("Mensagem vazia.");
     if (message.length > 4096) throw new Error("A mensagem excede o limite de 4096 caracteres.");
-    return { phone, message };
+    const clientId = typeof input?.clientId === "string" && input.clientId.length > 0 ? input.clientId : undefined;
+    return { phone, message, clientId };
   })
   .handler(async ({ data, context }) => {
     await enforceRateLimit(context.supabase, "zapi_send_text");
@@ -115,9 +120,13 @@ export const metaWhatsAppSendText = createServerFn({ method: "POST" })
     });
     const payload = await response.json().catch(() => ({})) as { error?: { message?: string }; messages?: Array<{ id?: string }> };
     if (!response.ok) throw new Error(payload.error?.message ?? `Meta retornou HTTP ${response.status}.`);
-    const conversationId = await findOrCreateConversation(channel, data.phone);
-    const externalMessageId = payload.messages?.[0]?.id ?? null;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (data.clientId) {
+      const { data: client } = await supabaseAdmin.from("clients").select("id").eq("id", data.clientId).eq("tenant_id", channel.tenantId).maybeSingle();
+      if (!client) throw new Error("Cliente não pertence ao escritório atual.");
+    }
+    const conversationId = await findOrCreateConversation(channel, data.phone, data.clientId);
+    const externalMessageId = payload.messages?.[0]?.id ?? null;
     const { error: messageError } = await supabaseAdmin.from("whatsapp_messages").insert({
       tenant_id: channel.tenantId, conversation_id: conversationId, direction: "outbound", body: data.message,
       status: "sent", external_message_id: externalMessageId,
