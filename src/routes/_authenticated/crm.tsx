@@ -103,7 +103,21 @@ function getMeta(c: Client) {
   if (c.status === "novo_contato" || c.status === "triagem") {
     hot = c.name.length % 2 === 0;
   }
-  return { area, value, owner, hot };
+  // The board is a financial view: it must display only what was saved for
+  // this client. The previous decorative fallback replaced valid values such
+  // as 10.000 with a number generated from the client's name.
+  try {
+    const persisted = c.notes ? JSON.parse(c.notes) : {};
+    const persistedValue = Number(persisted.value);
+    return {
+      area: typeof persisted.area === "string" && persisted.area.trim() ? persisted.area : "Nao definido",
+      value: Number.isFinite(persistedValue) && persistedValue >= 0 ? persistedValue : 0,
+      owner: typeof persisted.owner === "string" && persisted.owner.trim() ? persisted.owner : "Sem responsavel",
+      hot: persisted.hot === true,
+    };
+  } catch {
+    return { area: "Nao definido", value: 0, owner: "Sem responsavel", hot: false };
+  }
 }
 
 function CRM() {

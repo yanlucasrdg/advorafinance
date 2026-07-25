@@ -34,6 +34,7 @@ type Conversation = {
   id: string;
   tenant_id: string;
   instance_id: string | null;
+  client_id: string | null;
   contact_name: string | null;
   contact_phone: string | null;
   last_message: string | null;
@@ -301,6 +302,7 @@ function Comunicacoes() {
       const identifier = channel === "whatsapp"
         ? "+" + newContact.phone.replace(/\D/g, "")
         : newContact.phone.trim().replace(/^@/, "");
+      let clientId: string | null = null;
 
       // Dedupe check: existing conversation with same channel + identifier
       const { data: existing } = await supabase
@@ -319,15 +321,19 @@ function Comunicacoes() {
       // Also link/create a client record by phone (WhatsApp only)
       if (channel === "whatsapp") {
         const { data: cli } = await supabase.from("clients").select("id").eq("phone", identifier).maybeSingle();
-        if (!cli) {
-          await supabase.from("clients").insert({
+        if (cli) {
+          clientId = cli.id;
+        } else {
+          const { data: createdClient, error: clientError } = await supabase.from("clients").insert({
             tenant_id: profile.tenant_id,
             name: newContact.name.trim(),
             phone: identifier,
             type: "pf",
             status: "novo_contato",
             created_by: user?.id ?? null,
-          } as never);
+          } as never).select("id").single();
+          if (clientError) throw new Error(clientError.message);
+          clientId = createdClient?.id ?? null;
         }
       }
 
@@ -336,14 +342,42 @@ function Comunicacoes() {
         instance_id: null as unknown as string,
         contact_name: newContact.name.trim(),
         contact_phone: identifier,
+        client_id: clientId,
         channel,
-        assigned_to: user?.id ?? null,
-        assignment_status: "assigned" as AssignmentStatus,
+        assigned_to: null,
+        assignment_status: "new" as AssignmentStatus,
+        tags: ["Triagem"],
         last_message: newContact.message.trim() || null,
         last_message_at: new Date().toISOString(),
         unread_count: 0,
       } as never).select().single();
       if (error) throw new Error(error.message);
+
+      // Primeiro atendimento: uma pendência de SLA é criada junto com o lead.
+      // Isso dá visibilidade na Agenda sem precisar depender de memória ou planilhas.
+      if (clientId) {
+        const dueAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        const { error: deadlineError } = await supabase.from("deadlines").insert({
+          tenant_id: profile.tenant_id,
+          client_id: clientId,
+          title: `Responder novo contato: ${newContact.name.trim()}`,
+          due_at: dueAt,
+          kind: "primeiro_atendimento",
+          priority: "high",
+          notes: "Criado automaticamente ao iniciar uma conversa pelo módulo de Comunicações.",
+        });
+        if (deadlineError) console.warn("Não foi possível criar SLA do novo contato", deadlineError.message);
+
+        await supabase.from("notifications").insert({
+          tenant_id: profile.tenant_id,
+          user_id: user?.id ?? null,
+          kind: "novo_lead",
+          severity: "info",
+          title: "Novo contato em triagem",
+          body: `${newContact.name.trim()} precisa de uma primeira resposta em até 15 minutos.`,
+          link_action: "/comunicacoes",
+        });
+      }
 
       if (newContact.message.trim() && data) {
         if (channel === "instagram" || channel === "messenger") {
@@ -368,7 +402,7 @@ function Comunicacoes() {
         }
       }
 
-      toast.success("Conversa criada");
+      toast.success("Conversa criada e enviada para Triagem", { description: "Uma pendência de primeira resposta foi criada para os próximos 15 minutos." });
       if (data?.id) setSelected(data.id);
       closeNewModal(true);
       load();

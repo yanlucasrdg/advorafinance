@@ -58,6 +58,30 @@ function messageBody(message: MetaWebhookMessage) {
   return `Mensagem ${message.type ?? "recebida"}`;
 }
 
+type Qualification = { queue: "Triagem" | "Jurídico" | "Financeiro" | "Secretaria"; urgent: boolean };
+
+/**
+ * A conservative first-pass classifier. It never sends a reply or assigns a
+ * person; it only places a new conversation in the appropriate work queue so
+ * the office remains in control of every legal interaction.
+ */
+function qualifyInboundMessage(body: string): Qualification {
+  const text = body.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const includesAny = (terms: string[]) => terms.some((term) => text.includes(term));
+  const urgent = includesAny(["urgente", "urgencia", "hoje", "agora", "liminar", "audiencia", "prazo vence", "prisao", "preso"]);
+
+  if (includesAny(["boleto", "pagamento", "cobranca", "cobrar", "fatura", "pix", "honorario", "reembolso", "nota fiscal"])) {
+    return { queue: "Financeiro", urgent };
+  }
+  if (includesAny(["agendar", "agenda", "consulta", "horario", "documento", "procuracao", "endereco", "atendimento presencial"])) {
+    return { queue: "Secretaria", urgent };
+  }
+  if (includesAny(["processo", "trabalhista", "previdenci", "criminal", "divorcio", "familia", "inventario", "contrato", "imovel", "indenizacao", "advogado", "demissao", "beneficio", "recurso"])) {
+    return { queue: "Jurídico", urgent };
+  }
+  return { queue: "Triagem", urgent };
+}
+
 async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBindings) {
   const supabaseUrl = binding(env, "SUPABASE_URL");
   const serviceRole = binding(env, "SUPABASE_SERVICE_ROLE_KEY");
@@ -102,7 +126,7 @@ async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBind
             channel: "whatsapp",
             assignment_status: "new",
           }, { onConflict: "instance_id,contact_phone" })
-          .select("id")
+          .select("id, tags, assignment_status")
           .single();
         if (conversationError || !conversation) continue;
 
@@ -120,12 +144,34 @@ async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBind
         // The unique index makes retries a no-op; only a newly stored message
         // updates the inbox preview and unread count.
         if (!messageError) {
+          const qualification = qualifyInboundMessage(body);
+          const knownQueues = ["Triagem", "Jurídico", "Financeiro", "Secretaria"];
+          const currentTags = conversation.tags ?? [];
+          const manuallyRouted = currentTags.some((tag: string) => knownQueues.includes(tag) && tag !== "Triagem");
+          const nextTags = manuallyRouted
+            ? currentTags
+            : Array.from(new Set([
+              ...currentTags.filter((tag: string) => !knownQueues.includes(tag)),
+              qualification.queue,
+              ...(qualification.urgent ? ["Urgente"] : []),
+            ]));
           await supabase.from("whatsapp_conversations").update({
             last_message: body,
             last_message_at: message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : new Date().toISOString(),
             unread_count: 1,
-            assignment_status: "new",
+            tags: nextTags,
           }).eq("id", conversation.id);
+
+          if (qualification.urgent) {
+            await supabase.from("notifications").insert({
+              tenant_id: instance.tenant_id,
+              kind: "atendimento_urgente",
+              severity: "warning",
+              title: "Novo atendimento com indício de urgência",
+              body: `A conversa foi encaminhada para ${qualification.queue}. Revise a mensagem e assuma o atendimento.`,
+              link_action: "/comunicacoes",
+            });
+          }
         }
       }
     }
@@ -158,7 +204,11 @@ export async function handleMetaWhatsAppWebhook(request: Request, env: WorkerBin
 
   const body = await request.text();
   const signature = request.headers.get("x-hub-signature-256");
-  if (!(await validMetaSignature(body, signature, appSecret))) return new Response("Invalid signature", { status: 401 });
+  console.log("Meta WhatsApp webhook request", { hasSignature: Boolean(signature), bytes: body.length });
+  if (!(await validMetaSignature(body, signature, appSecret))) {
+    console.warn("Meta WhatsApp webhook rejected: invalid signature");
+    return new Response("Invalid signature", { status: 401 });
+  }
 
   let payload: MetaWebhookPayload;
   try {
