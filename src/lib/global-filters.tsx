@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { getPeriodRange, type PeriodKey } from "@/lib/global-filter-utils";
 
-export type PeriodKey = "7d" | "30d" | "mtd" | "ytd" | "12m";
+export type { PeriodKey } from "@/lib/global-filter-utils";
 
 export type GlobalFilters = {
   period: PeriodKey;
@@ -17,31 +18,27 @@ type Ctx = {
   range: { start: Date; end: Date };
 };
 
-const DEFAULT: GlobalFilters = { period: "30d", responsible: null, area: null, clientId: null, status: null };
+const DEFAULT: GlobalFilters = {
+  period: "30d",
+  responsible: null,
+  area: null,
+  clientId: null,
+  status: null,
+};
 
 const GlobalFiltersCtx = createContext<Ctx | undefined>(undefined);
 
-function rangeFor(period: PeriodKey): { start: Date; end: Date } {
-  const end = new Date();
-  const start = new Date(end);
-  switch (period) {
-    case "7d": start.setDate(end.getDate() - 7); break;
-    case "30d": start.setDate(end.getDate() - 30); break;
-    case "mtd": start.setDate(1); start.setHours(0, 0, 0, 0); break;
-    case "ytd": start.setMonth(0, 1); start.setHours(0, 0, 0, 0); break;
-    case "12m": start.setMonth(end.getMonth() - 11, 1); start.setHours(0, 0, 0, 0); break;
-  }
-  return { start, end };
-}
-
 export function GlobalFiltersProvider({ children }: { children: ReactNode }) {
   const [filters, setFilters] = useState<GlobalFilters>(DEFAULT);
-  const value = useMemo<Ctx>(() => ({
-    filters,
-    setFilter: (k, v) => setFilters((f) => ({ ...f, [k]: v })),
-    reset: () => setFilters(DEFAULT),
-    range: rangeFor(filters.period),
-  }), [filters]);
+  const value = useMemo<Ctx>(
+    () => ({
+      filters,
+      setFilter: (k, v) => setFilters((f) => ({ ...f, [k]: v })),
+      reset: () => setFilters(DEFAULT),
+      range: getPeriodRange(filters.period),
+    }),
+    [filters],
+  );
   return <GlobalFiltersCtx.Provider value={value}>{children}</GlobalFiltersCtx.Provider>;
 }
 
@@ -54,7 +51,7 @@ export function useGlobalFilters() {
 export const PERIOD_LABELS: Record<PeriodKey, string> = {
   "7d": "7 dias",
   "30d": "30 dias",
-  "mtd": "Mês atual",
-  "ytd": "Ano",
+  mtd: "Mês atual",
+  ytd: "Ano",
   "12m": "12 meses",
 };
