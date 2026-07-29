@@ -3,7 +3,8 @@
  *
  * Correções desta versão (Auditoria 2026-07-25):
  * - Substituição de `payload as any` por parseOrThrow(clientCreateSchema)
- * - Activity log protegido com try/catch isolado (não derruba moveStage)
+ * - Mudança de etapa atômica com lock otimista e auditoria obrigatória
+ * - Exclusão lógica para preservar vínculos jurídicos e trilha LGPD
  * - toggleHot com onError explícito
  * - Limite de 500 registros com aviso ao atingir
  */
@@ -15,6 +16,7 @@ import { useRealtimeTables } from "@/hooks/use-realtime-table";
 import { toast } from "sonner";
 import {
   clientCreateSchema,
+  clientStatusSchema,
   clientUpdateSchema,
   parseOrThrow,
   type ClientCreate,
@@ -24,8 +26,10 @@ import {
 export type Client = {
   id: string; name: string; email: string | null; phone: string | null;
   doc: string | null; type: string; status: string; notes: string | null;
-  area: string | null; value_cents: number | null; owner: string | null;
+  area: string | null; value_cents: number; owner: string | null;
   is_hot: boolean; address: string | null; city: string | null; state: string | null;
+  tenant_id: string; created_by: string | null; deleted_at: string | null;
+  status_version: number; stage_entered_at: string;
   created_at: string; updated_at: string;
 };
 
@@ -51,6 +55,21 @@ export function stageOf(status: string): string {
 
 const CLIENT_QUERY_LIMIT = 500;
 
+type ClientsQueryData = {
+  items: Client[];
+  totalCount: number;
+};
+
+function clientMutationMessage(error: Error, fallback: string) {
+  if (/^\[(Criar|Atualizar) Cliente\]/.test(error.message)) {
+    return error.message.replace(/^\[[^\]]+\]\s*/, "");
+  }
+  if (/^(Sessão expirada|Cliente não encontrado)/.test(error.message)) {
+    return error.message;
+  }
+  return fallback;
+}
+
 export function useClients() {
   const { profile } = useAuth();
   const qc = useQueryClient();
@@ -61,109 +80,153 @@ export function useClients() {
   const query = useQuery({
     queryKey: ["clients", tenantId],
     queryFn: async () => {
+      if (!tenantId) {
+        return { items: [], totalCount: 0 } satisfies ClientsQueryData;
+      }
+
       const { data, error, count } = await supabase
         .from("clients")
         .select("*", { count: "estimated" })
+        .eq("tenant_id", tenantId)
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(CLIENT_QUERY_LIMIT);
-      if (error) throw error;
-      if ((count ?? 0) >= CLIENT_QUERY_LIMIT) {
+      if (error) throw new Error(error.message);
+
+      const totalCount = count ?? data?.length ?? 0;
+      if (totalCount > CLIENT_QUERY_LIMIT) {
         console.warn(
-          `[useClients] Limite de ${CLIENT_QUERY_LIMIT} clientes atingido. Implemente paginação para escalabilidade.`,
+          `[useClients] Exibindo ${CLIENT_QUERY_LIMIT} de ${totalCount} clientes. A consulta está pronta para receber paginação.`,
         );
       }
-      return ((data ?? []) as unknown) as Client[];
+
+      return {
+        items: (data ?? []) as Client[],
+        totalCount,
+      } satisfies ClientsQueryData;
     },
     enabled: !!tenantId,
   });
 
   const create = useMutation({
     mutationFn: async (raw: Partial<Client>) => {
-      // ✅ Valida antes de inserir — elimina mass assignment
+      if (!tenantId || !profile?.id) {
+        throw new Error("Sessão expirada. Faça login novamente.");
+      }
+
       const payload: ClientCreate = parseOrThrow(clientCreateSchema, raw, "Criar Cliente");
-      const { error } = await supabase.from("clients").insert({
-        ...payload,
-        tenant_id: tenantId,
-      } as never);
+      const { data, error } = await supabase
+        .from("clients")
+        .insert({
+          ...payload,
+          tenant_id: tenantId,
+          created_by: profile.id,
+        })
+        .select("*")
+        .single();
       if (error) throw new Error(error.message);
+      return data as Client;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients", tenantId] });
       toast.success("Cliente criado");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) =>
+      toast.error(clientMutationMessage(err, "Não foi possível criar o cliente.")),
   });
 
   const update = useMutation({
     mutationFn: async ({ id, payload: raw }: { id: string; payload: Partial<Client> }) => {
-      // ✅ Valida campos de atualização
+      if (!tenantId) throw new Error("Sessão expirada. Faça login novamente.");
+
       const payload: ClientUpdate = parseOrThrow(clientUpdateSchema, raw, "Atualizar Cliente");
-      const { error } = await supabase.from("clients").update(payload as never).eq("id", id);
+      const { data, error } = await supabase
+        .from("clients")
+        .update(payload)
+        .eq("id", id)
+        .eq("tenant_id", tenantId)
+        .is("deleted_at", null)
+        .select("*")
+        .maybeSingle();
       if (error) throw new Error(error.message);
+      if (!data) throw new Error("Cliente não encontrado ou já removido.");
+      return data as Client;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients", tenantId] });
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) =>
+      toast.error(clientMutationMessage(err, "Não foi possível atualizar o cliente.")),
   });
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("clients").delete().eq("id", id);
+      if (!tenantId) throw new Error("Sessão expirada. Faça login novamente.");
+
+      const { data, error } = await supabase.rpc("soft_delete_client", {
+        p_client_id: id,
+      });
       if (error) throw new Error(error.message);
+      if (!data) throw new Error("Cliente não encontrado ou já removido.");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients", tenantId] });
       toast.success("Cliente removido");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) =>
+      toast.error(clientMutationMessage(err, "Não foi possível remover o cliente.")),
   });
 
   const moveStage = useMutation({
-    mutationFn: async ({ id, status, prevStatus }: { id: string; status: string; prevStatus?: string }) => {
-      const oldLabel = prevStatus ? (STAGES.find((s) => s.id === stageOf(prevStatus))?.label ?? prevStatus) : "";
-      const newLabel = STAGES.find((s) => s.id === stageOf(status))?.label ?? status;
+    mutationFn: async ({
+      id,
+      status: rawStatus,
+      expectedVersion,
+    }: {
+      id: string;
+      status: string;
+      prevStatus?: string;
+      expectedVersion?: number;
+    }) => {
+      const status = parseOrThrow(clientStatusSchema, rawStatus, "Mover Cliente");
+      const cached = qc.getQueryData<ClientsQueryData>(["clients", tenantId]);
+      const current = cached?.items.find((client) => client.id === id);
+      const version =
+        expectedVersion ??
+        (current?.status === status
+          ? current.status_version - 1
+          : current?.status_version);
 
-      // ✅ Passo 1 — atualizar etapa (operação principal)
-      const { error } = await supabase
-        .from("clients")
-        .update({ status } as never)
-        .eq("id", id);
-      if (error) throw new Error(error.message);
-
-      // ✅ Passo 2 — activity log LGPD: isolado para não derrubar a operação principal
-      if (prevStatus && prevStatus !== status && profile?.tenant_id) {
-        try {
-          const { error: logError } = await (supabase as unknown as {
-            from: (t: string) => {
-              insert: (v: unknown) => Promise<{ error: { message: string } | null }>;
-            };
-          })
-            .from("client_activities")
-            .insert({
-              tenant_id:  profile.tenant_id,
-              client_id:  id,
-              user_id:    profile.id,
-              kind:       "stage_change",
-              title:      `Etapa alterada: ${oldLabel} → ${newLabel}`,
-              meta:       { old_stage: prevStatus, new_stage: status },
-            });
-          if (logError) {
-            // ✅ Log de auditoria falhando NÃO deve derrubar o negócio, mas deve ser monitorado
-            console.warn("[LGPD Audit] Falha ao registrar activity log:", logError.message);
-          }
-        } catch (logErr) {
-          console.warn("[LGPD Audit] Exceção ao registrar activity log:", logErr);
-        }
+      if (!version) {
+        throw new Error("CLIENT_STATUS_VERSION_REQUIRED");
       }
+
+      const { data, error } = await supabase.rpc("move_client_stage", {
+        p_client_id: id,
+        p_next_status: status,
+        p_expected_version: version,
+      });
+      if (error) throw new Error(error.message);
+      return data as Client;
     },
     onMutate: async ({ id, status }) => {
       await qc.cancelQueries({ queryKey: ["clients", tenantId] });
-      const previous = qc.getQueryData<Client[]>(["clients", tenantId]);
+      const previous = qc.getQueryData<ClientsQueryData>(["clients", tenantId]);
       if (previous) {
-        qc.setQueryData<Client[]>(["clients", tenantId], (old) =>
-          old?.map((c) => (c.id === id ? { ...c, status } : c)),
-        );
+        qc.setQueryData<ClientsQueryData>(["clients", tenantId], {
+          ...previous,
+          items: previous.items.map((client) =>
+            client.id === id
+              ? {
+                  ...client,
+                  status,
+                  status_version: client.status_version + 1,
+                  stage_entered_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                }
+              : client,
+          ),
+        });
       }
       return { previous };
     },
@@ -171,7 +234,24 @@ export function useClients() {
       if (context?.previous) {
         qc.setQueryData(["clients", tenantId], context.previous);
       }
-      toast.error(err.message);
+      toast.error(
+        /CLIENT_STATUS_CONFLICT/i.test(err.message)
+          ? "Este cliente foi movido por outra pessoa. Atualizamos o quadro."
+          : /CLIENT_STATUS_VERSION_REQUIRED/i.test(err.message)
+            ? "Não foi possível confirmar a versão do cliente. Atualize o quadro e tente novamente."
+            : "Não foi possível mover o cliente.",
+      );
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData<ClientsQueryData>(["clients", tenantId], (current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((client) => (client.id === updated.id ? updated : client)),
+            }
+          : current,
+      );
+      toast.success("Etapa do cliente atualizada");
     },
     onSettled: (_data, _error, variables) => {
       qc.invalidateQueries({ queryKey: ["clients", tenantId] });
@@ -181,16 +261,30 @@ export function useClients() {
 
   const toggleHot = useMutation({
     mutationFn: async ({ id, is_hot }: { id: string; is_hot: boolean }) => {
-      const { error } = await supabase.from("clients").update({ is_hot } as never).eq("id", id);
+      if (!tenantId) throw new Error("Sessão expirada. Faça login novamente.");
+
+      const { data, error } = await supabase
+        .from("clients")
+        .update({ is_hot })
+        .eq("id", id)
+        .eq("tenant_id", tenantId)
+        .is("deleted_at", null)
+        .select("*")
+        .maybeSingle();
       if (error) throw new Error(error.message);
+      if (!data) throw new Error("Cliente não encontrado ou já removido.");
+      return data as Client;
     },
     onMutate: async ({ id, is_hot }) => {
       await qc.cancelQueries({ queryKey: ["clients", tenantId] });
-      const previous = qc.getQueryData<Client[]>(["clients", tenantId]);
+      const previous = qc.getQueryData<ClientsQueryData>(["clients", tenantId]);
       if (previous) {
-        qc.setQueryData<Client[]>(["clients", tenantId], (old) =>
-          old?.map((c) => (c.id === id ? { ...c, is_hot } : c)),
-        );
+        qc.setQueryData<ClientsQueryData>(["clients", tenantId], {
+          ...previous,
+          items: previous.items.map((client) =>
+            client.id === id ? { ...client, is_hot } : client,
+          ),
+        });
       }
       return { previous };
     },
@@ -198,8 +292,7 @@ export function useClients() {
       if (context?.previous) {
         qc.setQueryData(["clients", tenantId], context.previous);
       }
-      // ✅ Erro explícito em vez de silencioso
-      toast.error(`Não foi possível atualizar: ${err.message}`);
+      toast.error(clientMutationMessage(err, "Não foi possível atualizar a prioridade."));
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["clients", tenantId] });
@@ -207,10 +300,13 @@ export function useClients() {
   });
 
   return {
-    clients: query.data ?? [],
+    clients: query.data?.items ?? [],
+    totalCount: query.data?.totalCount ?? 0,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     isError: query.isError,
     error: query.error,
+    refetch: query.refetch,
     create,
     update,
     remove,

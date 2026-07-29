@@ -68,33 +68,72 @@ export const isoDateSchema = z
 // Clientes
 // ─────────────────────────────────────────────
 
-export const clientTypeSchema = z.enum(["pf", "pj"], {
-  errorMap: () => ({ message: "Tipo deve ser 'pf' ou 'pj'" }),
-});
+/**
+ * O banco usa PF/PJ como representação canônica.
+ * Entradas legadas em minúsculas continuam aceitas na borda da aplicação.
+ */
+export const clientTypeSchema = z
+  .string({ required_error: "Tipo de cliente é obrigatório" })
+  .trim()
+  .transform((value) => value.toUpperCase())
+  .pipe(
+    z.enum(["PF", "PJ"], {
+      errorMap: () => ({ message: "Tipo deve ser 'PF' ou 'PJ'" }),
+    }),
+  );
 
-export const clientStatusSchema = z.enum([
-  "novo_contato", "triagem", "consulta_agendada",
-  "proposta", "contrato", "em_andamento", "encerrado",
-], { errorMap: () => ({ message: "Status de cliente inválido" }) });
+export const clientStatusSchema = z.enum(
+  [
+    "novo_contato",
+    "triagem",
+    "consulta_agendada",
+    "proposta",
+    "contrato",
+    "em_andamento",
+    "encerrado",
+  ],
+  { errorMap: () => ({ message: "Status de cliente inválido" }) },
+);
 
-export const clientCreateSchema = z.object({
-  name:        z.string().min(2, "Nome deve ter ao menos 2 caracteres").max(200),
-  type:        clientTypeSchema,
-  status:      clientStatusSchema.default("novo_contato"),
-  email:       emailSchema,
-  phone:       phoneSchema,
-  doc:         docSchema,
-  area:        z.string().max(100).optional().nullable(),
-  notes:       z.string().max(5000).optional().nullable(),
-  owner:       z.string().max(200).optional().nullable(),
-  value_cents: centsSchema,
-  address:     z.string().max(300).optional().nullable(),
-  city:        z.string().max(100).optional().nullable(),
-  state:       z.string().max(2).optional().nullable(),
-  is_hot:      z.boolean().optional().default(false),
-});
+const clientValueCentsSchema = z
+  .number({ invalid_type_error: "Honorário estimado deve ser numérico" })
+  .int("Honorário estimado deve ser informado em centavos")
+  .nonnegative("Honorário estimado não pode ser negativo")
+  .optional()
+  .default(0);
 
-export const clientUpdateSchema = clientCreateSchema.partial();
+const clientStateSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.toUpperCase())
+  .pipe(z.string().regex(/^[A-Z]{2}$/, "Estado deve conter a sigla com 2 letras"))
+  .optional()
+  .nullable();
+
+export const clientCreateSchema = z
+  .object({
+    name: z.string().trim().min(2, "Nome deve ter ao menos 2 caracteres").max(200),
+    type: clientTypeSchema,
+    status: clientStatusSchema.default("novo_contato"),
+    email: emailSchema,
+    phone: phoneSchema,
+    doc: docSchema,
+    area: z.string().trim().max(100).optional().nullable(),
+    notes: z.string().max(5000).optional().nullable(),
+    owner: z.string().trim().max(200).optional().nullable(),
+    value_cents: clientValueCentsSchema,
+    address: z.string().trim().max(300).optional().nullable(),
+    city: z.string().trim().max(100).optional().nullable(),
+    state: clientStateSchema,
+    is_hot: z.boolean().optional().default(false),
+  })
+  .strict();
+
+/**
+ * Mudanças de etapa não passam pelo update genérico. Elas usam
+ * move_client_stage(), que aplica lock otimista e auditoria na mesma transação.
+ */
+export const clientUpdateSchema = clientCreateSchema.omit({ status: true }).partial().strict();
 
 export type ClientCreate = z.output<typeof clientCreateSchema>;
 export type ClientUpdate = z.output<typeof clientUpdateSchema>;

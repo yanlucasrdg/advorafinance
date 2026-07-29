@@ -220,49 +220,76 @@ export type Database = {
       }
       clients: {
         Row: {
+          address: string | null
+          area: string | null
+          city: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
           doc: string | null
           email: string | null
           id: string
+          is_hot: boolean
           name: string
           notes: string | null
+          owner: string | null
           phone: string | null
+          state: string | null
+          stage_entered_at: string
           status: string
+          status_version: number
           tenant_id: string
           type: string
           updated_at: string
+          value_cents: number
         }
         Insert: {
+          address?: string | null
+          area?: string | null
+          city?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           doc?: string | null
           email?: string | null
           id?: string
+          is_hot?: boolean
           name: string
           notes?: string | null
+          owner?: string | null
           phone?: string | null
+          state?: string | null
+          stage_entered_at?: string
           status?: string
+          status_version?: number
           tenant_id: string
           type?: string
           updated_at?: string
+          value_cents?: number
         }
         Update: {
+          address?: string | null
+          area?: string | null
+          city?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           doc?: string | null
           email?: string | null
           id?: string
+          is_hot?: boolean
           name?: string
           notes?: string | null
+          owner?: string | null
           phone?: string | null
+          state?: string | null
+          stage_entered_at?: string
           status?: string
+          status_version?: number
           tenant_id?: string
           type?: string
           updated_at?: string
+          value_cents?: number
         }
         Relationships: [
           {
@@ -1193,6 +1220,14 @@ export type Database = {
         Returns: boolean
       }
       is_master_admin: { Args: { _user_id: string }; Returns: boolean }
+      move_client_stage: {
+        Args: {
+          p_client_id: string
+          p_expected_version: number
+          p_next_status: string
+        }
+        Returns: Database["public"]["Tables"]["clients"]["Row"]
+      }
       metrics_agenda: { Args: never; Returns: Json }
       metrics_comunicacoes: { Args: never; Returns: Json }
       metrics_crm: { Args: never; Returns: Json }
@@ -1212,6 +1247,10 @@ export type Database = {
       reconcile_financial_entry: {
         Args: { _entry_id: string }
         Returns: undefined
+      }
+      soft_delete_client: {
+        Args: { p_client_id: string }
+        Returns: Database["public"]["Tables"]["clients"]["Row"]
       }
       tz_today: { Args: never; Returns: string }
       user_in_tenant: {

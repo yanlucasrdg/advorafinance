@@ -1,11 +1,34 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Plus, Mail, MoreHorizontal, Upload, Download, Users, UserCheck,
-  TrendingUp, DollarSign, FileCheck2, Flame, AlertTriangle, Bot, Sparkles,
-  X, MessageCircle, PhoneCall, LayoutGrid, List, Filter, ChevronDown,
-  Clock, FileText, CheckCircle2, Calendar, RotateCcw, ShieldCheck, Zap,
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCorners,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  Plus,
+  Upload,
+  Download,
+  Users,
+  UserCheck,
+  Flame,
+  MessageCircle,
+  LayoutGrid,
+  List,
+  Filter,
+  RotateCcw,
+  ShieldCheck,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,50 +42,12 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { useMetricsCrm } from "@/hooks/use-metrics";
 import { STAGES, stageOf, useClients, type Client } from "@/hooks/use-clients";
 import { CrmKanbanCard, type ClientCardData } from "@/components/crm/crm-kanban-card";
 import { CrmLeadDrawer } from "@/components/crm/crm-lead-drawer";
-import { CrmTasksWidget } from "@/components/crm/crm-tasks-widget";
+import { createCsv, parseCrmImportCsv } from "@/lib/crm-csv";
+import { getCrmClientMeta } from "@/lib/crm-client";
 
-/* ---------- CSV helpers ---------- */
-function parseCSV(text: string): Record<string, string>[] {
-  const rows: string[][] = [];
-  let i = 0, field = "", row: string[] = [], inQ = false;
-  while (i < text.length) {
-    const ch = text[i];
-    if (inQ) {
-      if (ch === '"' && text[i + 1] === '"') { field += '"'; i += 2; continue; }
-      if (ch === '"') { inQ = false; i++; continue; }
-      field += ch; i++; continue;
-    }
-    if (ch === '"') { inQ = true; i++; continue; }
-    if (ch === ",") { row.push(field); field = ""; i++; continue; }
-    if (ch === "\n" || ch === "\r") {
-      if (field !== "" || row.length) { row.push(field); rows.push(row); row = []; field = ""; }
-      if (ch === "\r" && text[i + 1] === "\n") i++;
-      i++; continue;
-    }
-    field += ch; i++;
-  }
-  if (field !== "" || row.length) { row.push(field); rows.push(row); }
-  if (!rows.length) return [];
-  const headers = rows[0].map(h => h.trim().toLowerCase());
-  return rows.slice(1).filter(r => r.some(c => c.trim() !== "")).map(r => {
-    const o: Record<string, string> = {};
-    headers.forEach((h, idx) => { o[h] = (r[idx] ?? "").trim(); });
-    return o;
-  });
-}
-function toCSV(rows: Record<string, string | number>[]): string {
-  if (!rows.length) return "";
-  const headers = Object.keys(rows[0]);
-  const esc = (v: string | number) => {
-    const s = String(v ?? "");
-    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  return [headers.join(","), ...rows.map(r => headers.map(h => esc(r[h])).join(","))].join("\n");
-}
 function downloadFile(name: string, content: string, mime = "text/csv;charset=utf-8") {
   const blob = new Blob(["\ufeff" + content], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -72,7 +57,7 @@ function downloadFile(name: string, content: string, mime = "text/csv;charset=ut
 }
 
 export const Route = createFileRoute("/_authenticated/crm")({
-  head: () => ({ meta: [{ title: "CRM Jurídico — Advora" }] }),
+  head: () => ({ meta: [{ title: "CRM Jurídico" }] }),
   component: CRM,
 });
 
@@ -83,55 +68,34 @@ function brl(n: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
 }
 
+function elapsedLabel(value: string) {
+  const elapsedMs = Math.max(0, Date.now() - new Date(value).getTime());
+  const hours = Math.floor(elapsedMs / 3_600_000);
+  if (hours < 1) return "há menos de 1h";
+  if (hours < 24) return `há ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `há ${days} ${days === 1 ? "dia" : "dias"}`;
+}
+
 function getMeta(c: Client) {
-  let area = "Cível", value = 10000, owner = "Dr. Yan", hot = false;
-  try {
-    const m = c.notes ? JSON.parse(c.notes) : {};
-    if (m.area) area = m.area;
-    if (typeof m.value === "number") value = m.value;
-    if (m.owner) owner = m.owner;
-    if (m.hot) hot = true;
-  } catch { /* ignore */ }
-  if (!area || area === "Cível") {
-    const seed = c.name.charCodeAt(0) + c.name.length;
-    area = AREAS[seed % AREAS.length];
-  }
-  if (value === 10000) {
-    const seed = c.name.length * 1374 + c.name.charCodeAt(0) * 91;
-    value = 3000 + (seed % 47) * 1000;
-  }
-  if (c.status === "novo_contato" || c.status === "triagem") {
-    hot = c.name.length % 2 === 0;
-  }
-  // The board is a financial view: it must display only what was saved for
-  // this client. The previous decorative fallback replaced valid values such
-  // as 10.000 with a number generated from the client's name.
-  try {
-    const persisted = c.notes ? JSON.parse(c.notes) : {};
-    const persistedValue = Number(persisted.value);
-    return {
-      area: typeof persisted.area === "string" && persisted.area.trim() ? persisted.area : "Nao definido",
-      value: Number.isFinite(persistedValue) && persistedValue >= 0 ? persistedValue : 0,
-      owner: typeof persisted.owner === "string" && persisted.owner.trim() ? persisted.owner : "Sem responsavel",
-      hot: persisted.hot === true,
-    };
-  } catch {
-    return { area: "Nao definido", value: 0, owner: "Sem responsavel", hot: false };
-  }
+  return getCrmClientMeta(c);
 }
 
 function CRM() {
   const { profile } = useAuth();
   const qc = useQueryClient();
-  const { clients, isLoading, create, update, moveStage } = useClients();
+  const { clients, isLoading, isError, create, update, moveStage } = useClients();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "", value: 0 });
   const [filter, setFilter] = useState<"all" | "PF" | "PJ" | "leads" | "ativos" | "inativos">("all");
   const [view, setView] = useState<"funil" | "lista">("funil");
   const [selected, setSelected] = useState<Client | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [draggedClientId, setDraggedClientId] = useState<string | null>(null);
-  const [dropStageId, setDropStageId] = useState<string | null>(null);
+  const [activeClientId, setActiveClientId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const [adv, setAdv] = useState<{ areas: string[]; stages: string[]; minValue: string; maxValue: string; hotOnly: boolean; search: string }>({
     areas: [], stages: [], minValue: "", maxValue: "", hotOnly: false, search: "",
@@ -143,14 +107,15 @@ function CRM() {
     const max = adv.maxValue ? Number(adv.maxValue) : Infinity;
     const q = adv.search.trim().toLowerCase();
     return clients.filter(c => {
-      if (filter === "PF" && c.type !== "PF") return false;
-      if (filter === "PJ" && c.type !== "PJ") return false;
-      if (filter === "leads" && !["novo_contato", "triagem"].includes(stageOf(c.status))) return false;
+      const normalizedType = c.type.toLocaleUpperCase("pt-BR");
+      if (filter === "PF" && normalizedType !== "PF") return false;
+      if (filter === "PJ" && normalizedType !== "PJ") return false;
       if (filter === "ativos" && !["contrato", "em_andamento"].includes(stageOf(c.status))) return false;
       if (filter === "inativos" && stageOf(c.status) !== "encerrado") return false;
       const m = getMeta(c);
+      if (filter === "leads" && !m.hot) return false;
       if (adv.areas.length && !adv.areas.includes(m.area)) return false;
-      if (adv.stages.length && !adv.stages.includes(c.status)) return false;
+      if (adv.stages.length && !adv.stages.includes(stageOf(c.status))) return false;
       if (m.value < min || m.value > max) return false;
       if (adv.hotOnly && !m.hot) return false;
       if (q && !(c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.doc ?? "").toLowerCase().includes(q))) return false;
@@ -173,55 +138,79 @@ function CRM() {
     [filtered]
   );
 
-  const { data: crmMetrics } = useMetricsCrm();
-  const kpis = {
-    leads: crmMetrics?.leads ?? 0,
-    ativos: crmMetrics?.ativos ?? 0,
-    conv: crmMetrics?.conv_pct ?? 0,
-    pipeline: crmMetrics?.pipeline_value ?? 0,
-    fechadosMes: crmMetrics?.fechados_mes ?? 0,
-  };
+  const operationalMetrics = useMemo(() => {
+    const today = new Date().toDateString();
+    return {
+      newToday: clients.filter((client) => new Date(client.created_at).toDateString() === today).length,
+      unassigned: clients.filter((client) => !client.owner?.trim()).length,
+      hot: clients.filter((client) => getMeta(client).hot).length,
+      pipeline: clients
+        .filter((client) => stageOf(client.status) !== "encerrado")
+        .reduce((total, client) => total + getMeta(client).value, 0),
+    };
+  }, [clients]);
 
   const createClient = async () => {
     if (!form.name.trim() || !profile?.tenant_id) return;
     try {
       const payload = {
-        tenant_id: profile.tenant_id,
-        created_by: profile.id,
-        name: form.name,
+        name: form.name.trim(),
         email: form.email || null,
         phone: form.phone || null,
         doc: form.doc || null,
         type: form.type,
         status: form.status,
-        notes: JSON.stringify({ area: form.area, value: form.value, owner: profile.full_name || "Dr. Yan", hot: true }),
+        area: form.area || null,
+        value_cents: Math.round(form.value * 100),
+        owner: profile.full_name?.trim() || null,
+        is_hot: false,
       };
       await create.mutateAsync(payload);
       setOpen(false);
-      setForm({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
+      setForm({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "", value: 0 });
     } catch {
       // toast handled by mutation
     }
   };
 
   const moveStageHandler = async (id: string, status: string) => {
+    const client = clients.find((item) => item.id === id);
+    if (!client || stageOf(client.status) === status) return;
     try {
-      await moveStage.mutateAsync({ id, status, prevStatus: clients.find((c) => c.id === id)?.status });
+      await moveStage.mutateAsync({
+        id,
+        status,
+        prevStatus: client.status,
+        expectedVersion: client.status_version,
+      });
       if (selected?.id === id) {
-        setSelected((prev) => prev ? { ...prev, status, updated_at: new Date().toISOString() } : null);
+        setSelected((prev) => prev ? {
+          ...prev,
+          status,
+          status_version: prev.status_version + 1,
+          updated_at: new Date().toISOString(),
+        } : null);
       }
-      toast.success("Etapa do funil atualizada!");
     } catch {
-      // toast handled by mutation
+      // O hook apresenta a falha e restaura o estado otimista.
     }
   };
 
-  const handleDropInStage = async (stageId: string) => {
-    const client = clients.find((item) => item.id === draggedClientId);
-    setDropStageId(null);
-    setDraggedClientId(null);
-    if (!client || stageOf(client.status) === stageId) return;
-    await moveStageHandler(client.id, stageId);
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    setActiveClientId(String(active.id));
+  };
+
+  const handleDragEnd = async ({ active, over }: DragEndEvent) => {
+    setActiveClientId(null);
+    if (!over) return;
+
+    const overId = String(over.id);
+    const targetStage = STAGES.some((stage) => stage.id === overId)
+      ? overId
+      : stageOf(clients.find((client) => client.id === overId)?.status ?? "");
+    if (!STAGES.some((stage) => stage.id === targetStage)) return;
+
+    await moveStageHandler(String(active.id), targetStage);
   };
 
   const saveNotes = async (id: string, notesText: string) => {
@@ -250,40 +239,46 @@ function CRM() {
 
   const onImportCSV = async (file: File) => {
     if (!profile?.tenant_id) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("O arquivo deve ter no máximo 5 MB.");
+      return;
+    }
+
     try {
       const text = await file.text();
-      const rows = parseCSV(text);
-      if (!rows.length) return toast.error("CSV vazio");
-      const valid = STAGES.map((s) => s.id) as readonly string[];
-      const payload = rows
-        .map((r) => {
-          const name = r.name || r.nome || "";
-          const type = (r.type || r.tipo || "PF").toUpperCase() === "PJ" ? "PJ" : "PF";
-          const status = valid.includes((r.status || "novo_contato").toLowerCase())
-            ? (r.status || "novo_contato").toLowerCase()
-            : "novo_contato";
-          const area = r.area || "Cível";
-          const value = Number(r.value || r.valor || 0) || 10000;
-          return {
-            tenant_id: profile.tenant_id!,
-            created_by: profile.id,
-            name,
-            email: r.email || null,
-            phone: r.phone || r.telefone || null,
-            doc: r.doc || r.cpf || r.cnpj || null,
-            type,
-            status,
-            notes: JSON.stringify({ area, value, owner: profile.full_name || "Dr. Yan", hot: true }),
-          };
-        })
-        .filter((p) => p.name.trim() !== "");
-      if (!payload.length) return toast.error("Nenhuma linha válida (coluna 'name' obrigatória)");
-      const { error } = await supabase.from("clients").insert(payload);
-      if (error) return toast.error(error.message);
-      toast.success(`${payload.length} cliente(s) importado(s)`);
+      const result = parseCrmImportCsv(text, {
+        maxRows: 5_000,
+        defaultOwner: profile.full_name?.trim() || null,
+      });
+      if (!result.records.length) {
+        const detail = result.issues[0]?.message ?? "O arquivo está vazio.";
+        toast.error(`Nenhum registro válido. ${detail}`);
+        return;
+      }
+
+      const payload = result.records.map((record) => ({
+        ...record,
+        tenant_id: profile.tenant_id!,
+        created_by: profile.id,
+      }));
+
+      // One SQL statement means the import is all-or-nothing: a rejected row
+      // cannot leave a partially imported client base behind.
+      const { error: insertError } = await supabase.from("clients").insert(payload);
+      if (insertError) throw insertError;
+
+      const warning = result.issues.length
+        ? ` ${result.issues.length} linha(s) foram ignoradas; revise o arquivo.`
+        : "";
+      toast.success(`${payload.length} cliente(s) importado(s).${warning}`, {
+        duration: result.issues.length ? 7_000 : 4_000,
+      });
       qc.invalidateQueries({ queryKey: ["clients", profile.tenant_id] });
-    } catch (e) {
-      toast.error("Falha ao ler CSV");
+    } catch (importError) {
+      console.error("[CRM_IMPORT_FAILED]", {
+        kind: importError instanceof Error ? importError.name : "unknown",
+      });
+      toast.error("Não foi possível concluir a importação. Revise o arquivo e tente novamente.");
     }
   };
 
@@ -291,14 +286,16 @@ function CRM() {
     if (!filtered.length) return toast.error("Nenhum cliente para exportar");
     const rows = filtered.map((c) => {
       const m = getMeta(c);
-      const stage = STAGES.find((s) => s.id === c.status)?.label ?? c.status;
+      const canonicalStage = stageOf(c.status);
+      const stageLabel = STAGES.find((s) => s.id === canonicalStage)?.label ?? canonicalStage;
       return {
         name: c.name,
         email: c.email ?? "",
-        phone: c.phone ?? "",
-        doc: c.doc ?? "",
+        phone: c.phone ? `'${c.phone}` : "",
+        doc: c.doc ? `'${c.doc}` : "",
         type: c.type,
-        status: stage,
+        status: canonicalStage,
+        stage_label: stageLabel,
         area: m.area,
         value: m.value,
         owner: m.owner,
@@ -307,34 +304,35 @@ function CRM() {
       };
     });
     const stamp = new Date().toISOString().slice(0, 10);
-    downloadFile(`advora-crm-${stamp}.csv`, toCSV(rows));
+    downloadFile(`crm-clientes-${stamp}.csv`, createCsv(rows));
     toast.success(`Relatório exportado (${rows.length} registros)`);
   };
 
   const resetAdv = () => setAdv({ areas: [], stages: [], minValue: "", maxValue: "", hotOnly: false, search: "" });
   const toggle = (key: "areas" | "stages", v: string) =>
     setAdv(a => ({ ...a, [key]: a[key].includes(v) ? a[key].filter(x => x !== v) : [...a[key], v] }));
+  const activeClient = activeClientId
+    ? clients.find((client) => client.id === activeClientId) ?? null
+    : null;
+  const movingClientId = moveStage.isPending ? String(moveStage.variables?.id ?? "") : null;
 
   return (
     <div className="relative min-h-full overflow-hidden bg-muted/30">
       {/* Background glow */}
       <div className="pointer-events-none absolute inset-0 -z-10 opacity-40">
-        <div className="absolute top-0 left-1/3 w-[600px] h-[600px] rounded-full bg-violet-600/10 blur-[120px]" />
-        <div className="absolute top-40 right-0 w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[120px]" />
+        <div className="absolute left-1/3 top-0 h-[600px] w-[600px] rounded-full bg-primary/10 blur-[120px]" />
+        <div className="absolute right-0 top-40 h-[500px] w-[500px] rounded-full bg-primary/5 blur-[120px]" />
       </div>
 
       {/* CRM header */}
       <header className="flex flex-col gap-4 border-b border-border bg-card px-5 py-4 md:flex-row md:items-center md:justify-between lg:px-8">
         <div className="min-w-0">
-          <div className="mb-1 flex items-center gap-2">
-            <span className="rounded-md bg-primary px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary-foreground">
-              Advora Legal OS
-            </span>
-            <span className="text-xs text-muted-foreground">CRM</span>
-          </div>
-          <h1 className="truncate text-xl font-bold tracking-tight text-foreground">Pipeline de clientes</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Organize oportunidades, contatos e contratos em um só lugar.
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Módulo comercial
+          </p>
+          <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">CRM</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Gerencie oportunidades, clientes e contratos em um só lugar.
           </p>
         </div>
 
@@ -384,7 +382,7 @@ function CRM() {
                   <div>
                     <Label className="text-xs">Área Jurídica</Label>
                     <Select value={form.area} onValueChange={v => setForm({ ...form, area: v })}>
-                      <SelectTrigger className="text-xs mt-1 h-9"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="text-xs mt-1 h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
                       <SelectContent>{AREAS.map(a => <SelectItem key={a} value={a} className="text-xs">{a}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
@@ -404,49 +402,18 @@ function CRM() {
         </div>
       </header>
 
-      {/* KPI cards */}
-      <div className="hidden grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-        <KpiCard label="Leads Ativos" value={String(kpis.leads)} deltaLabel="Triagem e primeiro contato" icon={Users} tone="violet" />
-        <KpiCard label="Clientes em Atendimento" value={String(kpis.ativos)} deltaLabel="Contrato e casos ativos" icon={UserCheck} tone="blue" />
-        <KpiCard label="Taxa de Conversão" value={crmMetrics?.conv_pct != null ? `${crmMetrics.conv_pct}%` : "—"} deltaLabel="Leads para Contrato" icon={TrendingUp} tone="emerald" />
-        <KpiCard label="Receita Potencial" value={brl(kpis.pipeline)} deltaLabel="Propostas abertas" icon={DollarSign} tone="amber" />
-        <KpiCard label="Contratos Fechados (Mês)" value={String(kpis.fechadosMes)} deltaLabel="Honorários garantidos" icon={FileCheck2} tone="rose" />
-      </div>
-
-      {/* Main Grid: Tasks Widget + Commercial Insights */}
-      <div className="hidden grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-1">
-          <CrmTasksWidget />
-        </div>
-
-        <div className="lg:col-span-2 rounded-xl border border-border bg-card p-4 flex flex-col justify-between shadow-xs">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400">
-                  <Sparkles className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-foreground">Insights de Atendimento Conversacional</h3>
-                  <p className="text-[10px] text-muted-foreground">Qualificação em tempo real</p>
-                </div>
-              </div>
-              <Badge variant="outline" className="text-[10px] text-purple-600 border-purple-500/30">IA ativa</Badge>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <InsightCard icon={Flame} tone="rose" title={`${Math.max(1, Math.floor(kpis.leads * 0.4))} Leads Quentes 🔥`} desc="Prontos para fechamento de proposta" />
-              <InsightCard icon={AlertTriangle} tone="amber" title="Alertas de SLA ⏱️" desc="2 leads sem contato há +48 horas" />
-              <InsightCard icon={Bot} tone="violet" title="Triagem Automática" desc="92% de assertividade no enquadramento jurídico" />
-            </div>
-          </div>
-        </div>
+      {/* Operational metrics — all values come from the same client source as the board. */}
+      <div className="grid grid-cols-2 gap-px border-b border-border bg-border sm:grid-cols-4">
+        <OperationalMetric label="Novos hoje" value={String(operationalMetrics.newToday)} />
+        <OperationalMetric label="Sem responsável" value={String(operationalMetrics.unassigned)} />
+        <OperationalMetric label="Leads quentes" value={String(operationalMetrics.hot)} />
+        <OperationalMetric label="Pipeline aberto" value={brl(operationalMetrics.pipeline)} />
       </div>
 
       {/* Filter toolbar */}
       <div className="flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card px-5 py-3 sm:flex-row sm:items-center lg:px-8">
         {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar" role="group" aria-label="Visões rápidas do CRM">
           {[
             { id: "all", label: "Todos", icon: LayoutGrid },
             { id: "leads", label: "🔥 Leads Quentes", icon: Flame },
@@ -457,6 +424,7 @@ function CRM() {
             <button
               key={f.id}
               onClick={() => setFilter(f.id as typeof filter)}
+              aria-pressed={filter === f.id}
               className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-all whitespace-nowrap ${
                 filter === f.id
                   ? "bg-primary text-primary-foreground font-semibold shadow-sm"
@@ -470,19 +438,21 @@ function CRM() {
         </div>
 
         {/* Search + View Toggle + Advanced Popover */}
-        <div className="flex items-center gap-2">
-          <div className="relative min-w-[180px]">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[180px] flex-1 sm:flex-none">
             <Input
               placeholder="Pesquisar clientes..."
+              aria-label="Pesquisar clientes por nome, e-mail ou documento"
               value={adv.search}
               onChange={(e) => setAdv({ ...adv, search: e.target.value })}
               className="h-8 rounded-md text-xs pl-3 pr-8"
             />
           </div>
 
-          <div className="flex items-center p-1 rounded-lg border border-border bg-muted/30">
+          <div className="flex items-center p-1 rounded-lg border border-border bg-muted/30" role="group" aria-label="Modo de visualização">
             <button
               onClick={() => setView("funil")}
+              aria-pressed={view === "funil"}
               className={`inline-flex items-center gap-1 h-6 px-2 rounded text-xs font-medium transition-all ${
                 view === "funil" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground"
               }`}
@@ -492,6 +462,7 @@ function CRM() {
             </button>
             <button
               onClick={() => setView("lista")}
+              aria-pressed={view === "lista"}
               className={`inline-flex items-center gap-1 h-6 px-2 rounded text-xs font-medium transition-all ${
                 view === "lista" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground"
               }`}
@@ -534,6 +505,29 @@ function CRM() {
               </div>
 
               <div>
+                <Label className="text-xs font-semibold text-muted-foreground">Etapas</Label>
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                  {STAGES.map((stage) => (
+                    <label key={stage.id} className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground hover:text-foreground">
+                      <Checkbox
+                        checked={adv.stages.includes(stage.id)}
+                        onCheckedChange={() => toggle("stages", stage.id)}
+                      />
+                      <span className="truncate">{stage.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 p-2 text-xs text-foreground">
+                <Checkbox
+                  checked={adv.hotOnly}
+                  onCheckedChange={(checked) => setAdv({ ...adv, hotOnly: checked === true })}
+                />
+                Mostrar somente leads marcados como quentes
+              </label>
+
+              <div>
                 <Label className="text-[10px] uppercase font-semibold text-muted-foreground">Faixa de valor</Label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   <CurrencyInput placeholder="Mín" valueInCents={adv.minValue ? Math.round(Number(adv.minValue) * 100) : undefined} onValueChange={value => setAdv({ ...adv, minValue: value == null ? "" : String(value / 100) })} className="h-8 text-xs" />
@@ -545,123 +539,148 @@ function CRM() {
         </div>
       </div>
 
-      {/* Pipeline Kanban */}
-      {view === "funil" ? (
-        <div className="flex min-h-[calc(100vh-235px)] items-start gap-3 overflow-x-auto bg-muted/60 p-4 pb-6">
-          {grouped.map((col) => (
-            <div
-              key={col.id}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-                setDropStageId(col.id);
-              }}
-              onDragLeave={(event) => {
-                if (event.currentTarget === event.target) setDropStageId(null);
-              }}
-              onDrop={() => void handleDropInStage(col.id)}
-              className={`flex min-h-[520px] w-[278px] shrink-0 flex-col rounded-xl p-2.5 transition-colors ${
-                dropStageId === col.id ? "bg-primary/15 ring-1 ring-primary/40" : "bg-muted/75"
-              }`}
-            >
-              {/* Stage Header */}
-              <div className="mb-3 px-1">
-                <div className="mb-2 h-1 w-full rounded-full" style={{ background: col.color }} />
-                <div className="flex items-center justify-between">
-                  <h3 className="truncate text-xs font-bold text-foreground">{col.label}</h3>
-                  <span className="rounded-full bg-card px-2 py-0.5 text-[10px] font-bold text-muted-foreground shadow-sm">
-                    {col.items.length}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1">
-                  <span>{col.subtitle}</span>
-                  <span className="rounded bg-card px-1.5 py-0.5 font-semibold text-foreground">{brl(col.totalValue)}</span>
-                </div>
-              </div>
-
-              {/* Cards List */}
-              <div className="flex-1 space-y-2.5 overflow-y-auto pr-0.5">
-                {isLoading && Array.from({ length: 2 }).map((_, i) => (
-                  <div key={i} className="skeleton h-28 rounded-xl" />
-                ))}
-
-                {!isLoading && col.items.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-border/60 py-12 text-center text-[11px] text-muted-foreground/60">
-                    Nenhum lead nesta etapa
-                  </div>
-                )}
-
-                {col.items.map((client) => {
-                  const m = getMeta(client);
-                  return (
-                    <CrmKanbanCard
-                      key={client.id}
-                      client={client}
-                      meta={m}
-                      onClick={handleCardClick as (client: ClientCardData) => void}
-                      onOpenWhatsapp={openWhatsapp}
-                      onQuickAction={(action, cl) => {
-                        if (action === "schedule") {
-                          toast.info(`Agendamento iniciado para ${cl.name}`);
-                        } else if (action === "note") {
-                          handleCardClick(cl as unknown as Client);
-                        }
-                      }}
-                      onDragStart={(dragged) => setDraggedClientId(dragged.id)}
-                      onDragEnd={() => {
-                        setDraggedClientId(null);
-                        setDropStageId(null);
-                      }}
-                    />
-                  );
-                })}
-              </div>
+      {isError ? (
+        <div className="m-5 flex min-h-[320px] items-center justify-center rounded-xl border border-destructive/25 bg-card p-8 text-center" role="alert">
+          <div className="max-w-md">
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <AlertCircle className="h-5 w-5" />
             </div>
-          ))}
+            <h2 className="mt-4 text-base font-semibold text-foreground">Não foi possível carregar o CRM</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Seus dados continuam protegidos. Verifique a conexão e tente novamente.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-4 gap-2"
+              onClick={() => void qc.refetchQueries({ queryKey: ["clients", profile?.tenant_id], type: "active" })}
+            >
+              <RefreshCw className="h-4 w-4" /> Tentar novamente
+            </Button>
+          </div>
         </div>
+      ) : view === "funil" ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragCancel={() => setActiveClientId(null)}
+          onDragEnd={(event) => void handleDragEnd(event)}
+          accessibility={{
+            screenReaderInstructions: {
+              draggable:
+                "Para mover um cliente, pressione Espaço. Use as setas para escolher a nova etapa e pressione Espaço novamente para confirmar. Pressione Escape para cancelar.",
+            },
+            announcements: {
+              onDragStart: ({ active }) => `Movendo ${clients.find((client) => client.id === String(active.id))?.name ?? "cliente"}.`,
+              onDragOver: ({ over }) => over ? `Sobre ${STAGES.find((stage) => stage.id === String(over.id))?.label ?? "outro cliente"}.` : "Fora de uma etapa.",
+              onDragEnd: ({ over }) => over ? "Movimentação solicitada." : "Movimentação cancelada.",
+              onDragCancel: () => "Movimentação cancelada.",
+            },
+          }}
+        >
+          <div className="flex min-h-[calc(100vh-260px)] items-start gap-3 overflow-x-auto bg-muted/60 p-4 pb-6">
+            {grouped.map((col) => (
+              <KanbanStage
+                key={col.id}
+                id={col.id}
+                label={col.label}
+                subtitle={col.subtitle}
+                color={col.color}
+                totalValue={col.totalValue}
+                itemIds={col.items.map((client) => client.id)}
+                isLoading={isLoading}
+              >
+                {col.items.map((client) => (
+                  <CrmKanbanCard
+                    key={client.id}
+                    client={client}
+                    meta={getMeta(client)}
+                    disabled={movingClientId === client.id}
+                    onClick={handleCardClick as (client: ClientCardData) => void}
+                    onOpenWhatsapp={openWhatsapp}
+                    onQuickAction={(action, quickActionClient) => {
+                      if (action === "schedule") {
+                        toast.info("A criação de tarefas será habilitada na próxima etapa do CRM.");
+                      } else if (action === "note") {
+                        handleCardClick(quickActionClient as unknown as Client);
+                      }
+                    }}
+                  />
+                ))}
+              </KanbanStage>
+            ))}
+          </div>
+
+          <DragOverlay>
+            {activeClient ? (
+              <div className="w-[304px] rounded-xl border border-primary/40 bg-card p-4 shadow-2xl">
+                <p className="text-sm font-semibold text-foreground">{activeClient.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {getMeta(activeClient).area} · {brl(getMeta(activeClient).value)}
+                </p>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       ) : (
         /* Table View */
-        <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs">
-          <table className="w-full text-xs">
-            <thead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground bg-muted/40 border-b border-border">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
+          <table className="w-full min-w-[920px] text-xs">
+            <thead className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground">
               <tr>
                 <th className="text-left p-3 pl-4">Cliente / Lead</th>
                 <th className="text-left p-3">Contato</th>
                 <th className="text-left p-3">Área Jurídica</th>
                 <th className="text-left p-3">Etapa do Funil</th>
                 <th className="text-right p-3">Honorário Estimado</th>
-                <th className="text-left p-3">Tempo na Etapa</th>
+                <th className="text-left p-3">Na etapa</th>
                 <th className="p-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {filtered.map((c) => {
+              {isLoading && Array.from({ length: 5 }).map((_, index) => (
+                <tr key={`loading-${index}`}>
+                  <td colSpan={7} className="p-3">
+                    <div className="skeleton h-8 rounded-md" />
+                  </td>
+                </tr>
+              ))}
+              {!isLoading && filtered.map((c) => {
                 const m = getMeta(c);
-                const stage = STAGES.find((s) => s.id === c.status) ?? STAGES[0];
+                const stage = STAGES.find((s) => s.id === stageOf(c.status)) ?? STAGES[0];
                 return (
                   <tr
                     key={c.id}
-                    className="hover:bg-muted/30 cursor-pointer transition-colors"
+                    className="cursor-pointer transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                     onClick={() => handleCardClick(c)}
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleCardClick(c);
+                      }
+                    }}
+                    aria-label={`Abrir cliente ${c.name}`}
                   >
                     <td className="p-3 pl-4 font-semibold text-foreground">
                       <div className="flex items-center gap-2">
                         <span>{c.name}</span>
                         {m.hot && (
-                          <Badge className="bg-rose-500 text-white text-[9px] px-1 py-0">🔥 Quente</Badge>
+                          <Badge className="bg-destructive/12 px-1.5 py-0 text-xs text-destructive">Quente</Badge>
                         )}
                       </div>
                     </td>
                     <td className="p-3 text-muted-foreground">{c.phone || c.email || "—"}</td>
-                    <td className="p-3"><Badge variant="outline" className="text-[10px]">{m.area}</Badge></td>
+                    <td className="p-3"><Badge variant="outline" className="text-xs">{m.area}</Badge></td>
                     <td className="p-3">
-                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-md ${stage.bg} ${stage.text}`}>
+                      <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs font-medium text-foreground">
+                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stage.color }} />
                         {stage.label}
                       </span>
                     </td>
                     <td className="p-3 text-right font-bold text-foreground">{brl(m.value)}</td>
-                    <td className="p-3 text-muted-foreground text-[11px]">
-                      {new Date(c.updated_at).toLocaleDateString("pt-BR")}
+                    <td className="p-3 text-xs text-muted-foreground">
+                      {elapsedLabel(c.stage_entered_at ?? c.updated_at)}
                     </td>
                     <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <Button
@@ -669,6 +688,7 @@ function CRM() {
                         variant="ghost"
                         className="h-7 w-7 text-emerald-600 hover:bg-emerald-500/10"
                         title="Abrir WhatsApp"
+                        aria-label={`Abrir WhatsApp de ${c.name}`}
                         onClick={() => openWhatsapp(c.phone, c.name)}
                       >
                         <MessageCircle className="h-3.5 w-3.5" />
@@ -677,10 +697,12 @@ function CRM() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && (
+              {!isLoading && filtered.length === 0 && (
                 <tr>
                   <td colSpan={7} className="text-center py-12 text-muted-foreground text-xs">
-                    Nenhum cliente cadastrado
+                    {clients.length === 0
+                      ? "Nenhum cliente cadastrado. Use “Novo Lead / Cliente” para começar."
+                      : "Nenhum cliente corresponde aos filtros atuais."}
                   </td>
                 </tr>
               )}
@@ -694,7 +716,7 @@ function CRM() {
         client={selected}
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        meta={selected ? getMeta(selected) : { area: "Cível", value: 10000, owner: "Dr. Yan", hot: false }}
+        meta={selected ? getMeta(selected) : { area: "Não definido", value: 0, valueCents: 0, owner: "Sem responsável", hot: false }}
         stages={STAGES}
         onUpdateStage={moveStageHandler}
         onSaveNotes={saveNotes}
@@ -703,45 +725,82 @@ function CRM() {
   );
 }
 
-function KpiCard({ label, value, deltaLabel, icon: Icon, tone }: { label: string; value: string; deltaLabel: string; icon: typeof Users; tone: "violet" | "blue" | "emerald" | "amber" | "rose" }) {
-  const tones = {
-    violet:  { bg: "bg-violet-500/10",  text: "text-violet-600 dark:text-violet-400" },
-    blue:    { bg: "bg-blue-500/10",    text: "text-blue-600 dark:text-blue-400" },
-    emerald: { bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400" },
-    amber:   { bg: "bg-amber-500/10",   text: "text-amber-600 dark:text-amber-400" },
-    rose:    { bg: "bg-rose-500/10",    text: "text-rose-600 dark:text-rose-400" },
-  }[tone];
-
+function OperationalMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-3.5 shadow-xs hover:shadow-md transition-all">
-      <div className="flex items-center justify-between">
-        <div className={`h-8 w-8 rounded-lg ${tones.bg} flex items-center justify-center`}>
-          <Icon className={`h-4 w-4 ${tones.text}`} />
-        </div>
-      </div>
-      <p className="text-[11px] text-muted-foreground mt-2 font-medium">{label}</p>
-      <p className="text-xl font-extrabold text-foreground tracking-tight mt-0.5">{value}</p>
-      <p className="text-[10px] text-muted-foreground/80 mt-1">{deltaLabel}</p>
+    <div className="bg-card px-5 py-3 lg:px-8">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-bold tabular-nums text-foreground">{value}</p>
     </div>
   );
 }
 
-function InsightCard({ icon: Icon, tone, title, desc }: { icon: typeof Flame; tone: "rose" | "amber" | "violet"; title: string; desc: string }) {
-  const tones = {
-    rose:   { bg: "bg-rose-500/10",   text: "text-rose-600 dark:text-rose-400" },
-    amber:  { bg: "bg-amber-500/10",  text: "text-amber-600 dark:text-amber-400" },
-    violet: { bg: "bg-purple-500/10", text: "text-purple-600 dark:text-purple-400" },
-  }[tone];
+function KanbanStage({
+  id,
+  label,
+  subtitle,
+  color,
+  totalValue,
+  itemIds,
+  isLoading,
+  children,
+}: {
+  id: string;
+  label: string;
+  subtitle: string;
+  color: string;
+  totalValue: number;
+  itemIds: string[];
+  isLoading: boolean;
+  children: ReactNode;
+}) {
+  const { isOver, setNodeRef } = useDroppable({
+    id,
+    data: { type: "crm-stage", stageId: id },
+  });
 
   return (
-    <div className="rounded-lg bg-muted/20 border border-border/60 p-2.5 flex items-start gap-2.5">
-      <div className={`h-7 w-7 rounded-md ${tones.bg} flex items-center justify-center shrink-0`}>
-        <Icon className={`h-3.5 w-3.5 ${tones.text}`} />
+    <section
+      ref={setNodeRef}
+      aria-label={`Etapa ${label}, ${itemIds.length} clientes`}
+      className={`flex min-h-[540px] w-[304px] shrink-0 flex-col rounded-xl border p-2.5 transition-colors ${
+        isOver
+          ? "border-primary/50 bg-primary/10 ring-2 ring-primary/20"
+          : "border-border/70 bg-muted/75"
+      }`}
+    >
+      <div className="sticky top-0 z-10 mb-3 rounded-lg bg-muted/95 px-1 pb-2 pt-1 backdrop-blur">
+        <div className="mb-2 h-1 w-full rounded-full" style={{ backgroundColor: color }} />
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="truncate text-sm font-semibold text-foreground">{label}</h3>
+          <span className="rounded-full bg-card px-2 py-0.5 text-xs font-semibold text-muted-foreground shadow-sm">
+            {itemIds.length}
+          </span>
+        </div>
+        <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="truncate">{subtitle}</span>
+          <span className="rounded bg-card px-1.5 py-0.5 font-semibold tabular-nums text-foreground">
+            {brl(totalValue)}
+          </span>
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <h4 className="text-xs font-bold text-foreground leading-tight">{title}</h4>
-        <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{desc}</p>
-      </div>
-    </div>
+
+      <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+        <div className="flex-1 space-y-2.5 overflow-y-auto pr-0.5">
+          {isLoading
+            ? Array.from({ length: 2 }).map((_, index) => (
+                <div key={index} className="skeleton h-32 rounded-xl" />
+              ))
+            : children}
+          {!isLoading && itemIds.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border/70 px-4 py-10 text-center">
+              <p className="text-xs font-medium text-muted-foreground">Nenhum contato nesta etapa</p>
+              <p className="mt-1 text-xs text-muted-foreground/80">
+                Arraste um card para cá ou cadastre um novo contato.
+              </p>
+            </div>
+          )}
+        </div>
+      </SortableContext>
+    </section>
   );
 }
