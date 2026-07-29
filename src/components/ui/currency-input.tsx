@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { parseBrlInput } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 const brlFormatter = new Intl.NumberFormat("pt-BR", {
@@ -9,80 +10,212 @@ const brlFormatter = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 2,
 });
 
-type CurrencyInputProps = Omit<React.ComponentProps<typeof Input>, "type" | "value" | "onChange"> & {
+type CurrencyInputProps = Omit<
+  React.ComponentProps<typeof Input>,
+  "type" | "value" | "onChange"
+> & {
   valueInCents?: number;
   onValueChange: (valueInCents: number | undefined) => void;
 };
 
-function parseBrlInput(input: string): number | undefined {
-  let raw = input.trim().toLowerCase().replace(/^r\$\s*/, "").replace(/\s/g, "");
-  if (!raw) return undefined;
+type CurrencyDraft = {
+  integerDigits: string;
+  decimalDigits: string;
+  decimalMode: boolean;
+};
 
-  let multiplier = 1;
-  if (raw.endsWith("mil")) { multiplier = 1_000; raw = raw.slice(0, -3); }
-  else if (raw.endsWith("k")) { multiplier = 1_000; raw = raw.slice(0, -1); }
-  else if (raw.endsWith("mi") || raw.endsWith("m")) { multiplier = 1_000_000; raw = raw.replace(/m(i)?$/, ""); }
+function draftFromCents(valueInCents: number | undefined): CurrencyDraft {
+  if (valueInCents == null || !Number.isFinite(valueInCents)) {
+    return { integerDigits: "", decimalDigits: "", decimalMode: false };
+  }
 
-  raw = raw.trim();
-  if (!raw || !/^[\d.,]+$/.test(raw)) return undefined;
-
-  // pt-BR accepts 10.000,50. A lone dot with three digits after it is treated
-  // as a thousands separator; other lone dots work as a decimal convenience.
-  let normalized: string;
-  if (raw.includes(",")) normalized = raw.replace(/\./g, "").replace(",", ".");
-  else if ((raw.match(/\./g) ?? []).length > 1 || /\.\d{3}$/.test(raw)) normalized = raw.replace(/\./g, "");
-  else normalized = raw;
-
-  const reais = Number(normalized) * multiplier;
-  if (!Number.isFinite(reais) || reais < 0) return undefined;
-  return Math.round(reais * 100);
+  const safeCents = Math.max(0, Math.round(valueInCents));
+  return {
+    integerDigits: String(Math.floor(safeCents / 100)),
+    decimalDigits: String(safeCents % 100).padStart(2, "0"),
+    decimalMode: false,
+  };
 }
 
-/** A currency field that presents Brazilian reais and exposes integer cents. */
+function centsFromDraft(draft: CurrencyDraft): number | undefined {
+  if (!draft.integerDigits && !draft.decimalDigits) return undefined;
+
+  const integerPart = Number(draft.integerDigits || "0");
+  const decimalPart = Number(draft.decimalDigits.padEnd(2, "0").slice(0, 2) || "0");
+  if (!Number.isSafeInteger(integerPart) || integerPart < 0) return undefined;
+
+  const value = integerPart * 100 + decimalPart;
+  return Number.isSafeInteger(value) ? value : undefined;
+}
+
+function formatDraft(draft: CurrencyDraft) {
+  const cents = centsFromDraft(draft);
+  return cents == null ? "" : brlFormatter.format(cents / 100);
+}
+
+/**
+ * Brazilian currency field that keeps the value formatted while typing and
+ * exposes only integer cents to the caller.
+ *
+ * Digits are appended to the reais portion. Press comma or dot to edit the
+ * two decimal places. Example: 10000 is shown as R$ 10.000,00.
+ */
 const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
-  ({ valueInCents, onValueChange, className, onFocus, ...props }, ref) => {
-    const [display, setDisplay] = useState(valueInCents == null ? "" : brlFormatter.format(valueInCents / 100));
+  (
+    { valueInCents, onValueChange, className, onBlur, onFocus, onKeyDown, onPaste, ...props },
+    ref,
+  ) => {
     const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState<CurrencyDraft>(() => draftFromCents(valueInCents));
 
     useEffect(() => {
-      if (!editing) setDisplay(valueInCents == null ? "" : brlFormatter.format(valueInCents / 100));
+      if (!editing) setDraft(draftFromCents(valueInCents));
     }, [editing, valueInCents]);
+
+    const applyDraft = (nextDraft: CurrencyDraft) => {
+      setDraft(nextDraft);
+      onValueChange(centsFromDraft(nextDraft));
+    };
+
+    const appendDigit = (digit: string, replaceCurrentValue: boolean) => {
+      const current = replaceCurrentValue
+        ? { integerDigits: "", decimalDigits: "", decimalMode: false }
+        : draft;
+
+      if (current.decimalMode) {
+        if (current.decimalDigits.length >= 2) return;
+        applyDraft({
+          ...current,
+          decimalDigits: `${current.decimalDigits}${digit}`,
+        });
+        return;
+      }
+
+      const integerDigits = `${current.integerDigits}${digit}`
+        .replace(/^0+(?=\d)/, "")
+        .slice(0, 13);
+      applyDraft({ ...current, integerDigits });
+    };
+
+    const clearValue = () => {
+      applyDraft({ integerDigits: "", decimalDigits: "", decimalMode: false });
+    };
+
+    const display = editing
+      ? formatDraft(draft)
+      : valueInCents == null
+        ? ""
+        : brlFormatter.format(valueInCents / 100);
 
     return (
       <Input
         {...props}
         ref={ref}
         type="text"
-        inputMode="numeric"
+        inputMode="decimal"
         autoComplete="off"
         value={display}
         className={cn("tabular-nums", className)}
         onFocus={(event) => {
           setEditing(true);
-          setDisplay(valueInCents == null ? "" : String(valueInCents / 100).replace(".", ","));
+          setDraft(draftFromCents(valueInCents));
           event.currentTarget.select();
           onFocus?.(event);
         }}
         onChange={(event) => {
-          const next = event.currentTarget.value;
-          setDisplay(next);
-          const cents = parseBrlInput(next);
-          if (cents == null) {
-            if (!next.trim()) onValueChange(undefined);
+          const insertedText = (event.nativeEvent as InputEvent).data;
+          if (insertedText && /^\d$/.test(insertedText)) {
+            const allSelected =
+              event.currentTarget.selectionStart === 0 &&
+              event.currentTarget.selectionEnd === display.length;
+            appendDigit(insertedText, allSelected);
             return;
           }
-          onValueChange(cents);
+
+          if (insertedText === "," || insertedText === ".") {
+            applyDraft({ ...draft, decimalDigits: "", decimalMode: true });
+            return;
+          }
+
+          const cents = parseBrlInput(event.currentTarget.value);
+          if (cents == null) {
+            if (!event.currentTarget.value.trim()) clearValue();
+            return;
+          }
+          applyDraft(draftFromCents(cents));
+        }}
+        onKeyDown={(event) => {
+          onKeyDown?.(event);
+          if (event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey) {
+            return;
+          }
+
+          const allSelected =
+            event.currentTarget.selectionStart === 0 &&
+            event.currentTarget.selectionEnd === display.length;
+
+          if (/^\d$/.test(event.key)) {
+            event.preventDefault();
+            appendDigit(event.key, allSelected);
+            return;
+          }
+
+          if (event.key === "," || event.key === ".") {
+            event.preventDefault();
+            applyDraft({
+              ...(allSelected
+                ? { integerDigits: "", decimalDigits: "", decimalMode: false }
+                : draft),
+              decimalDigits: "",
+              decimalMode: true,
+            });
+            return;
+          }
+
+          if (event.key === "Backspace") {
+            event.preventDefault();
+            if (allSelected) {
+              clearValue();
+              return;
+            }
+
+            if (draft.decimalMode) {
+              if (draft.decimalDigits) {
+                applyDraft({
+                  ...draft,
+                  decimalDigits: draft.decimalDigits.slice(0, -1),
+                });
+              } else {
+                applyDraft({ ...draft, decimalMode: false });
+              }
+              return;
+            }
+
+            applyDraft({
+              ...draft,
+              integerDigits: draft.integerDigits.slice(0, -1),
+            });
+            return;
+          }
+
+          if (event.key === "Delete" && allSelected) {
+            event.preventDefault();
+            clearValue();
+          }
+        }}
+        onPaste={(event) => {
+          onPaste?.(event);
+          if (event.defaultPrevented) return;
+
+          event.preventDefault();
+          const cents = parseBrlInput(event.clipboardData.getData("text"));
+          if (cents == null) return;
+          applyDraft(draftFromCents(cents));
         }}
         onBlur={(event) => {
           setEditing(false);
-          const cents = parseBrlInput(event.currentTarget.value);
-          if (cents == null) {
-            setDisplay("");
-            onValueChange(undefined);
-            return;
-          }
-          setDisplay(brlFormatter.format(cents / 100));
-          onValueChange(cents);
+          onValueChange(centsFromDraft(draft));
+          onBlur?.(event);
         }}
       />
     );
