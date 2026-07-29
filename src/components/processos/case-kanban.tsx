@@ -10,6 +10,8 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
+  type DraggableAttributes,
+  type DraggableSyntheticListeners,
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -183,8 +185,8 @@ function CaseCard({ caseItem, deadlines, stage, onOpenCase, overlay = false, dra
   stage?: ProcessStage;
   onOpenCase?: (caseItem: Case) => void;
   overlay?: boolean;
-  dragAttributes?: Record<string, unknown>;
-  dragListeners?: Record<string, unknown>;
+  dragAttributes?: DraggableAttributes;
+  dragListeners?: DraggableSyntheticListeners;
 }) {
   const nextDeadline = deadlines.filter((item) => !item.done).sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0];
   const daysToDeadline = nextDeadline ? Math.ceil((new Date(nextDeadline.due_at).getTime() - Date.now()) / 86_400_000) : null;

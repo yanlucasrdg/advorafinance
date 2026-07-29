@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
@@ -46,6 +46,23 @@ type ChatMessage = {
   time: string;
 };
 
+type LeadTab = "chat" | "ficha" | "ia" | "docs" | "tarefas";
+
+function isLeadTab(value: string): value is LeadTab {
+  return ["chat", "ficha", "ia", "docs", "tarefas"].includes(value);
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function formatChatTime(value: string) {
+  return new Date(value).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 const TEMPLATES = [
   { label: "👋 Boas-vindas", text: "Olá! Obrigado por entrar em contato com nosso escritório. Como podemos lhe auxiliar em sua demanda jurídica hoje?" },
   { label: "📅 Agendar Consulta", text: "Gostaríamos de agendar uma reunião de consulta para analisar os detalhes do seu caso. Qual melhor horário para você nesta semana?" },
@@ -62,7 +79,7 @@ export function CrmLeadDrawer({
   onUpdateStage,
   onSaveNotes,
 }: CrmLeadDrawerProps) {
-  const [activeTab, setActiveTab] = useState<"chat" | "ficha" | "ia" | "docs" | "tarefas">("chat");
+  const [activeTab, setActiveTab] = useState<LeadTab>("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
@@ -80,10 +97,10 @@ export function CrmLeadDrawer({
   const [docDescription, setDocDescription] = useState("");
   const [officeNotes, setOfficeNotes] = useState("");
   const fileRef = React.useRef<HTMLInputElement | null>(null);
+  const clientId = client?.id ?? null;
+  const clientNotes = client?.notes ?? null;
 
-  const formatChatTime = (value: string) => new Date(value).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-
-  const loadMessages = async (id: string) => {
+  const loadMessages = useCallback(async (id: string): Promise<ChatMessage[]> => {
     const { data, error } = await supabase
       .from("whatsapp_messages")
       .select("id, direction, body, created_at")
@@ -91,76 +108,92 @@ export function CrmLeadDrawer({
       .order("created_at", { ascending: true })
       .limit(300);
     if (error) throw error;
-    setMessages((data ?? []).map((message: any) => ({
+    return (data ?? []).map((message) => ({
       id: message.id,
       sender: message.direction === "inbound" ? "client" : "lawyer",
       text: message.body,
       time: formatChatTime(message.created_at),
-    })));
-  };
+    }));
+  }, []);
 
   React.useEffect(() => {
     let active = true;
     const loadConversation = async () => {
       setMessages([]);
       setConversationId(null);
-      if (!client?.id) return;
+      if (!clientId) return;
       const { data, error } = await supabase
         .from("whatsapp_conversations")
         .select("id")
-        .eq("client_id", client.id)
+        .eq("client_id", clientId)
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .limit(1)
         .maybeSingle();
       if (error || !data || !active) return;
       setConversationId(data.id);
-      try { await loadMessages(data.id); } catch (err) { console.error(err); }
+      try {
+        const loadedMessages = await loadMessages(data.id);
+        if (active) setMessages(loadedMessages);
+      } catch (error) {
+        console.error(error);
+      }
     };
     void loadConversation();
     return () => { active = false; };
-  }, [client?.id]);
+  }, [clientId, loadMessages]);
 
   React.useEffect(() => {
     if (!conversationId) return;
+    let active = true;
     const channel = supabase.channel(`crm-client-conversation:${conversationId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_messages", filter: `conversation_id=eq.${conversationId}` }, () => {
-        void loadMessages(conversationId);
+        void loadMessages(conversationId)
+          .then((loadedMessages) => {
+            if (active) setMessages(loadedMessages);
+          })
+          .catch((error) => console.error(error));
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [conversationId]);
+    return () => {
+      active = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [conversationId, loadMessages]);
 
   React.useEffect(() => {
-    if (!client) { setOfficeNotes(""); return; }
+    if (!clientId) {
+      setOfficeNotes("");
+      return;
+    }
     try {
-      const parsed = client.notes ? JSON.parse(client.notes) : {};
+      const parsed = clientNotes ? JSON.parse(clientNotes) : {};
       setOfficeNotes(typeof parsed.office_notes === "string" ? parsed.office_notes : "");
     } catch {
-      setOfficeNotes(client.notes ?? "");
+      setOfficeNotes(clientNotes ?? "");
     }
-  }, [client?.id, client?.notes]);
+  }, [clientId, clientNotes]);
 
-  async function loadClientDocuments(clientId: string) {
+  const loadClientDocuments = useCallback(async (targetClientId: string) => {
     setDocsLoading(true);
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("documents")
         .select("id, file_name, file_path, document_type, created_at")
-        .eq("client_id", clientId)
+        .eq("client_id", targetClientId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setClientDocs((data ?? []) as any);
+      setClientDocs(data ?? []);
     } catch (err) {
       console.error(err);
     } finally {
       setDocsLoading(false);
     }
-  }
+  }, []);
 
   React.useEffect(() => {
-    if (!client) return;
-    loadClientDocuments(client.id);
-  }, [client?.id]);
+    if (!clientId) return;
+    void loadClientDocuments(clientId);
+  }, [clientId, loadClientDocuments]);
 
   async function uploadClientDocument(file: File) {
     if (!profile?.tenant_id || !client) return;
@@ -171,7 +204,7 @@ export function CrmLeadDrawer({
       const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file, { cacheControl: "3600", upsert: false });
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await (supabase as any).from("documents").insert({
+      const { error: insertError } = await supabase.from("documents").insert({
         tenant_id: profile.tenant_id,
         client_id: client.id,
         uploaded_by: profile.id,
@@ -237,10 +270,10 @@ export function CrmLeadDrawer({
       const result = await sendTextFn({ data: { phone: client.phone, message: msg, clientId: client.id } });
       setInputText("");
       setConversationId(result.conversationId);
-      await loadMessages(result.conversationId);
+      setMessages(await loadMessages(result.conversationId));
       toast.success("Mensagem enviada no WhatsApp.");
-    } catch (err: any) {
-      toast.error(err?.message || "Não foi possível enviar a mensagem pelo WhatsApp.");
+    } catch (error: unknown) {
+      toast.error(errorMessage(error, "Não foi possível enviar a mensagem pelo WhatsApp."));
     } finally {
       setSending(false);
     }
@@ -341,7 +374,13 @@ export function CrmLeadDrawer({
         </div>
 
         {/* Tabs header */}
-        <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="flex-1 flex flex-col overflow-hidden">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            if (isLeadTab(value)) setActiveTab(value);
+          }}
+          className="flex-1 flex flex-col overflow-hidden"
+        >
           <div className="px-3 sm:px-4 border-b border-border bg-card overflow-x-auto no-scrollbar">
             <TabsList className="bg-transparent h-11 min-w-max space-x-1.5">
               <TabsTrigger value="chat" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary text-xs gap-1.5 font-medium">
@@ -638,8 +677,23 @@ function PartiesEditor({ client, onSave }: { client: ClientCardData; onSave: (no
   const [text, setText] = React.useState("");
   React.useEffect(() => {
     try {
-      const m = client.notes ? JSON.parse(client.notes) : {};
-      const parties = Array.isArray(m.parties) ? m.parties.map((p: any) => p.name).join(", ") : "";
+      const metadata: unknown = client.notes ? JSON.parse(client.notes) : {};
+      const parties =
+        typeof metadata === "object" &&
+        metadata !== null &&
+        "parties" in metadata &&
+        Array.isArray(metadata.parties)
+          ? metadata.parties
+              .filter(
+                (party): party is { name: string } =>
+                  typeof party === "object" &&
+                  party !== null &&
+                  "name" in party &&
+                  typeof party.name === "string",
+              )
+              .map((party) => party.name)
+              .join(", ")
+          : "";
       setText(parties);
     } catch {
       setText("");

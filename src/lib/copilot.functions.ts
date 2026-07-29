@@ -31,7 +31,7 @@ export const clearCopilotHistory = createServerFn({ method: "POST" })
 
 export const askCopilot = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => Schema.parse(d))
+  .validator((d) => Schema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     await enforceRateLimit(supabase, "copilot_prompt");

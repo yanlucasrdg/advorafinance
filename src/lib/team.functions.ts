@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import type { Database } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const AssignableRole = z.enum(["admin", "lawyer", "secretary", "intern"]);
@@ -16,7 +18,7 @@ const ChangeRoleSchema = z.object({
   role: AssignableRole,
 });
 
-async function requireOwner(context: { supabase: any; userId: string }) {
+async function requireOwner(context: { supabase: SupabaseClient<Database>; userId: string }) {
   const { data: profile, error: profileError } = await context.supabase
     .from("profiles")
     .select("tenant_id")
@@ -39,7 +41,7 @@ async function requireOwner(context: { supabase: any; userId: string }) {
 
 export const inviteTeamMember = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data) => InviteSchema.parse(data))
+  .validator((data) => InviteSchema.parse(data))
   .handler(async ({ data, context }) => {
     const tenantId = await requireOwner(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -76,7 +78,7 @@ export const inviteTeamMember = createServerFn({ method: "POST" })
 
 export const changeTeamMemberRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data) => ChangeRoleSchema.parse(data))
+  .validator((data) => ChangeRoleSchema.parse(data))
   .handler(async ({ data, context }) => {
     const tenantId = await requireOwner(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

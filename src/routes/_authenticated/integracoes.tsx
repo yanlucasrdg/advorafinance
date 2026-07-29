@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, CircleAlert, Cloud, ExternalLink, Loader2, LockKeyhole, MessageCircle, ShieldCheck, Zap } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -25,7 +25,10 @@ export const Route = createFileRoute("/_authenticated/integracoes")({
 function loadMetaSdk(appId: string) {
   return new Promise<void>((resolve, reject) => {
     let completed = false;
-    let timeout: number;
+    const timeout = window.setTimeout(
+      () => finish(new Error("O SDK da Meta não respondeu. Atualize a página e tente novamente.")),
+      12_000,
+    );
     const finish = (error?: Error) => {
       if (completed) return;
       completed = true;
@@ -41,7 +44,6 @@ function loadMetaSdk(appId: string) {
       window.FB.init({ appId, cookie: true, xfbml: false, version: "v25.0" });
       finish();
     };
-    timeout = window.setTimeout(() => finish(new Error("O SDK da Meta não respondeu. Atualize a página e tente novamente.")), 12_000);
     if (window.FB) {
       initialize();
       return;
@@ -72,25 +74,25 @@ function IntegracoesPage() {
   const pendingCode = useRef<string | null>(null);
   const connectionTimeout = useRef<number | null>(null);
 
-  const stopConnecting = () => {
+  const stopConnecting = useCallback(() => {
     if (connectionTimeout.current !== null) window.clearTimeout(connectionTimeout.current);
     connectionTimeout.current = null;
     setConnecting(false);
-  };
+  }, []);
 
-  const refreshStatus = async () => {
+  const refreshStatus = useCallback(async () => {
     setLoading(true);
     try { setStatus(await getStatus()); }
     catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível consultar a conexão WhatsApp."); }
     finally { setLoading(false); }
-  };
+  }, [getStatus]);
 
   useEffect(() => {
     void refreshStatus();
     return () => {
       if (connectionTimeout.current !== null) window.clearTimeout(connectionTimeout.current);
     };
-  }, []);
+  }, [refreshStatus]);
 
   useEffect(() => {
     const appId = status?.embeddedSignup.appId;
@@ -100,7 +102,7 @@ function IntegracoesPage() {
     });
   }, [status?.embeddedSignup.ready, status?.embeddedSignup.appId]);
 
-  const finishSignup = async () => {
+  const finishSignup = useCallback(async () => {
     if (!pendingCode.current || !signupDetails.current) return;
     const code = pendingCode.current;
     const details = signupDetails.current;
@@ -113,7 +115,7 @@ function IntegracoesPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível concluir a conexão com a Meta.");
     } finally { stopConnecting(); }
-  };
+  }, [completeSignup, refreshStatus, stopConnecting]);
 
   useEffect(() => {
     const receiveMetaEvent = (event: MessageEvent) => {
@@ -127,7 +129,7 @@ function IntegracoesPage() {
     };
     window.addEventListener("message", receiveMetaEvent);
     return () => window.removeEventListener("message", receiveMetaEvent);
-  }, []);
+  }, [finishSignup]);
 
   const connectWhatsApp = () => {
     if (!status?.embeddedSignup.ready || !status.embeddedSignup.appId || !status.embeddedSignup.configId) {

@@ -124,6 +124,7 @@ export type Database = {
           pipeline_value_cents: number
           responsible: string | null
           status: string
+          status_version: number
           subjects: Json | null
           tenant_id: string
           title: string
@@ -154,6 +155,7 @@ export type Database = {
           pipeline_value_cents?: number
           responsible?: string | null
           status?: string
+          status_version?: number
           subjects?: Json | null
           tenant_id: string
           title: string
@@ -184,6 +186,7 @@ export type Database = {
           pipeline_value_cents?: number
           responsible?: string | null
           status?: string
+          status_version?: number
           subjects?: Json | null
           tenant_id?: string
           title?: string
@@ -337,6 +340,76 @@ export type Database = {
           },
           {
             foreignKeyName: "deadlines_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          case_id: string | null
+          client_id: string | null
+          created_at: string
+          description: string | null
+          document_type: string
+          file_name: string
+          file_path: string
+          file_size: number
+          file_type: string
+          id: string
+          tenant_id: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          case_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          description?: string | null
+          document_type?: string
+          file_name: string
+          file_path: string
+          file_size?: number
+          file_type: string
+          id?: string
+          tenant_id: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          case_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          description?: string | null
+          document_type?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          file_type?: string
+          id?: string
+          tenant_id?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -680,6 +753,47 @@ export type Database = {
           },
         ]
       }
+      tenant_branding: {
+        Row: {
+          brand_name: string
+          created_at: string
+          default_theme: string
+          logo_url: string | null
+          primary_color: string
+          secondary_color: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          brand_name: string
+          created_at?: string
+          default_theme?: string
+          logo_url?: string | null
+          primary_color?: string
+          secondary_color?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          brand_name?: string
+          created_at?: string
+          default_theme?: string
+          logo_url?: string | null
+          primary_color?: string
+          secondary_color?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_branding_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           created_at: string
@@ -889,6 +1003,66 @@ export type Database = {
           },
         ]
       }
+      whatsapp_meta_connections: {
+        Row: {
+          access_token_ciphertext: string
+          access_token_expires_at: string | null
+          business_account_id: string
+          connected_at: string | null
+          created_at: string
+          id: string
+          instance_id: string
+          last_error: string | null
+          phone_number_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          access_token_ciphertext: string
+          access_token_expires_at?: string | null
+          business_account_id: string
+          connected_at?: string | null
+          created_at?: string
+          id?: string
+          instance_id: string
+          last_error?: string | null
+          phone_number_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          access_token_ciphertext?: string
+          access_token_expires_at?: string | null
+          business_account_id?: string
+          connected_at?: string | null
+          created_at?: string
+          id?: string
+          instance_id?: string
+          last_error?: string | null
+          phone_number_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_meta_connections_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: true
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_meta_connections_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_logs: {
         Row: {
           client_id: string | null
@@ -1002,6 +1176,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      consume_rate_limit: {
+        Args: { _scope: string }
+        Returns: boolean
+      }
       create_tenant_with_owner: {
         Args: { _name: string; _slug: string }
         Returns: string

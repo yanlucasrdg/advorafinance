@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -41,16 +41,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [branding, setBranding] = useState<TenantBranding | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadBranding = async (tenantId: string) => {
+  const loadBranding = useCallback(async (tenantId: string) => {
     const { data } = await supabase
       .from("tenant_branding")
       .select("tenant_id, brand_name, logo_url, primary_color, secondary_color, default_theme")
       .eq("tenant_id", tenantId)
       .maybeSingle();
     setBranding(data as TenantBranding | null);
-  };
+  }, []);
 
-  const loadProfile = async (uid: string) => {
+  const loadProfile = useCallback(async (uid: string) => {
     const { data } = await supabase
       .from("profiles")
       .select("id, tenant_id, full_name, email, avatar_url, locale, theme")
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(nextProfile);
     if (nextProfile?.tenant_id) await loadBranding(nextProfile.tenant_id);
     else setBranding(null);
-  };
+  }, [loadBranding]);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
@@ -82,21 +82,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [loadProfile]);
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (user) await loadProfile(user.id);
-  };
+  }, [loadProfile, user]);
 
-  const refreshBranding = async () => {
+  const refreshBranding = useCallback(async () => {
     if (profile?.tenant_id) await loadBranding(profile.tenant_id);
-  };
+  }, [loadBranding, profile?.tenant_id]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setProfile(null);
     setBranding(null);
-  };
+  }, []);
 
   return (
     <Ctx.Provider value={{ user, session, profile, branding, loading, refreshProfile, refreshBranding, signOut }}>

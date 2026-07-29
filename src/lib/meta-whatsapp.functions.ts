@@ -7,10 +7,6 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 type MetaChannel = { id: string; tenantId: string; phoneNumberId: string; accessToken: string };
 type MetaConnectionRow = { instance_id: string; tenant_id: string; phone_number_id: string; business_account_id: string; access_token_ciphertext: string; status: string; connected_at: string | null; last_error: string | null };
 
-function adminDatabase(client: unknown) {
-  return client as { from: (table: string) => any };
-}
-
 async function tenantForUser(userId: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
@@ -28,8 +24,7 @@ async function configuredEmbeddedSignup() {
 async function loadMetaChannel(userId: string): Promise<MetaChannel> {
   const tenantId = await tenantForUser(userId);
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const db = adminDatabase(supabaseAdmin);
-  const { data, error } = await db.from("whatsapp_meta_connections")
+  const { data, error } = await supabaseAdmin.from("whatsapp_meta_connections")
     .select("instance_id, tenant_id, phone_number_id, business_account_id, access_token_ciphertext, status, connected_at, last_error")
     .eq("tenant_id", tenantId).eq("status", "connected").maybeSingle() as { data: MetaConnectionRow | null; error: { message: string } | null };
   if (error) throw new Error(error.message);
@@ -87,8 +82,7 @@ export const metaWhatsAppStatus = createServerFn({ method: "GET" })
     const tenantId = await tenantForUser(context.userId);
     const config = await configuredEmbeddedSignup();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const db = adminDatabase(supabaseAdmin);
-    const { data } = await db.from("whatsapp_meta_connections")
+    const { data } = await supabaseAdmin.from("whatsapp_meta_connections")
       .select("phone_number_id, business_account_id, status, connected_at, last_error")
       .eq("tenant_id", tenantId).maybeSingle() as { data: Omit<MetaConnectionRow, "instance_id" | "tenant_id" | "access_token_ciphertext"> | null };
     return { connection: data, embeddedSignup: config };
@@ -96,7 +90,7 @@ export const metaWhatsAppStatus = createServerFn({ method: "GET" })
 
 export const metaWhatsAppCompleteEmbeddedSignup = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { code: string; businessAccountId: string; phoneNumberId: string; displayPhoneNumber?: string }) => {
+  .validator((input: { code: string; businessAccountId: string; phoneNumberId: string; displayPhoneNumber?: string }) => {
     const code = String(input?.code ?? "").trim();
     const businessAccountId = String(input?.businessAccountId ?? "").trim();
     const phoneNumberId = String(input?.phoneNumberId ?? "").trim();
@@ -108,7 +102,6 @@ export const metaWhatsAppCompleteEmbeddedSignup = createServerFn({ method: "POST
     const tenantId = await tenantForUser(context.userId);
     const { accessToken, expiresIn } = await exchangeEmbeddedSignupCode(data.code);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const db = adminDatabase(supabaseAdmin);
     const { data: taken } = await supabaseAdmin.from("whatsapp_instances").select("id, tenant_id").eq("external_instance_id", data.phoneNumberId).maybeSingle();
     if (taken && taken.tenant_id !== tenantId) throw new Error("Este número já está conectado a outro escritório no Advora.");
 
@@ -127,7 +120,7 @@ export const metaWhatsAppCompleteEmbeddedSignup = createServerFn({ method: "POST
 
     const connectedAt = new Date().toISOString();
     const accessTokenExpiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null;
-    const { error: connectionError } = await db.from("whatsapp_meta_connections").upsert({
+    const { error: connectionError } = await supabaseAdmin.from("whatsapp_meta_connections").upsert({
       tenant_id: tenantId, instance_id: instanceId, business_account_id: data.businessAccountId,
       phone_number_id: data.phoneNumberId, access_token_ciphertext: await encryptMetaAccessToken(accessToken),
       access_token_expires_at: accessTokenExpiresAt, status: "connected", connected_at: connectedAt, last_error: null,
@@ -139,7 +132,7 @@ export const metaWhatsAppCompleteEmbeddedSignup = createServerFn({ method: "POST
 
 export const metaWhatsAppSendText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { phone: string; message: string; clientId?: string }) => {
+  .validator((input: { phone: string; message: string; clientId?: string }) => {
     const phone = String(input?.phone ?? "").replace(/\D/g, "");
     const message = String(input?.message ?? "").trim();
     if (phone.length < 10 || phone.length > 15) throw new Error("Telefone inválido. Use DDI, DDD e número.");

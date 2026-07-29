@@ -263,7 +263,7 @@ function Financeiro() {
 
   const createEntry = async () => {
     if (!form.description.trim() || !tenantId) return;
-    await create.mutateAsync({
+    const payload = {
       tenant_id: tenantId,
       description: form.description,
       kind: form.kind,
@@ -273,7 +273,8 @@ function Financeiro() {
       client_id: form.client_id || null,
       case_id: form.case_id || null,
       category: form.category || null,
-    } as any);
+    };
+    await create.mutateAsync(payload);
     setOpen(false);
     setForm({ description: "", kind: "receita", amount_cents: 0, status: "pendente", due_date: "", client_id: "", case_id: "", category: "" });
   };
@@ -328,19 +329,27 @@ function Financeiro() {
 
     const brand = "3B2DC7";
     const navy = "111827";
-    const border = { style: "thin", color: { rgb: "D1D5DB" } };
-    const titleStyle = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 18 }, fill: { fgColor: { rgb: navy } }, alignment: { vertical: "center" } };
-    const subTitleStyle = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 }, fill: { fgColor: { rgb: brand } }, alignment: { vertical: "center" } };
-    const headerStyle = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 }, fill: { fgColor: { rgb: brand } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: { top: border, bottom: border, left: border, right: border } };
-    const sheet = XLSX.utils.json_to_sheet(rows, { cellDates: true, dateNF: "dd/mm/yyyy", origin: "A7" });
-    sheet["A1"] = { t: "s", v: "ADVORA LEGAL OS — RELATÓRIO FINANCEIRO", s: titleStyle } as any;
-    sheet["A2"] = { t: "s", v: `Período: ${PERIOD_LABELS[filters.period]}  •  Emitido em ${new Date().toLocaleDateString("pt-BR")}`, s: subTitleStyle } as any;
+    const border: NonNullable<XLSX.CellStyle["border"]>["top"] = {
+      style: "thin",
+      color: { rgb: "D1D5DB" },
+    };
+    const titleStyle: XLSX.CellStyle = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 18 }, fill: { fgColor: { rgb: navy } }, alignment: { vertical: "center" } };
+    const subTitleStyle: XLSX.CellStyle = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 }, fill: { fgColor: { rgb: brand } }, alignment: { vertical: "center" } };
+    const headerStyle: XLSX.CellStyle = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 }, fill: { fgColor: { rgb: brand } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: { top: border, bottom: border, left: border, right: border } };
+    const sheet = XLSX.utils.aoa_to_sheet([]);
+    XLSX.utils.sheet_add_json(sheet, rows, {
+      cellDates: true,
+      dateNF: "dd/mm/yyyy",
+      origin: "A7",
+    });
+    sheet["A1"] = { t: "s", v: "ADVORA LEGAL OS — RELATÓRIO FINANCEIRO", s: titleStyle };
+    sheet["A2"] = { t: "s", v: `Período: ${PERIOD_LABELS[filters.period]}  •  Emitido em ${new Date().toLocaleDateString("pt-BR")}`, s: subTitleStyle };
     sheet["!merges"] = [XLSX.utils.decode_range("A1:K1"), XLSX.utils.decode_range("A2:K2")];
     sheet["!rows"] = [{ hpt: 28 }, { hpt: 20 }];
     const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1");
     for (let column = range.s.c; column <= range.e.c; column += 1) {
       const header = sheet[XLSX.utils.encode_cell({ r: 6, c: column })];
-      if (header) header.s = headerStyle as any;
+      if (header) header.s = headerStyle;
     }
     for (let row = range.s.r + 1; row <= range.e.r; row += 1) {
       for (const column of [5, 6]) {
@@ -371,10 +380,10 @@ function Financeiro() {
       ["Receita líquida", dre.receitaLiquida / 100],
       ["Resultado do período", dre.resultado / 100],
     ]);
-    summary["A1"].s = titleStyle as any;
-    summary["A2"].s = subTitleStyle as any;
+    summary["A1"].s = titleStyle;
+    summary["A2"].s = subTitleStyle;
     summary["!merges"] = [XLSX.utils.decode_range("A1:D1"), XLSX.utils.decode_range("A2:D2")];
-    for (const address of ["A4", "B4", "C4", "D4", "A7", "B7"]) summary[address].s = headerStyle as any;
+    for (const address of ["A4", "B4", "C4", "D4", "A7", "B7"]) summary[address].s = headerStyle;
     for (const address of ["A5", "B5", "C5", "D5", "B8", "B9", "B10", "B11"]) {
       if (summary[address]) summary[address].z = 'R$ #,##0.00';
     }

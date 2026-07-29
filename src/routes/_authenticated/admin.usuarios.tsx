@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Loader2, Plus, Search, ShieldCheck, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, Panel } from "@/components/data-table-shell";
@@ -41,6 +41,8 @@ export const Route = createFileRoute("/_authenticated/admin/usuarios")({
 
 function UsersAdmin() {
   const { profile } = useAuth();
+  const profileId = profile?.id;
+  const tenantId = profile?.tenant_id;
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -50,12 +52,12 @@ function UsersAdmin() {
   const [saving, setSaving] = useState(false);
   const [invite, setInvite] = useState(emptyInvite);
 
-  const loadMembers = async () => {
-    if (!profile?.tenant_id || !profile.id) return;
+  const loadMembers = useCallback(async () => {
+    if (!tenantId || !profileId) return;
     setLoading(true);
     const [{ data: profiles, error: profilesError }, { data: roles, error: rolesError }] = await Promise.all([
-      supabase.from("profiles").select("id, full_name, email, avatar_url, phone").eq("tenant_id", profile.tenant_id).order("full_name"),
-      supabase.from("user_roles").select("user_id, role").eq("tenant_id", profile.tenant_id),
+      supabase.from("profiles").select("id, full_name, email, avatar_url, phone").eq("tenant_id", tenantId).order("full_name"),
+      supabase.from("user_roles").select("user_id, role").eq("tenant_id", tenantId),
     ]);
     if (profilesError || rolesError) {
       toast.error(profilesError?.message ?? rolesError?.message ?? "Não foi possível carregar os usuários.");
@@ -65,11 +67,11 @@ function UsersAdmin() {
 
     const roleByUser = new Map((roles ?? []).map((entry) => [entry.user_id, entry.role as DisplayRole]));
     setMembers((profiles ?? []).map((member) => ({ ...member, role: roleByUser.get(member.id) ?? "intern" })));
-    setIsOwner((roles ?? []).some((entry) => entry.user_id === profile.id && entry.role === "owner"));
+    setIsOwner((roles ?? []).some((entry) => entry.user_id === profileId && entry.role === "owner"));
     setLoading(false);
-  };
+  }, [profileId, tenantId]);
 
-  useEffect(() => { void loadMembers(); }, [profile?.id, profile?.tenant_id]);
+  useEffect(() => { void loadMembers(); }, [loadMembers]);
 
   const visibleMembers = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");

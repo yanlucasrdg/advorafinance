@@ -104,26 +104,52 @@ export type ClientUpdate = z.output<typeof clientUpdateSchema>;
 // ─────────────────────────────────────────────
 
 export const caseStatusSchema = z.enum([
-  "novo", "em_andamento", "aguardando_cliente", "aguardando_tribunal",
-  "recurso", "encerrado_ganho", "encerrado_perdido", "arquivado",
+  "ativo",
+  "suspenso",
+  "recurso",
+  "arquivado",
+  "ganho",
+  "perdido",
+  // Valores legados mantidos durante a normalização gradual dos dados.
+  "novo",
+  "em_andamento",
+  "aguardando_cliente",
+  "aguardando_tribunal",
+  "encerrado_ganho",
+  "encerrado_perdido",
 ], { errorMap: () => ({ message: "Status de processo inválido" }) });
 
 export const caseAreaSchema = z.enum([
-  "civil", "trabalhista", "tributario", "familia", "criminal",
-  "previdenciario", "empresarial", "administrativo", "consumidor", "outro",
+  "civel",
+  "civil",
+  "trabalhista",
+  "tributario",
+  "familia",
+  "criminal",
+  "previdenciario",
+  "empresarial",
+  "administrativo",
+  "consumidor",
+  "outro",
 ], { errorMap: () => ({ message: "Área jurídica inválida" }) }).optional().nullable();
 
+const casePartySchema = z.object({
+  name: z.string().trim().min(1, "Nome da parte é obrigatório").max(200),
+  role: z.string().trim().max(100).optional().nullable(),
+});
+
 export const caseCreateSchema = z.object({
-  title:        z.string().min(3, "Título deve ter ao menos 3 caracteres").max(300),
+  title:        z.string().trim().min(3, "Título deve ter ao menos 3 caracteres").max(300),
   number:       z.string().max(50).optional().nullable(),
   area:         caseAreaSchema,
-  status:       caseStatusSchema.default("novo"),
+  status:       caseStatusSchema.default("ativo"),
   client_id:    uuidSchema.optional().nullable(),
   responsible:  z.string().max(200).optional().nullable(),
   description:  z.string().max(5000).optional().nullable(),
   value_cents:  centsSchema,
   court:        z.string().max(200).optional().nullable(),
   tribunal:     z.string().max(50).optional().nullable(),
+  parties:      z.array(casePartySchema).max(100, "Limite de 100 partes por processo").optional(),
 });
 
 export const caseUpdateSchema = caseCreateSchema.partial();
@@ -209,10 +235,14 @@ export type FinancialPaymentCreate = z.output<typeof financialPaymentCreateSchem
  * Valida e lança exceção com mensagem amigável.
  * Use em mutationFn de React Query.
  */
-export function parseOrThrow<T>(schema: z.ZodSchema<T>, data: unknown, context?: string): T {
+export function parseOrThrow<TSchema extends z.ZodTypeAny>(
+  schema: TSchema,
+  data: unknown,
+  context?: string,
+): z.output<TSchema> {
   const result = schema.safeParse(data);
   if (!result.success) {
-    const messages = result.error.errors.map((e) => e.message).join("; ");
+    const messages = result.error.errors.map((error) => error.message).join("; ");
     throw new Error(context ? `[${context}] ${messages}` : messages);
   }
   return result.data;

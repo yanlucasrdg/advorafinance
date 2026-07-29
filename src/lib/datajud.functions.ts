@@ -1,7 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { validateCNJ, type CNJValidation } from "@/lib/cnj";
 import { enforceRateLimit } from "@/lib/rate-limit";
+
+export { validateCNJ };
+export type { CNJValidation };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Retry exponencial com Circuit Breaker para chamadas ao DataJud
@@ -100,130 +104,6 @@ function tribunalAlias(segmento: string, tribunal: string): string | null {
     return `api_publica_tj${ufs[Number(tt)]}`;
   }
   return null;
-}
-
-export type CNJValidation =
-  | { ok: true; clean: string; formatted: string; segmento: string; tribunal: string; ano: string }
-  | { ok: false; reason: "EMPTY" | "LENGTH" | "YEAR" | "SEGMENT" | "DV"; message: string };
-
-export function validateCNJ(raw: string): CNJValidation {
-  const trimmed = (raw ?? "").trim();
-  if (!trimmed) return { ok: false, reason: "EMPTY", message: "Informe o número CNJ do processo." };
-  const clean = trimmed.replace(/\D/g, "");
-  if (clean.length !== 20) {
-    return {
-      ok: false,
-      reason: "LENGTH",
-      message: `Número CNJ deve ter 20 dígitos (recebi ${clean.length}). Formato: NNNNNNN-DD.AAAA.J.TT.OOOO`,
-    };
-  }
-  // NNNNNNN DD AAAA J TT OOOO
-  const numero = clean.slice(0, 7);
-  const dv = clean.slice(7, 9);
-  const ano = clean.slice(9, 13);
-  const segmento = clean.slice(13, 14);
-  const tribunal = clean.slice(14, 16);
-  const origem = clean.slice(16, 20);
-
-// API pública divulgada pelo CNJ (DataJud Wiki)
-// Header: Authorization: APIKey <key>
-const DATAJUD_API_KEY =
-  "cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw==";
-const DATAJUD_BASE = "https://api-publica.datajud.cnj.jus.br";
-
-// Mapeia (segmento, tribunal) -> alias do índice do DataJud
-// Formato CNJ: NNNNNNN-DD.AAAA.J.TT.OOOO  (J = segmento, TT = tribunal)
-function tribunalAlias(segmento: string, tribunal: string): string | null {
-  const j = segmento;
-  const tt = tribunal.padStart(2, "0");
-  // STF/CNJ/STJ/TST/TSE/STM (TT = 00)
-  if (j === "1" && tt === "00") return "api_publica_stf";
-  if (j === "2" && tt === "00") return "api_publica_cnj";
-  if (j === "3" && tt === "00") return "api_publica_stj";
-  if (j === "4" && tt === "90") return "api_publica_tst";
-  if (j === "6" && tt === "00") return "api_publica_tse";
-  if (j === "7" && tt === "00") return "api_publica_stm";
-  // Justiça Federal (TRFs)
-  if (j === "4" && tt >= "01" && tt <= "06") return `api_publica_trf${Number(tt)}`;
-  // Justiça do Trabalho (TRTs)
-  if (j === "5" && Number(tt) >= 1 && Number(tt) <= 24) return `api_publica_trt${Number(tt)}`;
-  // Justiça Eleitoral (TREs) — TT = UF code 01..27
-  if (j === "6" && Number(tt) >= 1 && Number(tt) <= 27) {
-    const ufs = ["", "ac","al","ap","am","ba","ce","df","es","go","ma","mt","ms","mg","pa","pb","pr","pe","pi","rj","rn","rs","ro","rr","sc","sp","se","to"];
-    return `api_publica_tre-${ufs[Number(tt)]}`;
-  }
-  // Justiça Militar Estadual
-  if (j === "7" && (tt === "13" || tt === "21" || tt === "26")) {
-    const m: Record<string,string> = { "13": "mg", "21": "rs", "26": "sp" };
-    return `api_publica_tjm-${m[tt]}`;
-  }
-  // Justiça Estadual (TJs)
-  if (j === "8" && Number(tt) >= 1 && Number(tt) <= 27) {
-    const ufs = ["", "ac","al","ap","am","ba","ce","df","es","go","ma","mt","ms","mg","pa","pb","pr","pe","pi","rj","rn","rs","ro","rr","sc","sp","se","to"];
-    return `api_publica_tj${ufs[Number(tt)]}`;
-  }
-  return null;
-}
-
-export type CNJValidation =
-  | { ok: true; clean: string; formatted: string; segmento: string; tribunal: string; ano: string }
-  | { ok: false; reason: "EMPTY" | "LENGTH" | "YEAR" | "SEGMENT" | "DV"; message: string };
-
-export function validateCNJ(raw: string): CNJValidation {
-  const trimmed = (raw ?? "").trim();
-  if (!trimmed) return { ok: false, reason: "EMPTY", message: "Informe o número CNJ do processo." };
-  const clean = trimmed.replace(/\D/g, "");
-  if (clean.length !== 20) {
-    return {
-      ok: false,
-      reason: "LENGTH",
-      message: `Número CNJ deve ter 20 dígitos (recebi ${clean.length}). Formato: NNNNNNN-DD.AAAA.J.TT.OOOO`,
-    };
-  }
-  // NNNNNNN DD AAAA J TT OOOO
-  const numero = clean.slice(0, 7);
-  const dv = clean.slice(7, 9);
-  const ano = clean.slice(9, 13);
-  const segmento = clean.slice(13, 14);
-  const tribunal = clean.slice(14, 16);
-  const origem = clean.slice(16, 20);
-
-  const anoNum = Number(ano);
-  const yearNow = new Date().getFullYear();
-  if (anoNum < 1900 || anoNum > yearNow + 1) {
-    return { ok: false, reason: "YEAR", message: `Ano do processo inválido (${ano}).` };
-  }
-  if (!/^[1-9]$/.test(segmento)) {
-    return { ok: false, reason: "SEGMENT", message: `Segmento do Judiciário inválido (${segmento}).` };
-  }
-
-  // Verificador DV (módulo 97 base 10) — Resolução CNJ nº 65/2008
-  try {
-    const concat = `${numero}${ano}${segmento}${tribunal}${origem}`;
-    let mod = 0;
-    for (const ch of concat) mod = (mod * 10 + (ch.charCodeAt(0) - 48)) % 97;
-    mod = (mod * 100) % 97;
-    const expected = 98 - mod;
-    if (expected !== Number(dv)) {
-      return {
-        ok: false,
-        reason: "DV",
-        message: `Dígitos verificadores não conferem. Confira a digitação do número CNJ.`,
-      };
-    }
-  } catch (dvErr) {
-    // ✅ Falha no cálculo do DV não é silenciosa — vai para monitoring
-    console.warn("[validateCNJ] Erro no cálculo do dígito verificador:", dvErr);
-  }
-
-  const formatted = `${numero}-${dv}.${ano}.${segmento}.${tribunal}.${origem}`;
-  return { ok: true, clean, formatted, segmento, tribunal, ano };
-}
-
-function parseCNJ(raw: string): { clean: string; segmento: string; tribunal: string } | null {
-  const v = validateCNJ(raw);
-  if (!v.ok) return null;
-  return { clean: v.clean, segmento: v.segmento, tribunal: v.tribunal };
 }
 
 export type DataJudMovimento = {
@@ -333,7 +213,7 @@ async function fetchFromDataJud(numero: string): Promise<DataJudResult> {
 /** Apenas consulta o DataJud (não persiste). Usada no diálogo de import. */
 export const lookupDatajud = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ numero: z.string().min(1).max(64) }).parse(d))
+  .validator((d) => z.object({ numero: z.string().min(1).max(64) }).parse(d))
   .handler(async ({ data, context }) => {
     await enforceRateLimit(context.supabase, "datajud_lookup");
     return fetchFromDataJud(data.numero);
@@ -342,7 +222,7 @@ export const lookupDatajud = createServerFn({ method: "POST" })
 /** Sincroniza movimentações de um processo já existente. */
 export const syncCaseMovements = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ caseId: z.string().uuid() }).parse(d))
+  .validator((d) => z.object({ caseId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     await enforceRateLimit(supabase, "datajud_sync");

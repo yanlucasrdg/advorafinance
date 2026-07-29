@@ -27,6 +27,8 @@ import { lookupDatajud, syncCaseMovements, validateCNJ } from "@/lib/datajud.fun
 import { useMetricsProcessos, pctDelta, formatDelta } from "@/hooks/use-metrics";
 import { useCases } from "@/hooks/use-cases";
 import { CaseKanban } from "@/components/processos/case-kanban";
+import type { Tables } from "@/integrations/supabase/types";
+import type { Case, Client, Deadline, Entry, Movement, Party } from "@/hooks/use-cases";
 
 function maskCNJ(raw: string): string {
   const d = (raw ?? "").replace(/\D/g, "").slice(0, 20);
@@ -52,13 +54,19 @@ export const Route = createFileRoute("/_authenticated/processos")({
   component: Processos,
 });
 
-type Party = { name: string; role?: string | null };
-type Document = {
-  id: string; case_id: string; uploaded_by: string | null; file_name: string;
-  file_path: string; file_size: number; file_type: string; document_type: string;
-  description: string | null; created_at: string;
-};
-import type { Case, Client, Deadline, Entry, Movement } from "@/hooks/use-cases";
+type CaseDocument = Pick<
+  Tables<"documents">,
+  | "id"
+  | "case_id"
+  | "uploaded_by"
+  | "file_name"
+  | "file_path"
+  | "file_size"
+  | "file_type"
+  | "document_type"
+  | "description"
+  | "created_at"
+>;
 
 const STAGES = [
   { id: "ativo", label: "Em andamento", glow: "shadow-[0_0_24px_-8px_oklch(0.70_0.18_285/0.6)]", bar: "bg-violet-500", text: "text-violet-300", ring: "ring-violet-500/30" },
@@ -81,7 +89,7 @@ function Processos() {
   const [view, setView] = useState<"kanban" | "lista" | "timeline">("kanban");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Case | null>(null);
-  const [caseDocuments, setCaseDocuments] = useState<Document[]>([]);
+  const [caseDocuments, setCaseDocuments] = useState<CaseDocument[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docType, setDocType] = useState("other");
@@ -165,7 +173,7 @@ function Processos() {
   const createCase = async () => {
     if (!form.title.trim() || !profile?.tenant_id) return;
     try {
-      const payload: any = {
+      const payload: Partial<Case> = {
         title: form.title,
         number: form.number || null,
         tribunal: form.tribunal || null,
@@ -175,9 +183,11 @@ function Processos() {
         value_cents: form.value_cents,
         description: form.description || null,
         client_id: form.client_id || null,
-        parties: form.party_names ? form.party_names.split(",").map(name => ({ name: name.trim(), role: "Parte contrária" })) : null,
+        parties: form.party_names
+          ? form.party_names.split(",").map((name) => ({ name: name.trim(), role: "Parte contrária" }))
+          : [],
       };
-      await (create.mutateAsync as any)(payload);
+      await create.mutateAsync(payload);
       setOpen(false);
       setForm({ number: "", title: "", tribunal: "", court: "", area: "civel", status: "ativo", value_cents: 0, client_id: "", description: "", party_names: "" });
     } catch {
@@ -252,13 +262,13 @@ function Processos() {
   async function loadCaseDocuments(caseId: string) {
     setDocsLoading(true);
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("documents")
         .select("id, case_id, uploaded_by, file_name, file_path, file_type, file_size, document_type, description, created_at")
         .eq("case_id", caseId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setCaseDocuments(((data ?? []) as unknown) as Document[]);
+      setCaseDocuments(data ?? []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -277,7 +287,7 @@ function Processos() {
         .upload(filePath, file, { cacheControl: "3600", upsert: false });
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await (supabase as any).from("documents").insert({
+      const { error: insertError } = await supabase.from("documents").insert({
         tenant_id: profile.tenant_id,
         case_id: selected.id,
         uploaded_by: profile.id,
@@ -308,7 +318,7 @@ function Processos() {
     uploadCaseDocument(file).finally(() => { event.target.value = ""; });
   }
 
-  async function downloadDocument(doc: Document) {
+  async function downloadDocument(doc: CaseDocument) {
     try {
       const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.file_path, 60);
       if (error) throw error;
@@ -335,7 +345,7 @@ function Processos() {
       .limit(100)
       .then(({ data }) => setMovements((data ?? []) as Movement[]));
     loadCaseDocuments(selected.id);
-  }, [selected?.id]);
+  }, [selected]);
 
   async function syncSelected() {
     if (!selected) return;
@@ -533,64 +543,6 @@ function Processos() {
           onOpenCase={setSelected}
           onMoveCase={(caseItem, nextStatus) => void moveCaseStatus(caseItem, nextStatus)}
         />
-      ) : false ? (
-        <div className="grid grid-flow-col auto-cols-[minmax(280px,1fr)] gap-4 overflow-x-auto pb-4 -mx-2 px-2">
-          {STAGES.map(stage => {
-            const items = byStage.get(stage.id) ?? [];
-            return (
-              <div key={stage.id} className="flex flex-col min-w-0">
-                <div className="flex items-center justify-between mb-3 px-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`size-1.5 rounded-full ${stage.bar} animate-pulse-soft`} />
-                    <h4 className={`text-xs font-semibold uppercase tracking-wide ${stage.text}`}>{stage.label}</h4>
-                    <span className="text-[10px] text-muted-foreground">({items.length})</span>
-                  </div>
-                </div>
-                <div className={`h-0.5 rounded-full ${stage.bar} mb-3 opacity-60`} />
-                <div className="flex flex-col gap-3 stagger">
-                  {items.length === 0 ? (
-                    <div className="text-[11px] text-muted-foreground text-center py-8 border border-dashed border-border/40 rounded-xl">Sem processos</div>
-                  ) : items.map(c => {
-                    const success = hashSuccess(c.id);
-                    const dls = caseDeadlines.get(c.id) ?? [];
-                    const next = dls.filter(d => !d.done).sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0];
-                    const daysToNext = next ? Math.ceil((new Date(next.due_at).getTime() - Date.now()) / 86400000) : null;
-                    return (
-                      <button
-                        key={c.id}
-                        onClick={() => setSelected(c)}
-                        className={`text-left glass rounded-xl p-3.5 hover-lift ring-1 ${stage.ring} ${stage.glow} group`}
-                      >
-                        <p className="text-[11px] tabular-nums text-muted-foreground truncate">{c.number || "Sem número"}</p>
-                        <p className="text-sm font-semibold mt-1 truncate">{c.clients?.name ?? c.title}</p>
-                        <p className="text-[11px] text-muted-foreground capitalize">{c.area ?? "—"}</p>
-                        <p className="text-sm font-bold tabular-nums mt-2">{formatBRL(c.value_cents ?? 0)}</p>
-                        <div className="flex items-center gap-2 mt-3 flex-wrap">
-                          {daysToNext !== null && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${daysToNext <= 2 ? "bg-rose-500/15 text-rose-300 border-rose-500/30" : "bg-card/60 border-border text-muted-foreground"}`}>
-                              Prazo: {daysToNext}d
-                            </span>
-                          )}
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
-                            Êxito: {success}%
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/40">
-                          <p className="text-[10px] text-muted-foreground">
-                            Últ. mov.: {new Date(c.updated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
-                          </p>
-                          <div className="size-5 rounded-full bg-[image:var(--gradient-brand)] text-[9px] grid place-items-center font-bold">
-                            {(c.responsible ?? "DR")[0]}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       ) : view === "lista" ? (
         <div className="glass rounded-2xl overflow-hidden">
           <table className="w-full text-sm">

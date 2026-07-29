@@ -23,11 +23,17 @@ import {
   type CaseUpdate,
 } from "@/lib/validators";
 
+export type Party = {
+  name: string;
+  role?: string | null;
+};
+
 export type Case = {
   id: string; number: string | null; title: string; court: string | null;
   area: string | null; status: string; value_cents: number | null;
   client_id: string | null; responsible: string | null; description: string | null;
   updated_at: string; created_at: string; status_version: number;
+  parties: Party[];
   tribunal?: string | null; class_name?: string | null;
   tenant_id?: string;
   last_movement_at?: string | null; datajud_synced_at?: string | null;
@@ -40,6 +46,25 @@ export type Movement = { id: string; case_id: string; occurred_at: string; name:
 export type Client = { id: string; name: string };
 
 const CASE_QUERY_LIMIT = 500;
+
+function normalizeParties(value: unknown): Party[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) return [];
+
+    const candidate = item as Record<string, unknown>;
+    const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+    if (!name) return [];
+
+    const role =
+      candidate.role === null || typeof candidate.role === "string"
+        ? candidate.role
+        : undefined;
+
+    return [{ name, ...(role !== undefined ? { role } : {}) }];
+  });
+}
 
 export function useCases() {
   const { profile } = useAuth();
@@ -61,7 +86,12 @@ export function useCases() {
         .order("created_at", { ascending: false })
         .limit(CASE_QUERY_LIMIT);
       if (error) throw new Error(error.message);
-      return (data ?? []) as Case[];
+      return (data ?? []).map(
+        (row): Case => ({
+          ...row,
+          parties: normalizeParties(row.parties),
+        }),
+      );
     },
     enabled: !!tenantId,
   });
@@ -98,11 +128,16 @@ export function useCases() {
 
   const create = useMutation({
     mutationFn: async (raw: Partial<Case>) => {
+      if (!tenantId) throw new Error("Sessão expirada. Faça login novamente.");
       // ✅ Valida schema antes de inserir
-      const payload: CaseCreate = parseOrThrow(caseCreateSchema, raw, "Criar Processo");
+      const validated: CaseCreate = parseOrThrow(caseCreateSchema, raw, "Criar Processo");
+      const payload = {
+        ...validated,
+        tenant_id: tenantId,
+      };
       const { data, error } = await supabase
         .from("cases")
-        .insert({ ...payload, tenant_id: tenantId } as never)
+        .insert(payload)
         .select("id")
         .maybeSingle();
       if (error) throw new Error(error.message);
@@ -130,8 +165,8 @@ export function useCases() {
 
   const update = useMutation({
     mutationFn: async ({ id, payload: raw }: { id: string; payload: Partial<Case> }) => {
-      const payload: CaseUpdate = parseOrThrow(caseUpdateSchema, raw, "Atualizar Processo");
-      const { error } = await supabase.from("cases").update(payload as never).eq("id", id);
+      const validated: CaseUpdate = parseOrThrow(caseUpdateSchema, raw, "Atualizar Processo");
+      const { error } = await supabase.from("cases").update(validated).eq("id", id);
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {

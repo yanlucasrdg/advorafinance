@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Sparkles,
   Workflow,
+  type LucideIcon,
 } from "lucide-react";
 import { PageHeader, Panel } from "@/components/data-table-shell";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +28,26 @@ export const Route = createFileRoute("/_authenticated/automacoes")({
   component: AutomacoesPage,
 });
 
-const integrations = [
+type IntegrationTone =
+  | "violet"
+  | "sky"
+  | "pink"
+  | "indigo"
+  | "orange"
+  | "emerald"
+  | "blue"
+  | "slate";
+
+type IntegrationDefinition = {
+  name: string;
+  description: string;
+  icon: LucideIcon;
+  tone: IntegrationTone;
+  status: string;
+  href?: "/integracoes";
+};
+
+const integrations: readonly IntegrationDefinition[] = [
   { name: "WhatsApp Business", description: "Converse com clientes e inicie fluxos a partir de mensagens.", icon: MessageCircle, tone: "violet", status: "Canal oficial", href: "/integracoes" },
   { name: "Webhooks", description: "Envie eventos do Advora para sistemas que sua empresa já utiliza.", icon: Radio, tone: "sky", status: "Em preparação" },
   { name: "n8n", description: "Monte fluxos avançados com seus próprios conectores e regras.", icon: Network, tone: "pink", status: "Em preparação" },
@@ -36,7 +56,7 @@ const integrations = [
   { name: "Google Sheets", description: "Leve indicadores operacionais para planilhas da empresa.", icon: FileSpreadsheet, tone: "emerald", status: "Planejado" },
   { name: "Google Ads", description: "Relacione a origem do lead com campanhas e conversões.", icon: Megaphone, tone: "blue", status: "Planejado" },
   { name: "API do Advora", description: "Integre seu sistema próprio com uma API documentada e segura.", icon: Braces, tone: "slate", status: "Planejado" },
-] as const;
+];
 
 const recipes = [
   { icon: MessageCircle, title: "Mensagem nova → Triagem", detail: "Quando um cliente iniciar uma conversa no WhatsApp, criar ou atualizar o contato e encaminhar para a fila correta.", status: "Pronta após conectar WhatsApp" },
@@ -84,8 +104,8 @@ function IconBubble({ icon: Icon, className }: { icon: typeof Workflow; classNam
   return <div className={`absolute grid size-10 place-items-center rounded-xl border bg-background shadow-sm ${className}`}><Icon className="size-5" /></div>;
 }
 
-function IntegrationCard({ name, description, icon: Icon, tone, status, href }: typeof integrations[number]) {
-  const colors: Record<string, string> = { violet: "bg-primary/10 text-primary", sky: "bg-sky-500/10 text-sky-600", pink: "bg-pink-500/10 text-pink-600", indigo: "bg-indigo-500/10 text-indigo-600", orange: "bg-orange-500/10 text-orange-600", emerald: "bg-emerald-500/10 text-emerald-600", blue: "bg-blue-500/10 text-blue-600", slate: "bg-muted text-muted-foreground" };
+function IntegrationCard({ name, description, icon: Icon, tone, status, href }: IntegrationDefinition) {
+  const colors: Record<IntegrationTone, string> = { violet: "bg-primary/10 text-primary", sky: "bg-sky-500/10 text-sky-600", pink: "bg-pink-500/10 text-pink-600", indigo: "bg-indigo-500/10 text-indigo-600", orange: "bg-orange-500/10 text-orange-600", emerald: "bg-emerald-500/10 text-emerald-600", blue: "bg-blue-500/10 text-blue-600", slate: "bg-muted text-muted-foreground" };
   const content = <><div className={`grid size-10 place-items-center rounded-xl ${colors[tone]}`}><Icon className="size-5" /></div><h3 className="mt-4 text-sm font-semibold">{name}</h3><p className="mt-1 min-h-10 text-xs leading-relaxed text-muted-foreground">{description}</p><div className="mt-4 flex items-center justify-between"><span className="text-xs font-medium text-muted-foreground">{status}</span>{href ? <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">Configurar <ExternalLink className="size-3" /></span> : <span className="text-xs text-muted-foreground">Em breve</span>}</div></>;
   return href ? <Link to={href} className="rounded-xl border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-primary/[0.025]">{content}</Link> : <div className="rounded-xl border bg-card p-4">{content}</div>;
 }

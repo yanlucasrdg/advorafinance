@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Bell, AlertTriangle, Info, CheckCircle2, ExternalLink } from "lucide-react";
@@ -35,7 +35,7 @@ export function NotificationsPopover() {
   useRealtimeTables(["notifications"], ["notif-bell"]);
   const { data: summary, refetch } = useNotificationsSummary();
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!profile?.tenant_id) return;
     const { data } = await supabase
       .from("notifications")
@@ -43,11 +43,11 @@ export function NotificationsPopover() {
       .order("created_at", { ascending: false })
       .limit(20);
     setItems((data ?? []) as Notification[]);
-  };
+  }, [profile?.tenant_id]);
 
-  useEffect(() => { load(); }, [profile?.tenant_id]);
+  useEffect(() => { void load(); }, [load]);
   // Reload the visible list whenever realtime bumps the summary (list is limited to 20).
-  useEffect(() => { load(); }, [summary?.total, summary?.unread]);
+  useEffect(() => { void load(); }, [summary?.total, summary?.unread, load]);
 
   const unreadTotal = summary?.unread ?? 0;
 

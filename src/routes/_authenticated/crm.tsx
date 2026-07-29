@@ -185,7 +185,7 @@ function CRM() {
   const createClient = async () => {
     if (!form.name.trim() || !profile?.tenant_id) return;
     try {
-      await create.mutateAsync({
+      const payload = {
         tenant_id: profile.tenant_id,
         created_by: profile.id,
         name: form.name,
@@ -195,7 +195,8 @@ function CRM() {
         type: form.type,
         status: form.status,
         notes: JSON.stringify({ area: form.area, value: form.value, owner: profile.full_name || "Dr. Yan", hot: true }),
-      } as any);
+      };
+      await create.mutateAsync(payload);
       setOpen(false);
       setForm({ name: "", email: "", phone: "", doc: "", type: "PF", status: "novo_contato", area: "Trabalhista", value: 10000 });
     } catch {
