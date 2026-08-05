@@ -167,7 +167,7 @@ export function clientKpis(rows: ClientRow[], now = new Date()) {
   const monthStart = startOfMonth(now);
   let active = 0, inactive = 0, pf = 0, pj = 0, newMonth = 0;
   rows.forEach((c) => {
-    if (c.status === "ativo") active++; else inactive++;
+    if (["contrato", "em_andamento"].includes(c.status)) active++; else inactive++;
     if ((c.type ?? "").toUpperCase() === "PJ") pj++; else pf++;
     if (new Date(c.created_at) >= monthStart) newMonth++;
   });

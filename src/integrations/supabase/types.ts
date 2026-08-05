@@ -956,6 +956,7 @@ export type Database = {
           name: string
           plan: Database["public"]["Enums"]["tenant_plan"]
           slug: string
+          timezone: string
           updated_at: string
         }
         Insert: {
@@ -965,6 +966,7 @@ export type Database = {
           name: string
           plan?: Database["public"]["Enums"]["tenant_plan"]
           slug: string
+          timezone?: string
           updated_at?: string
         }
         Update: {
@@ -974,6 +976,7 @@ export type Database = {
           name?: string
           plan?: Database["public"]["Enums"]["tenant_plan"]
           slug?: string
+          timezone?: string
           updated_at?: string
         }
         Relationships: []
@@ -1442,10 +1445,15 @@ export type Database = {
         Args: { p_deadline_id: string; p_expected_version: number }
         Returns: Database["public"]["Tables"]["deadlines"]["Row"]
       }
+      soft_delete_financial_entry: {
+        Args: { p_entry_id: string }
+        Returns: Database["public"]["Tables"]["financial_entries"]["Row"]
+      }
       toggle_deadline_completion: {
         Args: { p_deadline_id: string; p_expected_version: number }
         Returns: Database["public"]["Tables"]["deadlines"]["Row"]
       }
+      tenant_timezone: { Args: never; Returns: string }
       update_deadline: {
         Args: { p_deadline_id: string; p_expected_version: number; p_patch: Json }
         Returns: Database["public"]["Tables"]["deadlines"]["Row"]

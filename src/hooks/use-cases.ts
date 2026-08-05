@@ -83,6 +83,7 @@ export function useCases() {
       const { data, error } = await supabase
         .from("cases")
         .select("*, clients(name)")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(CASE_QUERY_LIMIT);
       if (error) throw new Error(error.message);
@@ -99,7 +100,7 @@ export function useCases() {
   const queryClients = useQuery({
     queryKey: ["clients-light", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("id, name").order("name").limit(500);
+      const { data, error } = await supabase.from("clients").select("id, name").is("deleted_at", null).order("name").limit(500);
       if (error) throw new Error(error.message);
       return (data ?? []) as Client[];
     },
@@ -109,7 +110,7 @@ export function useCases() {
   const queryDeadlines = useQuery({
     queryKey: ["deadlines-light", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("deadlines").select("id, case_id, title, due_at, done, kind").limit(1000);
+      const { data, error } = await supabase.from("deadlines").select("id, case_id, title, due_at, done, kind").is("deleted_at", null).limit(1000);
       if (error) throw new Error(error.message);
       return (data ?? []) as Deadline[];
     },
@@ -119,7 +120,7 @@ export function useCases() {
   const queryEntries = useQuery({
     queryKey: ["entries-light", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("financial_entries").select("id, case_id, amount_cents, status, kind").limit(500);
+      const { data, error } = await supabase.from("financial_entries").select("id, case_id, amount_cents, status, kind").is("deleted_at", null).limit(500);
       if (error) throw new Error(error.message);
       return (data ?? []) as Entry[];
     },
@@ -205,6 +206,12 @@ export function useCases() {
       toast.error(
         /CASE_STATUS_CONFLICT/i.test(err.message)
           ? "Este processo foi alterado por outra pessoa. Atualizamos o quadro."
+          : /CASE_ARCHIVE_REQUIRES_OUTCOME/i.test(err.message)
+            ? "Defina o processo como ganho ou perdido antes de arquivá-lo."
+            : /CASE_ARCHIVE_OPEN_DEADLINES/i.test(err.message)
+              ? "Conclua ou remova os prazos pendentes antes de arquivar o processo."
+              : /CASE_ARCHIVE_OPEN_FINANCIAL/i.test(err.message)
+                ? "Regularize as pendências financeiras antes de arquivar o processo."
           : "Não foi possível mover o processo.",
       );
     },

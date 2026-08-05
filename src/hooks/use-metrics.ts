@@ -149,7 +149,7 @@ function useMetric<T>(
 export const useMetricsProcessos = () =>
   useMetric<ProcessosMetrics>("metrics_processos", ["cases", "deadlines", "financial_entries"]);
 export const useMetricsAgenda = () => useMetric<AgendaMetrics>("metrics_agenda", ["deadlines"]);
-export const useMetricsCrm = () => useMetric<CrmMetrics>("metrics_crm", ["cases"]);
+export const useMetricsCrm = () => useMetric<CrmMetrics>("metrics_crm", ["clients"]);
 export const useMetricsComunicacoes = () =>
   useMetric<ComunicacoesMetrics>("metrics_comunicacoes", ["whatsapp_conversations"]);
 export const useNotificationsSummary = () =>

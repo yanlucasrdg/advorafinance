@@ -179,6 +179,7 @@ function Dashboard() {
       const { data, error } = await supabase
         .from("deadlines")
         .select("id, title, due_at, kind, case_id, cases(number)")
+        .is("deleted_at", null)
         .eq("done", false)
         .gte("due_at", new Date().toISOString())
         .order("due_at", { ascending: true })
@@ -198,6 +199,7 @@ function Dashboard() {
       const { data, error } = await supabase
         .from("cases")
         .select("id, title, number, status, area, client_id, updated_at, clients(name)")
+        .is("deleted_at", null)
         .order("updated_at", { ascending: false })
         .limit(6);
 

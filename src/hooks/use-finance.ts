@@ -59,6 +59,7 @@ export function useFinance() {
       const { data, error } = await supabase
         .from("financial_entries")
         .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,paid_amount_cents,settlement_status,category,payment_method,clients(name)")
+        .is("deleted_at", null)
         .order("due_date", { ascending: false, nullsFirst: false })
         .limit(500);
       if (error) throw new Error(error.message);
@@ -70,7 +71,7 @@ export function useFinance() {
     queryKey: ["fin", "cases", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
-      const { data, error } = await supabase.from("cases").select("id,area,responsible").limit(500);
+      const { data, error } = await supabase.from("cases").select("id,area,responsible").is("deleted_at", null).limit(500);
       if (error) throw new Error(error.message);
       return (data ?? []) as CaseLite[];
     },
@@ -80,7 +81,7 @@ export function useFinance() {
     queryKey: ["fin", "clients", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("id,name").order("name").limit(500);
+      const { data, error } = await supabase.from("clients").select("id,name").is("deleted_at", null).order("name").limit(500);
       if (error) throw new Error(error.message);
       return (data ?? []) as ClientLite[];
     },
@@ -159,14 +160,21 @@ export function useFinance() {
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("financial_entries").delete().eq("id", id);
+      const { error } = await supabase.rpc("soft_delete_financial_entry", { p_entry_id: id });
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
       toast.success("Lançamento removido");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      const message = /FINANCIAL_ENTRY_HAS_PAYMENTS/i.test(err.message)
+        ? "Lançamentos com pagamentos não podem ser removidos. Cancele ou estorne pela rotina financeira."
+        : /FINANCIAL_ENTRY_RECONCILED/i.test(err.message)
+          ? "Lançamentos conciliados não podem ser removidos."
+          : "Não foi possível remover o lançamento.";
+      toast.error(message);
+    },
   });
 
   const markAllNotificationsRead = useMutation({
