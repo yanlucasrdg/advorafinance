@@ -19,7 +19,9 @@ import {
   deadlineUpdateSchema,
   parseOrThrow,
   type DeadlineCreate,
+  type DeadlineUpdate,
 } from "@/lib/validators";
+import { deadlineErrorMessage } from "@/lib/deadline";
 
 export type Deadline = {
   id: string;
@@ -31,7 +33,8 @@ export type Deadline = {
   case_id: string | null;
   client_id: string | null;
   completed_at: string | null;
-  completed_by?: string | null;
+  completed_by: string | null;
+  status_version: number;
   notes?: string | null;
   cases?: { id: string; title: string; number: string | null } | null;
   clients?: { id: string; name: string } | null;
@@ -55,10 +58,11 @@ export function useAgenda() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deadlines")
-        .select("id, title, kind, due_at, done, priority, case_id, client_id, completed_at, notes, cases(id, title, number), clients(id, name)")
+        .select("id, title, kind, due_at, done, priority, case_id, client_id, completed_at, completed_by, status_version, notes, cases(id, title, number), clients(id, name)")
+        .is("deleted_at", null)
         .order("due_at", { ascending: true })
         .limit(DEADLINE_QUERY_LIMIT);
-      if (error) throw new Error(error.message);
+      if (error) throw new Error("DEADLINES_LOAD_FAILED");
       return (data ?? []) as Deadline[];
     },
   });
@@ -70,9 +74,10 @@ export function useAgenda() {
       const { data, error } = await supabase
         .from("cases")
         .select("id, title, number")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(500);
-      if (error) throw new Error(error.message);
+      if (error) throw new Error("CASES_LOAD_FAILED");
       return (data ?? []) as CaseLite[];
     },
   });
@@ -84,9 +89,10 @@ export function useAgenda() {
       const { data, error } = await supabase
         .from("clients")
         .select("id, name")
+        .is("deleted_at", null)
         .order("name")
         .limit(500);
-      if (error) throw new Error(error.message);
+      if (error) throw new Error("CLIENTS_LOAD_FAILED");
       return (data ?? []) as ClientLite[];
     },
   });
@@ -102,9 +108,7 @@ export function useAgenda() {
         .order("created_at", { ascending: false })
         .limit(500);
       if (error) {
-        // ✅ Não derrubar a agenda por falha nos logs de comunicação
-        console.warn("[useAgenda] Falha ao buscar logs WhatsApp:", error.message);
-        return [];
+        throw new Error("COMMUNICATION_LOGS_UNAVAILABLE");
       }
       return data ?? [];
     },
@@ -123,41 +127,48 @@ export function useAgenda() {
   const createMutation = useMutation({
     mutationFn: async (raw: Partial<Deadline>) => {
       if (!tenantId) throw new Error("Sessão expirada. Faça login novamente.");
-      // ✅ Validação Zod antes de inserir
       const payload: DeadlineCreate = parseOrThrow(deadlineCreateSchema, raw, "Criar Prazo");
-      const { error } = await supabase.from("deadlines").insert({
-        ...payload,
-        tenant_id: tenantId,
-      } as never);
+      const { data, error } = await supabase.rpc("create_deadline", {
+        p_title: payload.title,
+        p_kind: payload.kind,
+        p_due_at: payload.due_at,
+        p_priority: payload.priority ?? "medium",
+        p_case_id: payload.case_id ?? null,
+        p_client_id: payload.client_id ?? null,
+        p_notes: payload.notes ?? null,
+      });
       if (error) throw new Error(error.message);
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agenda", "deadlines", tenantId] });
       toast.success("Prazo criado");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => toast.error(deadlineErrorMessage(err, "Não foi possível criar o prazo.")),
   });
 
   const toggleMutation = useMutation({
     mutationFn: async (deadline: Deadline) => {
-      const nowDone = !deadline.done;
-      const { error } = await supabase
-        .from("deadlines")
-        .update({
-          done:         nowDone,
-          // ✅ LGPD audit trail: registra quem e quando concluiu o prazo
-          completed_at: nowDone ? new Date().toISOString() : null,
-          completed_by: nowDone ? (profile?.id ?? null) : null,
-        } as never)
-        .eq("id", deadline.id);
+      const { data, error } = await supabase.rpc("toggle_deadline_completion", {
+        p_deadline_id: deadline.id,
+        p_expected_version: deadline.status_version,
+      });
       if (error) throw new Error(error.message);
-      return { id: deadline.id, done: nowDone };
+      return data;
     },
     onMutate: async (deadline) => {
       await qc.cancelQueries({ queryKey: ["agenda", "deadlines", tenantId] });
       const previous = qc.getQueryData<Deadline[]>(["agenda", "deadlines", tenantId]);
       qc.setQueryData<Deadline[]>(["agenda", "deadlines", tenantId], (old = []) =>
-        old.map((d) => d.id === deadline.id ? { ...d, done: !deadline.done } : d),
+        old.map((d) => d.id === deadline.id && d.status_version === deadline.status_version
+          ? {
+              ...d,
+              done: !deadline.done,
+              completed_at: !deadline.done ? new Date().toISOString() : null,
+              completed_by: !deadline.done ? (profile?.id ?? null) : null,
+              status_version: deadline.status_version + 1,
+            }
+          : d),
       );
       return { previous };
     },
@@ -165,7 +176,8 @@ export function useAgenda() {
       if (context?.previous) {
         qc.setQueryData(["agenda", "deadlines", tenantId], context.previous);
       }
-      toast.error(`Não foi possível atualizar o prazo: ${err.message}`);
+      qc.invalidateQueries({ queryKey: ["agenda", "deadlines", tenantId] });
+      toast.error(deadlineErrorMessage(err));
     },
     onSuccess: (_data, deadline) => {
       qc.invalidateQueries({ queryKey: ["agenda", "deadlines", tenantId] });
@@ -177,28 +189,47 @@ export function useAgenda() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, payload: raw }: { id: string; payload: Partial<Deadline> }) => {
-      const payload = parseOrThrow(deadlineUpdateSchema, raw, "Atualizar Prazo");
-      const { error } = await supabase.from("deadlines").update(payload as never).eq("id", id);
+    mutationFn: async ({ id, expectedVersion, payload: raw }: {
+      id: string;
+      expectedVersion: number;
+      payload: Partial<Deadline>;
+    }) => {
+      const payload: DeadlineUpdate = parseOrThrow(deadlineUpdateSchema, raw, "Atualizar Prazo");
+      const { data, error } = await supabase.rpc("update_deadline", {
+        p_deadline_id: id,
+        p_expected_version: expectedVersion,
+        p_patch: payload,
+      });
       if (error) throw new Error(error.message);
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agenda", "deadlines", tenantId] });
       toast.success("Prazo atualizado");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      qc.invalidateQueries({ queryKey: ["agenda", "deadlines", tenantId] });
+      toast.error(deadlineErrorMessage(err));
+    },
   });
 
   const removeMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("deadlines").delete().eq("id", id);
+    mutationFn: async (deadline: Deadline) => {
+      const { data, error } = await supabase.rpc("soft_delete_deadline", {
+        p_deadline_id: deadline.id,
+        p_expected_version: deadline.status_version,
+      });
       if (error) throw new Error(error.message);
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agenda", "deadlines", tenantId] });
       toast.success("Prazo removido");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      qc.invalidateQueries({ queryKey: ["agenda", "deadlines", tenantId] });
+      toast.error(deadlineErrorMessage(err, "Não foi possível remover o prazo."));
+    },
   });
 
   return {
@@ -206,9 +237,13 @@ export function useAgenda() {
     cases:      casesQ.data ?? [],
     clients:    clientsQ.data ?? [],
     lastComms,
+    communicationsUnavailable: lastCommsQ.isError,
     isLoading:  deadlinesQ.isLoading || casesQ.isLoading || clientsQ.isLoading,
-    isError:    deadlinesQ.isError,
-    error:      deadlinesQ.error,
+    isFetching: deadlinesQ.isFetching || casesQ.isFetching || clientsQ.isFetching,
+    isError:    deadlinesQ.isError || casesQ.isError || clientsQ.isError,
+    error:      deadlinesQ.error ?? casesQ.error ?? clientsQ.error,
+    refetch:    async () => Promise.all([deadlinesQ.refetch(), casesQ.refetch(), clientsQ.refetch()]),
+    isMutating: createMutation.isPending || toggleMutation.isPending || updateMutation.isPending || removeMutation.isPending,
     create:     createMutation.mutateAsync,
     toggle:     toggleMutation.mutateAsync,
     update:     updateMutation.mutateAsync,

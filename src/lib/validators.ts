@@ -8,6 +8,7 @@
  */
 
 import { z } from "zod";
+import { DEADLINE_KIND_VALUES, DEADLINE_PRIORITY_VALUES } from "@/lib/deadline";
 
 // ─────────────────────────────────────────────
 // Primitivos reutilizáveis
@@ -200,13 +201,12 @@ export type CaseUpdate = z.output<typeof caseUpdateSchema>;
 // Prazos / Agenda (Deadlines)
 // ─────────────────────────────────────────────
 
-export const deadlineKindSchema = z.enum([
-  "audiencia", "prazo_processual", "reuniao", "tarefa",
-  "primeiro_atendimento", "followup", "vencimento", "outro",
-], { errorMap: () => ({ message: "Tipo de prazo inválido" }) });
+export const deadlineKindSchema = z.enum(DEADLINE_KIND_VALUES, {
+  errorMap: () => ({ message: "Tipo de prazo inválido" }),
+});
 
 export const deadlinePrioritySchema = z
-  .enum(["low", "medium", "high", "critical"])
+  .enum(DEADLINE_PRIORITY_VALUES)
   .optional()
   .nullable();
 

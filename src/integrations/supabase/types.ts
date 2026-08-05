@@ -306,7 +306,9 @@ export type Database = {
           case_id: string | null
           client_id: string | null
           completed_at: string | null
+          completed_by: string | null
           created_at: string
+          created_by: string | null
           deleted_at: string | null
           done: boolean
           due_at: string
@@ -314,6 +316,7 @@ export type Database = {
           kind: string
           notes: string | null
           priority: string
+          status_version: number
           tenant_id: string
           title: string
           updated_at: string
@@ -322,7 +325,9 @@ export type Database = {
           case_id?: string | null
           client_id?: string | null
           completed_at?: string | null
+          completed_by?: string | null
           created_at?: string
+          created_by?: string | null
           deleted_at?: string | null
           done?: boolean
           due_at: string
@@ -330,6 +335,7 @@ export type Database = {
           kind?: string
           notes?: string | null
           priority?: string
+          status_version?: number
           tenant_id: string
           title: string
           updated_at?: string
@@ -338,7 +344,9 @@ export type Database = {
           case_id?: string | null
           client_id?: string | null
           completed_at?: string | null
+          completed_by?: string | null
           created_at?: string
+          created_by?: string | null
           deleted_at?: string | null
           done?: boolean
           due_at?: string
@@ -346,6 +354,7 @@ export type Database = {
           kind?: string
           notes?: string | null
           priority?: string
+          status_version?: number
           tenant_id?: string
           title?: string
           updated_at?: string
@@ -1211,6 +1220,18 @@ export type Database = {
         Args: { _name: string; _slug: string }
         Returns: string
       }
+      create_deadline: {
+        Args: {
+          p_case_id?: string | null
+          p_client_id?: string | null
+          p_due_at: string
+          p_kind: string
+          p_notes?: string | null
+          p_priority?: string
+          p_title: string
+        }
+        Returns: Database["public"]["Tables"]["deadlines"]["Row"]
+      }
       current_tenant_id: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -1227,6 +1248,14 @@ export type Database = {
           p_next_status: string
         }
         Returns: Database["public"]["Tables"]["clients"]["Row"]
+      }
+      move_case_status: {
+        Args: {
+          p_case_id: string
+          p_expected_version: number
+          p_next_status: string
+        }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
       }
       metrics_agenda: { Args: never; Returns: Json }
       metrics_comunicacoes: { Args: never; Returns: Json }
@@ -1251,6 +1280,22 @@ export type Database = {
       soft_delete_client: {
         Args: { p_client_id: string }
         Returns: Database["public"]["Tables"]["clients"]["Row"]
+      }
+      soft_delete_case: {
+        Args: { p_case_id: string; p_expected_version: number }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
+      }
+      soft_delete_deadline: {
+        Args: { p_deadline_id: string; p_expected_version: number }
+        Returns: Database["public"]["Tables"]["deadlines"]["Row"]
+      }
+      toggle_deadline_completion: {
+        Args: { p_deadline_id: string; p_expected_version: number }
+        Returns: Database["public"]["Tables"]["deadlines"]["Row"]
+      }
+      update_deadline: {
+        Args: { p_deadline_id: string; p_expected_version: number; p_patch: Json }
+        Returns: Database["public"]["Tables"]["deadlines"]["Row"]
       }
       tz_today: { Args: never; Returns: string }
       user_in_tenant: {
