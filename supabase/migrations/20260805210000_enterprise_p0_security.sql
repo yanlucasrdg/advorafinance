@@ -109,6 +109,81 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('documents', 'documents', false)
 ON CONFLICT (id) DO NOTHING;
 
+-- Repair the deadline audit dependency as well. This version deliberately
+-- stores operational metadata only and works across older deadline schemas.
+CREATE TABLE IF NOT EXISTS public.deadline_audit_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  deadline_id uuid NOT NULL REFERENCES public.deadlines(id) ON DELETE CASCADE,
+  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  actor_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  action text NOT NULL,
+  before jsonb,
+  after jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.deadline_audit_log ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON public.deadline_audit_log TO authenticated;
+GRANT ALL ON public.deadline_audit_log TO service_role;
+CREATE INDEX IF NOT EXISTS idx_deadline_audit_deadline
+  ON public.deadline_audit_log (deadline_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_deadline_audit_tenant
+  ON public.deadline_audit_log (tenant_id, created_at DESC);
+
+CREATE OR REPLACE FUNCTION public.fn_deadline_audit()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_old jsonb := CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE to_jsonb(OLD) END;
+  v_new jsonb := CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE to_jsonb(NEW) END;
+  v_action text := lower(TG_OP);
+  v_deadline_id uuid := COALESCE((v_new->>'id')::uuid, (v_old->>'id')::uuid);
+  v_tenant_id uuid := COALESCE((v_new->>'tenant_id')::uuid, (v_old->>'tenant_id')::uuid);
+  v_redacted text[] := ARRAY[
+    'title','notes','tenant_id','created_by','updated_at','description',
+    'party_name','contact_name','process_number'
+  ];
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF COALESCE((v_old->>'done')::boolean, false) = false
+      AND COALESCE((v_new->>'done')::boolean, false) = true THEN
+      v_action := 'completed';
+    ELSIF COALESCE((v_old->>'done')::boolean, false) = true
+      AND COALESCE((v_new->>'done')::boolean, false) = false THEN
+      v_action := 'reopened';
+    ELSIF v_old->>'deleted_at' IS NULL AND v_new->>'deleted_at' IS NOT NULL THEN
+      v_action := 'removed';
+    ELSE
+      v_action := 'updated';
+    END IF;
+  ELSIF TG_OP = 'INSERT' THEN
+    v_action := 'created';
+  ELSE
+    v_action := 'deleted';
+  END IF;
+
+  v_old := v_old - v_redacted;
+  v_new := v_new - v_redacted;
+  IF TG_OP = 'UPDATE' AND v_old = v_new THEN RETURN NEW; END IF;
+
+  INSERT INTO public.deadline_audit_log (
+    deadline_id, tenant_id, actor_id, action, before, after
+  ) VALUES (
+    v_deadline_id, v_tenant_id, auth.uid(), v_action, v_old, v_new
+  );
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_deadline_audit ON public.deadlines;
+CREATE TRIGGER trg_deadline_audit
+  AFTER INSERT OR UPDATE OR DELETE ON public.deadlines
+  FOR EACH ROW EXECUTE FUNCTION public.fn_deadline_audit();
+
 -- Defense in depth for every browser-originated business write, including
 -- SECURITY DEFINER RPCs. Service-role webhooks keep operating with auth.uid null.
 CREATE OR REPLACE FUNCTION public.enforce_business_write_access()
