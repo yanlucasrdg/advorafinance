@@ -39,6 +39,8 @@ import {
   Shield,
   ArrowUpRight,
   RefreshCw,
+  History,
+  CheckCircle2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -73,6 +75,30 @@ type ChatMessage = {
 
 type LeadTab = "chat" | "ficha" | "ia" | "docs" | "tarefas";
 type LoadState = "idle" | "loading" | "success" | "error";
+
+type ClientActivity = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  created_at: string;
+};
+
+type ClientFollowup = {
+  id: string;
+  title: string;
+  due_at: string;
+  done: boolean;
+  priority: string;
+  status_version: number;
+};
+
+type ClientCase = {
+  id: string;
+  title: string;
+  number: string | null;
+  status: string;
+};
 
 type DrawerSession = {
   clientId: string | null;
@@ -169,7 +195,7 @@ export function CrmLeadDrawer({
   const [chatError, setChatError] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
-  const { profile } = useAuth();
+  const { profile, roles } = useAuth();
 
   const [clientDocs, setClientDocs] = useState<
     {
@@ -186,6 +212,15 @@ export function CrmLeadDrawer({
   const [docType, setDocType] = useState("other");
   const [docDescription, setDocDescription] = useState("");
   const [officeNotes, setOfficeNotes] = useState("");
+  const [activities, setActivities] = useState<ClientActivity[]>([]);
+  const [followups, setFollowups] = useState<ClientFollowup[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [followupTitle, setFollowupTitle] = useState("");
+  const [followupAt, setFollowupAt] = useState("");
+  const [savingFollowup, setSavingFollowup] = useState(false);
+  const [clientCases, setClientCases] = useState<ClientCase[]>([]);
+  const [clientFinancial, setClientFinancial] = useState({ received: 0, pending: 0 });
+  const canViewFinancial = roles.some((role) => ["master_admin", "owner", "admin"].includes(role));
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const messageInputRef = React.useRef<HTMLInputElement | null>(null);
   const clientId = client?.id ?? null;
@@ -222,6 +257,14 @@ export function CrmLeadDrawer({
     setDocType("other");
     setDocDescription("");
     setOfficeNotes("");
+    setActivities([]);
+    setFollowups([]);
+    setHistoryLoading(Boolean(clientId && open));
+    setFollowupTitle("");
+    setFollowupAt("");
+    setSavingFollowup(false);
+    setClientCases([]);
+    setClientFinancial({ received: 0, pending: 0 });
     if (fileRef.current) fileRef.current.value = "";
   }, [clientId, open]);
 
@@ -345,6 +388,82 @@ export function CrmLeadDrawer({
     }
   }, [clientId, clientNotes, open]);
 
+  const loadClientHistory = useCallback(
+    async (targetClientId: string, requestedSession: DrawerSession = getCurrentSession()) => {
+      if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
+      setHistoryLoading(true);
+      try {
+        const [activitiesResult, followupsResult, casesResult, financialResult] = await Promise.all([
+          supabase
+            .from("client_activities")
+            .select("id, kind, title, body, created_at")
+            .eq("client_id", targetClientId)
+            .order("created_at", { ascending: false })
+            .limit(100),
+          supabase
+            .from("deadlines")
+            .select("id, title, due_at, done, priority, status_version")
+            .eq("client_id", targetClientId)
+            .eq("kind", "followup")
+            .is("deleted_at", null)
+            .order("due_at", { ascending: true })
+            .limit(100),
+          supabase
+            .from("cases")
+            .select("id, title, number, status")
+            .eq("client_id", targetClientId)
+            .is("deleted_at", null)
+            .order("updated_at", { ascending: false })
+            .limit(50),
+          canViewFinancial
+            ? supabase
+                .from("financial_entries")
+                .select("amount_cents, kind, status")
+                .eq("client_id", targetClientId)
+                .is("deleted_at", null)
+                .limit(500)
+            : Promise.resolve({ data: [], error: null }),
+        ]);
+        if (activitiesResult.error) throw activitiesResult.error;
+        if (followupsResult.error) throw followupsResult.error;
+        if (casesResult.error) throw casesResult.error;
+        if (financialResult.error) throw financialResult.error;
+        if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
+        setActivities((activitiesResult.data ?? []) as ClientActivity[]);
+        setFollowups((followupsResult.data ?? []) as ClientFollowup[]);
+        setClientCases((casesResult.data ?? []) as ClientCase[]);
+        setClientFinancial(
+          (financialResult.data ?? []).reduce(
+            (summary, entry) => {
+              if (entry.kind !== "receita") return summary;
+              if (entry.status === "pago") summary.received += entry.amount_cents;
+              else summary.pending += entry.amount_cents;
+              return summary;
+            },
+            { received: 0, pending: 0 },
+          ),
+        );
+      } catch {
+        if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
+        setActivities([]);
+        setFollowups([]);
+        setClientCases([]);
+        setClientFinancial({ received: 0, pending: 0 });
+        toast.error("Não foi possível carregar o histórico do cliente.");
+      } finally {
+        if (isDrawerSessionCurrent(requestedSession, getCurrentSession())) {
+          setHistoryLoading(false);
+        }
+      }
+    },
+    [canViewFinancial, getCurrentSession],
+  );
+
+  React.useEffect(() => {
+    if (!clientId || !open) return;
+    void loadClientHistory(clientId, getCurrentSession());
+  }, [clientId, getCurrentSession, loadClientHistory, open]);
+
   const loadClientDocuments = useCallback(
     async (targetClientId: string, requestedSession: DrawerSession = getCurrentSession()) => {
       if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
@@ -459,6 +578,52 @@ export function CrmLeadDrawer({
     const targetClient = client;
     if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
     await onSaveNotes(targetClient.id, officeNotes);
+  };
+
+  const createFollowup = async () => {
+    if (!sessionReady || !profile?.tenant_id || !followupTitle.trim() || !followupAt) return;
+    const requestedSession = getCurrentSession();
+    const targetClient = client;
+    setSavingFollowup(true);
+    try {
+      const { error } = await supabase.rpc("create_deadline", {
+        p_title: followupTitle.trim(),
+        p_kind: "followup",
+        p_due_at: new Date(followupAt).toISOString(),
+        p_priority: "medium",
+        p_case_id: null,
+        p_client_id: targetClient.id,
+        p_notes: "Follow-up criado no CRM",
+      });
+      if (error) throw error;
+      if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
+      setFollowupTitle("");
+      setFollowupAt("");
+      await loadClientHistory(targetClient.id, requestedSession);
+      toast.success("Follow-up agendado");
+    } catch {
+      if (isDrawerSessionCurrent(requestedSession, getCurrentSession())) {
+        toast.error("Não foi possível agendar o follow-up.");
+      }
+    } finally {
+      if (isDrawerSessionCurrent(requestedSession, getCurrentSession())) {
+        setSavingFollowup(false);
+      }
+    }
+  };
+
+  const toggleFollowup = async (followup: ClientFollowup) => {
+    const requestedSession = getCurrentSession();
+    const targetClient = client;
+    const { error } = await supabase.rpc("toggle_deadline_completion", {
+      p_deadline_id: followup.id,
+      p_expected_version: followup.status_version,
+    });
+    if (error) {
+      toast.error("Não foi possível atualizar o follow-up.");
+      return;
+    }
+    await loadClientHistory(targetClient.id, requestedSession);
   };
 
   const transferQueue = async (queue: string) => {
@@ -690,7 +855,7 @@ export function CrmLeadDrawer({
                 className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary text-xs gap-1.5 font-medium"
               >
                 <Clock className="h-3.5 w-3.5" />
-                <span>Acompanhamento</span>
+                <span>Histórico &amp; Follow-up</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -902,6 +1067,35 @@ export function CrmLeadDrawer({
               </span>
             </div>
 
+            <div className="grid gap-3 border-t border-border pt-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-border bg-muted/20 p-3">
+                <p className="text-xs font-semibold">Casos vinculados</p>
+                {clientCases.length === 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">Nenhum caso jurídico vinculado.</p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {clientCases.slice(0, 5).map((caseItem) => (
+                      <div key={caseItem.id} className="text-xs">
+                        <p className="font-medium">{caseItem.title}</p>
+                        <p className="text-[10px] text-muted-foreground">{caseItem.number ?? "Sem CNJ"} • {caseItem.status}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="rounded-xl border border-border bg-muted/20 p-3">
+                <p className="text-xs font-semibold">Financeiro do cliente</p>
+                {canViewFinancial ? (
+                  <div className="mt-2 space-y-1 text-xs">
+                    <p>Recebido: <strong>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(clientFinancial.received / 100)}</strong></p>
+                    <p>A receber: <strong>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(clientFinancial.pending / 100)}</strong></p>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground">Disponível para perfis financeiros autorizados.</p>
+                )}
+              </div>
+            </div>
+
           </TabsContent>
 
           {/* TAB 3: Triagem IA */}
@@ -1064,7 +1258,7 @@ export function CrmLeadDrawer({
             )}
           </TabsContent>
 
-          {/* TAB 4: acompanhamento real da etapa */}
+          {/* Histórico comercial e follow-ups persistidos na Agenda */}
           <TabsContent value="tarefas" className="flex-1 p-4 overflow-y-auto space-y-3">
             <div className="rounded-xl border border-border bg-card p-3 space-y-2">
               <div className="flex items-center justify-between">
@@ -1087,14 +1281,74 @@ export function CrmLeadDrawer({
               </p>
             </div>
 
-            <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center">
-              <Calendar className="mx-auto h-7 w-7 text-muted-foreground/70" />
-              <p className="mt-2 text-sm font-medium text-foreground">
-                Nenhum prazo exibido nesta ficha
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Prazos reais devem ser cadastrados e acompanhados pelo módulo Agenda.
-              </p>
+            <div className="rounded-xl border border-border bg-card p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-primary" />
+                <p className="text-xs font-semibold">Agendar próximo contato</p>
+              </div>
+              <Input
+                value={followupTitle}
+                onChange={(event) => setFollowupTitle(event.target.value)}
+                placeholder="Ex.: Retornar sobre a proposta"
+                className="text-xs"
+              />
+              <div className="flex gap-2">
+                <Input
+                  type="datetime-local"
+                  value={followupAt}
+                  onChange={(event) => setFollowupAt(event.target.value)}
+                  className="text-xs"
+                />
+                <Button size="sm" onClick={() => void createFollowup()} disabled={savingFollowup || !followupTitle.trim() || !followupAt}>
+                  Agendar
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                <p className="text-xs font-semibold">Follow-ups</p>
+                <Badge variant="secondary" className="ml-auto text-[10px]">{followups.filter(item => !item.done).length} abertos</Badge>
+              </div>
+              {historyLoading ? (
+                <p className="py-4 text-center text-xs text-muted-foreground">Carregando...</p>
+              ) : followups.length === 0 ? (
+                <p className="py-4 text-center text-xs text-muted-foreground">Nenhum follow-up agendado.</p>
+              ) : followups.map((followup) => (
+                <button
+                  key={followup.id}
+                  type="button"
+                  onClick={() => void toggleFollowup(followup)}
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-border/60 p-2 text-left hover:bg-muted/40"
+                >
+                  <span className={`text-xs ${followup.done ? "line-through text-muted-foreground" : "font-medium"}`}>{followup.title}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{new Date(followup.due_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-3">
+                <History className="h-4 w-4 text-primary" />
+                <p className="text-xs font-semibold">Timeline comercial</p>
+              </div>
+              {historyLoading ? (
+                <p className="py-4 text-center text-xs text-muted-foreground">Carregando...</p>
+              ) : activities.length === 0 ? (
+                <p className="py-4 text-center text-xs text-muted-foreground">Nenhuma atividade registrada.</p>
+              ) : (
+                <div className="relative space-y-3 pl-5 before:absolute before:bottom-1 before:left-1.5 before:top-1 before:w-px before:bg-border">
+                  {activities.map((activity) => (
+                    <div key={activity.id} className="relative">
+                      <span className="absolute -left-[14px] top-1.5 size-2 rounded-full bg-primary" />
+                      <p className="text-[10px] text-muted-foreground">{new Date(activity.created_at).toLocaleString("pt-BR")}</p>
+                      <p className="text-xs font-medium">{activity.title}</p>
+                      {activity.body && <p className="text-[11px] text-muted-foreground">{activity.body}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>

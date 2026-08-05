@@ -265,6 +265,57 @@ export type Database = {
           },
         ]
       }
+      client_activities: {
+        Row: {
+          body: string | null
+          client_id: string
+          created_at: string
+          id: string
+          kind: string
+          meta: Json | null
+          tenant_id: string
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          kind?: string
+          meta?: Json | null
+          tenant_id: string
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          meta?: Json | null
+          tenant_id?: string
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_activities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_activities_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           address: string | null

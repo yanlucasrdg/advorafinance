@@ -161,7 +161,14 @@ export function useCases() {
           });
       }
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      const message = /CASE_CNJ_DUPLICATE/i.test(err.message)
+        ? "Já existe um processo ativo com este número CNJ."
+        : /CASE_CNJ_INVALID/i.test(err.message)
+          ? "Número CNJ inválido. Informe os 20 dígitos no formato oficial."
+          : err.message;
+      toast.error(message);
+    },
   });
 
   const update = useMutation({

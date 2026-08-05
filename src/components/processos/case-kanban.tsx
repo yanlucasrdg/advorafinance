@@ -37,12 +37,6 @@ type Props = {
   onMoveCase: (caseItem: Case, nextStatus: string) => void;
 };
 
-function successScore(id: string) {
-  let value = 0;
-  for (let index = 0; index < id.length; index++) value = (value * 31 + id.charCodeAt(index)) | 0;
-  return 55 + (Math.abs(value) % 40);
-}
-
 export function CaseKanban({ stages, casesByStage, deadlinesByCase, onOpenCase, onMoveCase }: Props) {
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
   const allCases = useMemo(() => Array.from(casesByStage.values()).flat(), [casesByStage]);
@@ -190,7 +184,6 @@ function CaseCard({ caseItem, deadlines, stage, onOpenCase, overlay = false, dra
 }) {
   const nextDeadline = deadlines.filter((item) => !item.done).sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0];
   const daysToDeadline = nextDeadline ? Math.ceil((new Date(nextDeadline.due_at).getTime() - Date.now()) / 86_400_000) : null;
-  const success = successScore(caseItem.id);
 
   return (
     <button
@@ -211,7 +204,11 @@ function CaseCard({ caseItem, deadlines, stage, onOpenCase, overlay = false, dra
             Prazo: {daysToDeadline}d
           </span>
         )}
-        <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">Êxito: {success}%</span>
+        {caseItem.datajud_synced_at && (
+          <span className="rounded-md border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] text-sky-300">
+            DataJud sincronizado
+          </span>
+        )}
       </div>
       <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-3">
         <p className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="size-3" /> {new Date(caseItem.updated_at).toLocaleDateString("pt-BR")}</p>

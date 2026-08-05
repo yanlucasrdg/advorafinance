@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Plus, Trash2, Briefcase, Clock, TrendingUp, AlertTriangle, Target,
-  DollarSign, Activity, Sparkles, Search, Filter, LayoutGrid, List as ListIcon,
+  DollarSign, Activity, Search, Filter, LayoutGrid, List as ListIcon,
   GitBranch, X, FileText, Users, MessageSquare, ChevronRight, Calendar, RotateCcw,
   Download, RefreshCw, Loader2,
 } from "lucide-react";
@@ -78,10 +79,14 @@ const STAGES = [
   { id: "perdido", label: "Perdidos", glow: "", bar: "bg-rose-500", text: "text-rose-300", ring: "ring-rose-500/30" },
 ] as const;
 
-function hashSuccess(id: string) {
-  let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return 55 + (Math.abs(h) % 40); // 55-94%
-}
+type RecentMovement = Movement & {
+  cases?: {
+    id: string;
+    title: string;
+    number: string | null;
+    clients?: { name: string } | null;
+  } | null;
+};
 
 function Processos() {
   const { profile } = useAuth();
@@ -222,6 +227,19 @@ function Processos() {
   const [lookupLoading, setLookupLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [movements, setMovements] = useState<Movement[]>([]);
+  const recentMovementsQ = useQuery({
+    queryKey: ["case-movements", "recent", profile?.tenant_id],
+    enabled: !!profile?.tenant_id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("case_movements")
+        .select("id, case_id, occurred_at, name, code, complement, cases(id, title, number, clients(name))")
+        .order("occurred_at", { ascending: false })
+        .limit(100);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as unknown as RecentMovement[];
+    },
+  });
 
   async function importFromCNJ() {
     const v = validateCNJ(form.number);
@@ -371,6 +389,7 @@ function Processos() {
         .order("occurred_at", { ascending: false })
         .limit(100);
       setMovements((data ?? []) as Movement[]);
+      await recentMovementsQ.refetch();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Falha ao sincronizar");
     } finally {
@@ -520,7 +539,7 @@ function Processos() {
         <section className="glass rounded-2xl p-4 mb-5 border-l-2 border-l-amber-500/60 animate-fade-up">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="size-4 text-amber-300" />
-            <h3 className="text-sm font-semibold">Alertas Inteligentes</h3>
+            <h3 className="text-sm font-semibold">Alertas operacionais</h3>
             <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-300">{alerts.length} ativos</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
@@ -562,7 +581,7 @@ function Processos() {
                 <th className="px-4 py-3 font-medium">Cliente</th>
                 <th className="px-4 py-3 font-medium">Área</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Êxito IA</th>
+                <th className="px-4 py-3 font-medium">DataJud</th>
                 <th className="px-4 py-3 font-medium text-right">Valor</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -570,7 +589,6 @@ function Processos() {
             <tbody className="stagger">
               {filtered.map(c => {
                 const stage = STAGES.find(s => s.id === c.status) ?? STAGES[0];
-                const success = hashSuccess(c.id);
                 return (
                   <tr key={c.id} className="row-hover border-b border-border/40 cursor-pointer" onClick={() => setSelected(c)}>
                     <td className="px-4 py-3">
@@ -580,7 +598,9 @@ function Processos() {
                     <td className="px-4 py-3">{c.clients?.name ?? "—"}</td>
                     <td className="px-4 py-3 capitalize">{c.area}</td>
                     <td className="px-4 py-3"><Badge variant="outline" className={`${stage.text} ${stage.ring}`}>{stage.label}</Badge></td>
-                    <td className="px-4 py-3 text-emerald-300 tabular-nums">{success}%</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {c.datajud_synced_at ? new Date(c.datajud_synced_at).toLocaleDateString("pt-BR") : "Não sincronizado"}
+                    </td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">{formatBRL(c.value_cents ?? 0)}</td>
                     <td className="px-4 py-3 text-right"><Button size="icon" variant="ghost" className="size-7" onClick={e => { e.stopPropagation(); removeCase(c); }}><Trash2 className="size-3.5" /></Button></td>
                   </tr>
@@ -592,24 +612,33 @@ function Processos() {
       ) : (
         <div className="glass rounded-2xl p-6">
           <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-0 before:bottom-0 before:w-px before:bg-border">
-            {filtered.slice(0, 20).map(c => {
-              const stage = STAGES.find(s => s.id === c.status) ?? STAGES[0];
+            {(recentMovementsQ.data ?? [])
+              .filter(m => filtered.some(c => c.id === m.case_id))
+              .slice(0, 50)
+              .map(m => {
+              const caseItem = filtered.find(c => c.id === m.case_id);
+              const stage = STAGES.find(s => s.id === caseItem?.status) ?? STAGES[0];
               return (
-                <div key={c.id} className="relative">
+                <div key={m.id} className="relative">
                   <span className={`absolute -left-[18px] top-1.5 size-3 rounded-full ${stage.bar} ring-4 ring-background`} />
-                  <button onClick={() => setSelected(c)} className="text-left w-full glass hover-lift rounded-xl p-3">
+                  <button onClick={() => caseItem && setSelected(caseItem)} className="text-left w-full glass hover-lift rounded-xl p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-[11px] text-muted-foreground tabular-nums">{new Date(c.updated_at).toLocaleDateString("pt-BR", { dateStyle: "long" })}</p>
-                        <p className="text-sm font-semibold truncate">{c.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{c.clients?.name ?? "—"} • {c.area}</p>
+                        <p className="text-[11px] text-muted-foreground tabular-nums">{new Date(m.occurred_at).toLocaleString("pt-BR", { dateStyle: "long", timeStyle: "short" })}</p>
+                        <p className="text-sm font-semibold truncate">{m.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{m.cases?.title ?? caseItem?.title ?? "Processo"}{m.complement ? ` • ${m.complement}` : ""}</p>
                       </div>
-                      <span className={`text-[10px] px-2 py-1 rounded-md border ${stage.ring} ${stage.text}`}>{stage.label}</span>
+                      <span className="text-[10px] px-2 py-1 rounded-md border border-border text-muted-foreground">{m.cases?.number ?? caseItem?.number ?? "Sem CNJ"}</span>
                     </div>
                   </button>
                 </div>
               );
             })}
+            {!recentMovementsQ.isLoading && (recentMovementsQ.data ?? []).filter(m => filtered.some(c => c.id === m.case_id)).length === 0 && (
+              <div className="rounded-xl border border-dashed border-border/40 p-6 text-center text-sm text-muted-foreground">
+                Nenhuma movimentação processual encontrada para os filtros atuais.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -619,7 +648,6 @@ function Processos() {
         <SheetContent className="glass !w-full sm:!max-w-[480px] p-0 overflow-y-auto">
           {selected && (() => {
             const stage = STAGES.find(s => s.id === selected.status) ?? STAGES[0];
-            const success = hashSuccess(selected.id);
             const dls = caseDeadlines.get(selected.id) ?? [];
             const next = dls.filter(d => !d.done).sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0];
             const caseEntries = entries.filter(e => e.case_id === selected.id);
@@ -651,20 +679,13 @@ function Processos() {
 
                   <TabsContent value="resumo" className="mt-4 space-y-4">
                     <div className="glass rounded-xl p-4">
-                      <p className="text-[11px] uppercase text-muted-foreground mb-2">Probabilidade de Êxito (IA)</p>
-                      <div className="flex items-center gap-3">
-                        <div className="relative size-16 grid place-items-center">
-                          <svg className="absolute inset-0 -rotate-90" viewBox="0 0 36 36">
-                            <circle cx="18" cy="18" r="15" className="stroke-border/40" strokeWidth="3" fill="none" />
-                            <circle cx="18" cy="18" r="15" className="stroke-emerald-400" strokeWidth="3" fill="none" strokeDasharray={`${success * 0.94} 100`} strokeLinecap="round" />
-                          </svg>
-                          <span className="text-sm font-bold tabular-nums text-emerald-300">{success}%</span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{success > 75 ? "Alta" : success > 55 ? "Moderada" : "Baixa"}</p>
-                          <p className="text-[11px] text-muted-foreground">Baseado em 24 fatores</p>
-                        </div>
-                      </div>
+                      <p className="text-[11px] uppercase text-muted-foreground mb-3">Dados processuais verificados</p>
+                      <dl className="grid grid-cols-2 gap-3 text-xs">
+                        <div><dt className="text-muted-foreground">Tribunal</dt><dd className="mt-1 font-medium">{selected.tribunal ?? "Não informado"}</dd></div>
+                        <div><dt className="text-muted-foreground">Classe</dt><dd className="mt-1 font-medium">{selected.class_name ?? "Não informada"}</dd></div>
+                        <div><dt className="text-muted-foreground">Vara / órgão</dt><dd className="mt-1 font-medium">{selected.court ?? "Não informado"}</dd></div>
+                        <div><dt className="text-muted-foreground">DataJud</dt><dd className="mt-1 font-medium">{selected.datajud_synced_at ? new Date(selected.datajud_synced_at).toLocaleString("pt-BR") : "Não sincronizado"}</dd></div>
+                      </dl>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="glass rounded-xl p-3">
@@ -674,7 +695,7 @@ function Processos() {
                       </div>
                       <div className="glass rounded-xl p-3">
                         <p className="text-[10px] uppercase text-muted-foreground">Responsável</p>
-                        <p className="text-sm font-semibold mt-1">{selected.responsible ?? "Dr. Yan Lucas"}</p>
+                        <p className="text-sm font-semibold mt-1">{selected.responsible ?? "Não atribuído"}</p>
                       </div>
                     </div>
                     {selected.description && (
@@ -683,9 +704,21 @@ function Processos() {
                         <p className="text-xs leading-relaxed">{selected.description}</p>
                       </div>
                     )}
-                    <Button className="w-full bg-[image:var(--gradient-brand)] hover-lift">
-                      <Sparkles className="size-4 mr-2" /> Gerar análise completa com IA
-                    </Button>
+                    <div className="glass rounded-xl p-4">
+                      <p className="text-[10px] uppercase text-muted-foreground mb-2">Agenda vinculada</p>
+                      {dls.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Nenhum prazo ou audiência vinculado.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {dls.slice().sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime()).slice(0, 5).map(deadline => (
+                            <div key={deadline.id} className="flex items-center justify-between gap-3 text-xs">
+                              <span className={deadline.done ? "line-through text-muted-foreground" : "font-medium"}>{deadline.title}</span>
+                              <span className="shrink-0 text-muted-foreground">{deadline.kind === "audiencia" ? "Audiência" : "Prazo"} • {new Date(deadline.due_at).toLocaleDateString("pt-BR")}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </TabsContent>
 
                   <TabsContent value="timeline" className="mt-4 space-y-3">
