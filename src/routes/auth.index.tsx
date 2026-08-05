@@ -2,17 +2,19 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   ArrowRight,
-  BarChart3,
+  BriefcaseBusiness,
   Check,
   Eye,
   EyeOff,
-  Fingerprint,
+  HeartHandshake,
   Loader2,
   LockKeyhole,
   Mail,
+  Moon,
   Scale,
-  ShieldCheck,
-  Sparkles,
+  Sun,
+  TrendingUp,
+  Users,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -21,30 +23,25 @@ import { useAuth } from "@/lib/auth-context";
 export const Route = createFileRoute("/auth/")({
   head: () => ({
     meta: [
-      { title: "Entrar — Advora" },
-      { name: "description", content: "Acesse o sistema operacional do seu escritório jurídico." },
+      { title: "Acesse sua conta — Advora" },
+      { name: "description", content: "Entre no sistema operacional do seu escritório jurídico." },
     ],
   }),
   component: AuthPage,
 });
 
-type AuthMode = "signin" | "signup";
-
 function AuthPage() {
   const navigate = useNavigate();
   const { user, profile, loading } = useAuth();
-  const [mode, setMode] = useState<AuthMode>("signin");
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [darkCard, setDarkCard] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) {
-      navigate({ to: profile?.tenant_id ? "/dashboard" : "/onboarding" });
-    }
+    if (!loading && user) navigate({ to: profile?.tenant_id ? "/dashboard" : "/onboarding" });
   }, [user, profile, loading, navigate]);
 
   const signIn = async (event: FormEvent) => {
@@ -54,22 +51,6 @@ function AuthPage() {
     setBusy(false);
     if (error) toast.error("Não foi possível entrar. Confira seus dados e tente novamente.");
     else toast.success("Bem-vindo de volta à Advora.");
-  };
-
-  const signUp = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: { full_name: fullName },
-      },
-    });
-    setBusy(false);
-    if (error) toast.error(error.message);
-    else toast.success("Conta criada. Verifique seu e-mail para continuar.");
   };
 
   const socialLogin = async (provider: "google" | "azure") => {
@@ -89,7 +70,7 @@ function AuthPage() {
 
   const resetPassword = async () => {
     if (!email) {
-      toast.info("Digite seu e-mail primeiro para recuperar a senha.");
+      toast.info("Digite seu e-mail para receber o link de recuperação.");
       return;
     }
     setBusy(true);
@@ -98,153 +79,98 @@ function AuthPage() {
     });
     setBusy(false);
     if (error) toast.error("Não foi possível enviar o link agora. Tente novamente.");
-    else toast.success("Enviamos as instruções de recuperação para o seu e-mail.");
+    else toast.success("As instruções foram enviadas para o seu e-mail.");
   };
 
   return (
-    <main className="auth-page">
-      <section className="auth-story" aria-label="Visão geral da plataforma Advora">
-        <div className="auth-orb auth-orb-one" />
-        <div className="auth-orb auth-orb-two" />
-        <div className="auth-grid" />
+    <main className={`auth-ref-page${darkCard ? " auth-ref-dark" : ""}`}>
+      <section className="auth-ref-story" aria-label="Sobre a plataforma Advora">
+        <div className="auth-ref-veil" />
+        <div className="auth-ref-wave auth-ref-wave-a" />
+        <div className="auth-ref-wave auth-ref-wave-b" />
+        <div className="auth-ref-wave auth-ref-wave-c" />
 
-        <Link to="/" className="auth-brand" aria-label="Advora — página inicial">
-          <span className="auth-brand-mark"><Scale aria-hidden="true" /></span>
-          <span>Advora</span>
-          <span className="auth-brand-badge">LEGAL OS</span>
+        <Link to="/" className="auth-ref-logo" aria-label="Advora — página inicial">
+          <Scale aria-hidden="true" />
+          <span><strong>ADVORA</strong><small>LEGAL OS</small></span>
         </Link>
 
-        <div className="auth-story-content">
-          <span className="auth-eyebrow"><Sparkles aria-hidden="true" /> Inteligência para a prática jurídica</span>
-          <h1>Decisões melhores.<br /><em>Uma operação extraordinária.</em></h1>
-          <p>Transforme processos, clientes e finanças em uma única fonte de verdade — segura, inteligente e pronta para crescer.</p>
-
-          <div className="auth-proof" aria-label="Indicadores da plataforma">
-            <article>
-              <span className="auth-proof-icon"><BarChart3 aria-hidden="true" /></span>
-              <strong>3,2×</strong>
-              <small>mais produtividade operacional</small>
-            </article>
-            <article>
-              <span className="auth-proof-icon"><ShieldCheck aria-hidden="true" /></span>
-              <strong>99,98%</strong>
-              <small>de disponibilidade da plataforma</small>
-            </article>
-            <article>
-              <span className="auth-proof-icon"><Fingerprint aria-hidden="true" /></span>
-              <strong>LGPD</strong>
-              <small>segurança em cada acesso</small>
-            </article>
-          </div>
+        <div className="auth-ref-message">
+          <h1>Mais controle.<br />Mais estratégia.<br />Mais <em>resultados.</em></h1>
+          <p>O sistema jurídico tudo-em-um que reúne tecnologia, automação e inteligência para advogados que pensam à frente.</p>
         </div>
 
-        <div className="auth-activity-card" aria-hidden="true">
-          <div className="auth-activity-head">
-            <span><i /> Operação em tempo real</span>
-            <small>AGORA</small>
-          </div>
-          <div className="auth-chart">
-            {[35, 54, 42, 67, 58, 83, 72, 92, 78, 100, 88, 108].map((height, index) => (
-              <i key={index} style={{ height }} />
-            ))}
-          </div>
-          <div className="auth-activity-foot"><span>Performance do escritório</span><strong>+24,8%</strong></div>
+        <div className="auth-ref-results">
+          <strong>Resultados que falam por si</strong>
+          <Metric icon={<Users />} value="+12K" label="Advogados ativos" />
+          <Metric icon={<BriefcaseBusiness />} value="+1.8M" label="Processos gerenciados" />
+          <Metric icon={<HeartHandshake />} value="98,6%" label="Satisfação dos clientes" accent />
         </div>
 
-        <footer className="auth-story-footer">
-          <span>© 2026 Advora Tecnologia</span>
-          <span><ShieldCheck aria-hidden="true" /> Ambiente protegido</span>
-        </footer>
+        <span className="auth-ref-copyright">© 2026 Advora Legal OS</span>
       </section>
 
-      <section className="auth-entry">
-        <div className="auth-mobile-brand">
-          <span className="auth-brand-mark"><Scale aria-hidden="true" /></span>
-          <strong>Advora</strong>
-        </div>
+      <section className="auth-ref-panel">
+        <div className="auth-ref-mobile-logo"><Scale /><strong>ADVORA</strong></div>
 
-        <div className="auth-entry-inner">
-          <div className="auth-card">
-            <div className="auth-tabs" role="tablist" aria-label="Tipo de acesso">
-              <button type="button" role="tab" aria-selected={mode === "signin"} onClick={() => setMode("signin")}>Entrar</button>
-              <button type="button" role="tab" aria-selected={mode === "signup"} onClick={() => setMode("signup")}>Criar conta</button>
-              <span className={mode === "signup" ? "is-right" : ""} />
+        <button type="button" className="auth-ref-theme" onClick={() => setDarkCard((value) => !value)} aria-label={darkCard ? "Ativar tema claro" : "Ativar tema escuro"}>
+          <span>Tema</span>{darkCard ? <Sun /> : <Moon />}
+        </button>
+
+        <div className="auth-ref-form-wrap">
+          <header className="auth-ref-heading">
+            <h2>Acesse sua conta</h2>
+            <p>Entre com seus dados para continuar</p>
+          </header>
+
+          <form className="auth-ref-form" onSubmit={signIn}>
+            <FormField label="E-mail">
+              <div className="auth-ref-input"><Mail /><input aria-label="E-mail" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="seu@email.com" autoComplete="email" required disabled={busy} /></div>
+            </FormField>
+
+            <FormField label="Senha">
+              <div className="auth-ref-input"><LockKeyhole /><input aria-label="Senha" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••••••" autoComplete="current-password" required disabled={busy} /><button type="button" onClick={() => setShowPassword((value) => !value)} disabled={busy} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}>{showPassword ? <EyeOff /> : <Eye />}</button></div>
+            </FormField>
+
+            <div className="auth-ref-options">
+              <label><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} disabled={busy} /><span><Check /></span>Manter conectado</label>
+              <button type="button" onClick={resetPassword} disabled={busy}>Esqueci minha senha?</button>
             </div>
 
-            <div className="auth-heading">
-              <span className="auth-kicker">{mode === "signin" ? "BEM-VINDO DE VOLTA" : "COMECE AGORA"}</span>
-              <h2>{mode === "signin" ? "Acesse seu escritório" : "Crie seu espaço Advora"}</h2>
-              <p>{mode === "signin" ? "Entre para continuar de onde parou." : "14 dias para conhecer uma operação jurídica melhor."}</p>
-            </div>
+            <button type="submit" className="auth-ref-submit" disabled={busy}>
+              {busy ? <><Loader2 className="auth-ref-spin" />Aguarde</> : <>Acessar<ArrowRight /></>}
+            </button>
+          </form>
 
-            <form onSubmit={mode === "signin" ? signIn : signUp} className="auth-form">
-              {mode === "signup" && (
-                <AuthField label="Nome completo" icon={<Fingerprint />}>
-                  <input aria-label="Nome completo" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Como devemos chamar você?" autoComplete="name" required disabled={busy} />
-                </AuthField>
-              )}
+          <div className="auth-ref-divider"><span>ou acesse com</span></div>
 
-              <AuthField label="E-mail profissional" icon={<Mail />}>
-                <input aria-label="E-mail profissional" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@escritorio.com.br" autoComplete="email" required disabled={busy} />
-              </AuthField>
-
-              <AuthField label="Senha" icon={<LockKeyhole />} action={
-                mode === "signin" ? <button type="button" onClick={resetPassword} disabled={busy}>Esqueci minha senha</button> : undefined
-              }>
-                <div className="auth-password">
-                  <input aria-label="Senha" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === "signup" ? "Mínimo de 8 caracteres" : "Sua senha"} autoComplete={mode === "signin" ? "current-password" : "new-password"} minLength={mode === "signup" ? 8 : undefined} required disabled={busy} />
-                  <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} disabled={busy}>
-                    {showPassword ? <EyeOff /> : <Eye />}
-                  </button>
-                </div>
-              </AuthField>
-
-              {mode === "signin" && (
-                <label className="auth-remember">
-                  <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} disabled={busy} />
-                  <span><Check /></span>
-                  Manter minha sessão ativa
-                </label>
-              )}
-
-              <button type="submit" className="auth-submit" disabled={busy}>
-                <span>{busy ? "Aguarde" : mode === "signin" ? "Entrar na Advora" : "Criar minha conta"}</span>
-                {busy ? <Loader2 className="auth-spin" /> : <ArrowRight />}
-              </button>
-            </form>
-
-            <div className="auth-divider"><span>ou continue com</span></div>
-
-            <div className="auth-socials">
-              <button type="button" onClick={() => socialLogin("google")} disabled={busy}>
-                <span className="google-mark">G</span><span>Google</span>
-              </button>
-              <button type="button" onClick={() => socialLogin("azure")} disabled={busy}>
-                <span className="microsoft-mark"><i /><i /><i /><i /></span><span>Microsoft</span>
-              </button>
-            </div>
-
-            <p className="auth-legal">Ao continuar, você aceita os <a href="#termos">Termos de Uso</a> e a <a href="#privacidade">Política de Privacidade</a>.</p>
+          <div className="auth-ref-socials">
+            <button type="button" onClick={() => socialLogin("google")} disabled={busy}><b className="auth-ref-google">G</b>Google</button>
+            <button type="button" onClick={() => socialLogin("azure")} disabled={busy}><b className="auth-ref-microsoft"><i /><i /><i /><i /></b>Microsoft</button>
           </div>
 
-          <aside className="auth-support">
-            <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=85" alt="Marina, especialista de implantação Advora" />
-            <div><strong>Precisa de ajuda para acessar?</strong><span>Marina, nossa especialista de implantação, responde em poucos minutos.</span></div>
-            <a href="mailto:suporte@advora.com.br" aria-label="Falar com o suporte Advora"><ArrowRight /></a>
+          <aside className="auth-ref-help">
+            <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=85" alt="Especialista de implantação Advora" />
+            <div><strong>Precisa de ajuda para começar?</strong><span>Fale com um especialista e veja como a Advora pode transformar seu escritório.</span><a href="mailto:suporte@advora.com.br">Falar com especialista <ArrowRight /></a></div>
           </aside>
         </div>
 
-        <footer className="auth-entry-footer"><a href="#seguranca">Segurança</a><a href="#privacidade">Privacidade</a><a href="mailto:suporte@advora.com.br">Suporte</a><span>Português (BR)</span></footer>
+        <footer className="auth-ref-footer"><a href="#termos">Termos de uso</a><i /> <a href="#privacidade">Privacidade</a><i /> <a href="mailto:suporte@advora.com.br">Suporte</a></footer>
       </section>
     </main>
   );
 }
 
-function AuthField({ label, icon, action, children }: { label: string; icon: ReactNode; action?: ReactNode; children: ReactNode }) {
+function FormField({ label, children }: { label: string; children: ReactNode }) {
+  return <label className="auth-ref-field"><span>{label}</span>{children}</label>;
+}
+
+function Metric({ icon, value, label, accent = false }: { icon: ReactNode; value: string; label: string; accent?: boolean }) {
   return (
-    <div className="auth-field">
-      <div className="auth-field-label"><span className="auth-field-title">{icon}{label}</span>{action}</div>
-      <div className="auth-control" onClick={(event) => event.currentTarget.querySelector("input")?.focus()}>{children}</div>
+    <div className="auth-ref-metric">
+      <span className="auth-ref-metric-icon">{icon}</span>
+      <span><b className={accent ? "auth-ref-accent" : ""}>{value}</b><small>{label}</small></span>
+      <TrendingUp aria-hidden="true" />
     </div>
   );
 }
