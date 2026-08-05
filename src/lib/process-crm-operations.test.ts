@@ -21,6 +21,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const processMetricsRepair = readFileSync(
+  new URL(
+    "../../supabase/migrations/20260805234500_repair_process_metrics_responsible.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 describe("Process and CRM operational integrity", () => {
   it("não apresenta score de êxito fabricado como inteligência artificial", () => {
@@ -34,6 +41,13 @@ describe("Process and CRM operational integrity", () => {
     expect(processesRoute).toContain('.from("case_movements")');
     expect(migration).toContain("FROM public.case_movements");
     expect(migration).toContain("occurred_at AT TIME ZONE v_timezone");
+  });
+
+  it("agrega responsáveis pelo perfil sem aplicar funções de texto em UUID", () => {
+    expect(migration).toContain("profile.id = legal_case.responsible");
+    expect(processMetricsRepair).toContain("profile.id = legal_case.responsible");
+    expect(migration).not.toContain("trim(responsible)");
+    expect(processMetricsRepair).not.toContain("trim(responsible)");
   });
 
   it("normaliza e bloqueia duplicidade concorrente de CNJ", () => {
