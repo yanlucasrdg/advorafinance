@@ -1,6 +1,215 @@
 -- Enterprise P0: enforce RBAC at the database boundary, close a cross-tenant
 -- financial write path and make subscription access authoritative.
 
+-- Reconcile the exact production drift captured on 2026-08-05: billing was
+-- never installed, even though the application and later migrations use it.
+ALTER TYPE public.tenant_plan ADD VALUE IF NOT EXISTS 'essential';
+ALTER TYPE public.tenant_plan ADD VALUE IF NOT EXISTS 'performance';
+ALTER TYPE public.tenant_plan ADD VALUE IF NOT EXISTS 'business';
+
+DO $billing_types$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public' AND t.typname = 'subscription_status'
+  ) THEN
+    CREATE TYPE public.subscription_status AS ENUM (
+      'trialing','active','past_due','canceled','expired','refunded','chargeback'
+    );
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public' AND t.typname = 'billing_interval'
+  ) THEN
+    CREATE TYPE public.billing_interval AS ENUM ('monthly','annual');
+  END IF;
+END;
+$billing_types$;
+
+CREATE TABLE IF NOT EXISTS public.tenant_subscriptions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL UNIQUE REFERENCES public.tenants(id) ON DELETE CASCADE,
+  plan public.tenant_plan NOT NULL DEFAULT 'trial',
+  status public.subscription_status NOT NULL DEFAULT 'trialing',
+  provider text NOT NULL DEFAULT 'kirvano' CHECK (provider IN ('kirvano','manual')),
+  billing_interval public.billing_interval,
+  kirvano_sale_id text UNIQUE,
+  kirvano_checkout_id text,
+  kirvano_offer_id text,
+  kirvano_product_id text,
+  customer_email text,
+  trial_ends_at timestamptz,
+  current_period_end timestamptz,
+  grace_ends_at timestamptz,
+  cancel_at_period_end boolean NOT NULL DEFAULT false,
+  last_event_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.billing_webhook_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_key text NOT NULL UNIQUE,
+  event_type text NOT NULL,
+  sale_id text,
+  checkout_id text,
+  tenant_id uuid REFERENCES public.tenants(id) ON DELETE SET NULL,
+  processing_status text NOT NULL DEFAULT 'received'
+    CHECK (processing_status IN ('received','processed','ignored','error')),
+  error_message text,
+  received_at timestamptz NOT NULL DEFAULT now(),
+  processed_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS tenant_subscriptions_status_idx
+  ON public.tenant_subscriptions (status, current_period_end);
+CREATE INDEX IF NOT EXISTS billing_webhook_events_tenant_idx
+  ON public.billing_webhook_events (tenant_id, received_at DESC);
+ALTER TABLE public.tenant_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.billing_webhook_events ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON public.tenant_subscriptions TO authenticated;
+GRANT ALL ON public.tenant_subscriptions, public.billing_webhook_events TO service_role;
+
+DROP POLICY IF EXISTS "tenant members view subscription" ON public.tenant_subscriptions;
+CREATE POLICY "tenant members view subscription" ON public.tenant_subscriptions
+  FOR SELECT TO authenticated
+  USING (tenant_id = public.current_tenant_id() OR public.is_master_admin(auth.uid()));
+
+INSERT INTO public.tenant_subscriptions (tenant_id, plan, status, trial_ends_at)
+SELECT
+  id,
+  plan,
+  CASE WHEN plan = 'trial'
+    THEN 'trialing'::public.subscription_status
+    ELSE 'active'::public.subscription_status
+  END,
+  CASE WHEN plan = 'trial' THEN now() + interval '14 days' ELSE NULL END
+FROM public.tenants
+ON CONFLICT (tenant_id) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION public.create_trial_subscription()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  INSERT INTO public.tenant_subscriptions (tenant_id, plan, status, trial_ends_at)
+  VALUES (NEW.id, 'trial', 'trialing', now() + interval '14 days')
+  ON CONFLICT (tenant_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS create_trial_subscription_after_tenant ON public.tenants;
+CREATE TRIGGER create_trial_subscription_after_tenant
+  AFTER INSERT ON public.tenants
+  FOR EACH ROW EXECUTE FUNCTION public.create_trial_subscription();
+
+CREATE OR REPLACE FUNCTION public.tenant_plan_limit(_tenant_id uuid, _resource text)
+RETURNS integer
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE v_plan text;
+BEGIN
+  SELECT plan::text INTO v_plan FROM public.tenants WHERE id = _tenant_id;
+  RETURN CASE _resource
+    WHEN 'users' THEN CASE v_plan
+      WHEN 'business' THEN 20 WHEN 'enterprise' THEN 20
+      WHEN 'performance' THEN 7 WHEN 'professional' THEN 7 ELSE 2 END
+    WHEN 'cases' THEN CASE v_plan
+      WHEN 'business' THEN 5000 WHEN 'enterprise' THEN 5000
+      WHEN 'performance' THEN 1000 WHEN 'professional' THEN 1000
+      WHEN 'essential' THEN 200 WHEN 'starter' THEN 200 ELSE 50 END
+    WHEN 'ai_credits' THEN CASE v_plan
+      WHEN 'business' THEN 2000 WHEN 'enterprise' THEN 2000
+      WHEN 'performance' THEN 500 WHEN 'professional' THEN 500
+      WHEN 'essential' THEN 100 WHEN 'starter' THEN 100 ELSE 30 END
+    ELSE 0
+  END;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.tenant_has_subscription_access(_tenant_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(EXISTS (
+    SELECT 1 FROM public.tenant_subscriptions s
+    WHERE s.tenant_id = _tenant_id AND (
+      s.status = 'active'
+      OR (s.status = 'trialing' AND s.trial_ends_at > now())
+      OR (s.status = 'canceled' AND s.current_period_end > now())
+      OR (s.status = 'past_due' AND s.grace_ends_at > now())
+    )
+  ), false);
+$$;
+
+CREATE OR REPLACE FUNCTION public.enforce_profile_plan_limit()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE v_current integer; v_limit integer;
+BEGIN
+  IF NEW.tenant_id IS NULL OR (TG_OP = 'UPDATE' AND NEW.tenant_id IS NOT DISTINCT FROM OLD.tenant_id) THEN RETURN NEW; END IF;
+  IF NOT public.tenant_has_subscription_access(NEW.tenant_id) THEN RAISE EXCEPTION 'SUBSCRIPTION_ACCESS_DENIED'; END IF;
+  SELECT count(*) INTO v_current FROM public.profiles WHERE tenant_id = NEW.tenant_id;
+  v_limit := public.tenant_plan_limit(NEW.tenant_id, 'users');
+  IF v_current >= v_limit THEN RAISE EXCEPTION 'PLAN_USER_LIMIT_REACHED'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enforce_case_plan_limit()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE v_current integer; v_limit integer;
+BEGIN
+  IF NOT public.tenant_has_subscription_access(NEW.tenant_id) THEN RAISE EXCEPTION 'SUBSCRIPTION_ACCESS_DENIED'; END IF;
+  SELECT count(*) INTO v_current FROM public.cases WHERE tenant_id = NEW.tenant_id AND deleted_at IS NULL;
+  v_limit := public.tenant_plan_limit(NEW.tenant_id, 'cases');
+  IF v_current >= v_limit THEN RAISE EXCEPTION 'PLAN_CASE_LIMIT_REACHED'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enforce_ai_plan_limit()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE v_current integer; v_limit integer;
+BEGIN
+  IF NEW.role <> 'user' THEN RETURN NEW; END IF;
+  IF NOT public.tenant_has_subscription_access(NEW.tenant_id) THEN RAISE EXCEPTION 'SUBSCRIPTION_ACCESS_DENIED'; END IF;
+  SELECT count(*) INTO v_current FROM public.ai_messages
+  WHERE tenant_id = NEW.tenant_id AND role = 'user' AND created_at >= date_trunc('month', now());
+  v_limit := public.tenant_plan_limit(NEW.tenant_id, 'ai_credits');
+  IF v_current >= v_limit THEN RAISE EXCEPTION 'PLAN_AI_LIMIT_REACHED'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_profile_plan_limit_trigger ON public.profiles;
+CREATE TRIGGER enforce_profile_plan_limit_trigger
+  BEFORE INSERT OR UPDATE OF tenant_id ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_profile_plan_limit();
+DROP TRIGGER IF EXISTS enforce_case_plan_limit_trigger ON public.cases;
+CREATE TRIGGER enforce_case_plan_limit_trigger
+  BEFORE INSERT ON public.cases
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_case_plan_limit();
+DROP TRIGGER IF EXISTS enforce_ai_plan_limit_trigger ON public.ai_messages;
+CREATE TRIGGER enforce_ai_plan_limit_trigger
+  BEFORE INSERT ON public.ai_messages
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_ai_plan_limit();
+
+REVOKE ALL ON FUNCTION public.create_trial_subscription() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.tenant_plan_limit(uuid, text), public.tenant_has_subscription_access(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.enforce_profile_plan_limit(), public.enforce_case_plan_limit(), public.enforce_ai_plan_limit() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_trial_subscription() TO service_role;
+GRANT EXECUTE ON FUNCTION public.tenant_plan_limit(uuid, text), public.tenant_has_subscription_access(uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.enforce_profile_plan_limit(), public.enforce_case_plan_limit(), public.enforce_ai_plan_limit() TO service_role;
+
 CREATE OR REPLACE FUNCTION public.has_any_tenant_role(_roles public.app_role[])
 RETURNS boolean
 LANGUAGE sql
@@ -180,9 +389,229 @@ END;
 $$;
 
 DROP TRIGGER IF EXISTS trg_deadline_audit ON public.deadlines;
+
+-- Restore the deadline/process RPC layer that is absent from the diagnosed
+-- production schema. Optimistic versioning prevents silent concurrent edits.
+UPDATE public.deadlines
+SET kind = CASE
+  WHEN kind = 'prazo' THEN 'prazo_processual'
+  WHEN kind IN (
+    'audiencia','prazo_processual','reuniao','tarefa','primeiro_atendimento',
+    'followup','vencimento','protocolo','compromisso','outro'
+  ) THEN kind ELSE 'outro' END,
+  priority = CASE priority
+    WHEN 'baixa' THEN 'low' WHEN 'media' THEN 'medium'
+    WHEN 'alta' THEN 'high' WHEN 'critica' THEN 'critical'
+    WHEN 'low' THEN 'low' WHEN 'medium' THEN 'medium'
+    WHEN 'high' THEN 'high' WHEN 'critical' THEN 'critical'
+    ELSE 'medium' END;
+
+ALTER TABLE public.deadlines ALTER COLUMN kind SET DEFAULT 'prazo_processual';
+ALTER TABLE public.deadlines ALTER COLUMN priority SET DEFAULT 'medium';
+ALTER TABLE public.deadlines DROP CONSTRAINT IF EXISTS chk_deadlines_kind;
+ALTER TABLE public.deadlines ADD CONSTRAINT chk_deadlines_kind CHECK (kind IN (
+  'audiencia','prazo_processual','reuniao','tarefa','primeiro_atendimento',
+  'followup','vencimento','protocolo','compromisso','outro'
+));
+ALTER TABLE public.deadlines DROP CONSTRAINT IF EXISTS chk_deadlines_priority;
+ALTER TABLE public.deadlines ADD CONSTRAINT chk_deadlines_priority
+  CHECK (priority IN ('low','medium','high','critical'));
+
+CREATE OR REPLACE FUNCTION public.bump_deadline_status_version()
+RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+BEGIN
+  NEW.status_version := OLD.status_version + 1;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_deadlines_status_version ON public.deadlines;
+CREATE TRIGGER trg_deadlines_status_version
+  BEFORE UPDATE ON public.deadlines
+  FOR EACH ROW EXECUTE FUNCTION public.bump_deadline_status_version();
 CREATE TRIGGER trg_deadline_audit
   AFTER INSERT OR UPDATE OR DELETE ON public.deadlines
   FOR EACH ROW EXECUTE FUNCTION public.fn_deadline_audit();
+
+CREATE OR REPLACE FUNCTION public.create_deadline(
+  p_title text,
+  p_kind text,
+  p_due_at timestamptz,
+  p_priority text DEFAULT 'medium',
+  p_case_id uuid DEFAULT NULL,
+  p_client_id uuid DEFAULT NULL,
+  p_notes text DEFAULT NULL
+)
+RETURNS public.deadlines
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE
+  v_tenant_id uuid := public.current_tenant_id();
+  v_deadline public.deadlines%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NULL OR v_tenant_id IS NULL THEN RAISE EXCEPTION 'DEADLINE_AUTH_REQUIRED'; END IF;
+  IF length(trim(COALESCE(p_title, ''))) NOT BETWEEN 2 AND 300 THEN RAISE EXCEPTION 'DEADLINE_TITLE_INVALID'; END IF;
+  IF p_kind NOT IN (
+    'audiencia','prazo_processual','reuniao','tarefa','primeiro_atendimento',
+    'followup','vencimento','protocolo','compromisso','outro'
+  ) THEN RAISE EXCEPTION 'DEADLINE_KIND_INVALID'; END IF;
+  IF p_priority NOT IN ('low','medium','high','critical') THEN RAISE EXCEPTION 'DEADLINE_PRIORITY_INVALID'; END IF;
+  IF p_due_at <= '1990-01-01'::timestamptz THEN RAISE EXCEPTION 'DEADLINE_DATE_INVALID'; END IF;
+  IF p_case_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.cases WHERE id = p_case_id AND tenant_id = v_tenant_id AND deleted_at IS NULL
+  ) THEN RAISE EXCEPTION 'DEADLINE_CASE_INVALID'; END IF;
+  IF p_client_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.clients WHERE id = p_client_id AND tenant_id = v_tenant_id AND deleted_at IS NULL
+  ) THEN RAISE EXCEPTION 'DEADLINE_CLIENT_INVALID'; END IF;
+
+  INSERT INTO public.deadlines (
+    tenant_id, created_by, title, kind, due_at, priority, case_id, client_id, notes
+  ) VALUES (
+    v_tenant_id, auth.uid(), trim(p_title), p_kind, p_due_at, p_priority,
+    p_case_id, p_client_id, NULLIF(trim(COALESCE(p_notes, '')), '')
+  ) RETURNING * INTO v_deadline;
+  RETURN v_deadline;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.update_deadline(
+  p_deadline_id uuid,
+  p_expected_version integer,
+  p_patch jsonb
+)
+RETURNS public.deadlines
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE
+  v_tenant_id uuid := public.current_tenant_id();
+  v_deadline public.deadlines%ROWTYPE;
+  v_title text; v_kind text; v_due_at timestamptz; v_priority text;
+  v_case_id uuid; v_client_id uuid; v_notes text;
+BEGIN
+  IF auth.uid() IS NULL OR v_tenant_id IS NULL THEN RAISE EXCEPTION 'DEADLINE_AUTH_REQUIRED'; END IF;
+  IF p_patch IS NULL OR jsonb_typeof(p_patch) <> 'object' OR EXISTS (
+    SELECT 1 FROM jsonb_object_keys(p_patch) AS key
+    WHERE key NOT IN ('title','kind','due_at','priority','case_id','client_id','notes')
+  ) THEN RAISE EXCEPTION 'DEADLINE_PATCH_INVALID'; END IF;
+
+  SELECT * INTO v_deadline FROM public.deadlines
+  WHERE id = p_deadline_id AND tenant_id = v_tenant_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'DEADLINE_NOT_FOUND'; END IF;
+  IF v_deadline.status_version <> p_expected_version THEN RAISE EXCEPTION 'DEADLINE_VERSION_CONFLICT'; END IF;
+
+  v_title := CASE WHEN p_patch ? 'title' THEN trim(p_patch->>'title') ELSE v_deadline.title END;
+  v_kind := CASE WHEN p_patch ? 'kind' THEN p_patch->>'kind' ELSE v_deadline.kind END;
+  v_due_at := CASE WHEN p_patch ? 'due_at' THEN (p_patch->>'due_at')::timestamptz ELSE v_deadline.due_at END;
+  v_priority := CASE WHEN p_patch ? 'priority' THEN p_patch->>'priority' ELSE v_deadline.priority END;
+  v_case_id := CASE WHEN p_patch ? 'case_id' THEN NULLIF(p_patch->>'case_id', '')::uuid ELSE v_deadline.case_id END;
+  v_client_id := CASE WHEN p_patch ? 'client_id' THEN NULLIF(p_patch->>'client_id', '')::uuid ELSE v_deadline.client_id END;
+  v_notes := CASE WHEN p_patch ? 'notes' THEN NULLIF(trim(COALESCE(p_patch->>'notes', '')), '') ELSE v_deadline.notes END;
+
+  IF length(COALESCE(v_title, '')) NOT BETWEEN 2 AND 300 THEN RAISE EXCEPTION 'DEADLINE_TITLE_INVALID'; END IF;
+  IF v_kind NOT IN (
+    'audiencia','prazo_processual','reuniao','tarefa','primeiro_atendimento',
+    'followup','vencimento','protocolo','compromisso','outro'
+  ) THEN RAISE EXCEPTION 'DEADLINE_KIND_INVALID'; END IF;
+  IF v_priority NOT IN ('low','medium','high','critical') THEN RAISE EXCEPTION 'DEADLINE_PRIORITY_INVALID'; END IF;
+  IF v_due_at <= '1990-01-01'::timestamptz THEN RAISE EXCEPTION 'DEADLINE_DATE_INVALID'; END IF;
+  IF v_case_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.cases WHERE id = v_case_id AND tenant_id = v_tenant_id AND deleted_at IS NULL
+  ) THEN RAISE EXCEPTION 'DEADLINE_CASE_INVALID'; END IF;
+  IF v_client_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.clients WHERE id = v_client_id AND tenant_id = v_tenant_id AND deleted_at IS NULL
+  ) THEN RAISE EXCEPTION 'DEADLINE_CLIENT_INVALID'; END IF;
+
+  UPDATE public.deadlines SET
+    title = v_title, kind = v_kind, due_at = v_due_at, priority = v_priority,
+    case_id = v_case_id, client_id = v_client_id, notes = v_notes
+  WHERE id = p_deadline_id RETURNING * INTO v_deadline;
+  RETURN v_deadline;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.toggle_deadline_completion(
+  p_deadline_id uuid, p_expected_version integer
+)
+RETURNS public.deadlines
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE
+  v_tenant_id uuid := public.current_tenant_id();
+  v_deadline public.deadlines%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NULL OR v_tenant_id IS NULL THEN RAISE EXCEPTION 'DEADLINE_AUTH_REQUIRED'; END IF;
+  SELECT * INTO v_deadline FROM public.deadlines
+  WHERE id = p_deadline_id AND tenant_id = v_tenant_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'DEADLINE_NOT_FOUND'; END IF;
+  IF v_deadline.status_version <> p_expected_version THEN RAISE EXCEPTION 'DEADLINE_VERSION_CONFLICT'; END IF;
+  UPDATE public.deadlines SET
+    done = NOT v_deadline.done,
+    completed_at = CASE WHEN NOT v_deadline.done THEN now() ELSE NULL END,
+    completed_by = CASE WHEN NOT v_deadline.done THEN auth.uid() ELSE NULL END
+  WHERE id = p_deadline_id RETURNING * INTO v_deadline;
+  RETURN v_deadline;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.soft_delete_deadline(
+  p_deadline_id uuid, p_expected_version integer
+)
+RETURNS public.deadlines
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE
+  v_tenant_id uuid := public.current_tenant_id();
+  v_deadline public.deadlines%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NULL OR v_tenant_id IS NULL THEN RAISE EXCEPTION 'DEADLINE_AUTH_REQUIRED'; END IF;
+  SELECT * INTO v_deadline FROM public.deadlines
+  WHERE id = p_deadline_id AND tenant_id = v_tenant_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'DEADLINE_NOT_FOUND'; END IF;
+  IF v_deadline.status_version <> p_expected_version THEN RAISE EXCEPTION 'DEADLINE_VERSION_CONFLICT'; END IF;
+  UPDATE public.deadlines SET deleted_at = now()
+  WHERE id = p_deadline_id RETURNING * INTO v_deadline;
+  RETURN v_deadline;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.soft_delete_case(
+  p_case_id uuid, p_expected_version integer
+)
+RETURNS public.cases
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE
+  v_tenant_id uuid := public.current_tenant_id();
+  v_case public.cases%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NULL OR v_tenant_id IS NULL THEN RAISE EXCEPTION 'CASE_AUTH_REQUIRED'; END IF;
+  SELECT * INTO v_case FROM public.cases
+  WHERE id = p_case_id AND tenant_id = v_tenant_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'CASE_NOT_FOUND'; END IF;
+  IF v_case.status_version <> p_expected_version THEN RAISE EXCEPTION 'CASE_STATUS_CONFLICT'; END IF;
+  UPDATE public.cases SET deleted_at = now()
+  WHERE id = p_case_id RETURNING * INTO v_case;
+  RETURN v_case;
+END;
+$$;
+
+REVOKE INSERT, UPDATE, DELETE ON public.deadlines FROM authenticated;
+REVOKE DELETE, UPDATE ON public.cases FROM authenticated;
+GRANT UPDATE (
+  title, number, tribunal, court, area, value_cents, description,
+  client_id, responsible, parties, class_name, distribution_date,
+  instance, subjects, conversation_id, lead_source, lead_temperature,
+  pipeline_stage, pipeline_value_cents
+) ON public.cases TO authenticated;
+
+REVOKE ALL ON FUNCTION public.create_deadline(text, text, timestamptz, text, uuid, uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.update_deadline(uuid, integer, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.toggle_deadline_completion(uuid, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.soft_delete_deadline(uuid, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.soft_delete_case(uuid, integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.create_deadline(text, text, timestamptz, text, uuid, uuid, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_deadline(uuid, integer, jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.toggle_deadline_completion(uuid, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.soft_delete_deadline(uuid, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.soft_delete_case(uuid, integer) TO authenticated;
+CREATE INDEX IF NOT EXISTS idx_deadlines_tenant_active_due
+  ON public.deadlines (tenant_id, done, due_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_cases_tenant_active_status
+  ON public.cases (tenant_id, status, updated_at DESC) WHERE deleted_at IS NULL;
 
 -- Defense in depth for every browser-originated business write, including
 -- SECURITY DEFINER RPCs. Service-role webhooks keep operating with auth.uid null.
@@ -247,6 +676,25 @@ END;
 $triggers$;
 
 -- RBAC read/write policies. Triggers remain the final write guard for RPCs.
+-- Clean up a partially committed prior attempt before recreating the complete
+-- policy set. This makes the script safe in SQL editors that autocommit DDL.
+DO $rbac_cleanup$
+DECLARE policy_row record;
+BEGIN
+  FOR policy_row IN
+    SELECT schemaname, tablename, policyname
+    FROM pg_policies
+    WHERE policyname LIKE 'rbac %'
+      AND schemaname IN ('public', 'storage')
+  LOOP
+    EXECUTE format(
+      'DROP POLICY %I ON %I.%I',
+      policy_row.policyname, policy_row.schemaname, policy_row.tablename
+    );
+  END LOOP;
+END;
+$rbac_cleanup$;
+
 DROP POLICY IF EXISTS "tenant read clients" ON public.clients;
 DROP POLICY IF EXISTS "tenant write clients" ON public.clients;
 DROP POLICY IF EXISTS "tenant update clients" ON public.clients;
@@ -385,6 +833,9 @@ CREATE POLICY "rbac view profiles" ON public.profiles FOR SELECT TO authenticate
   );
 
 DROP POLICY IF EXISTS "Users see roles in their tenant" ON public.user_roles;
+DROP POLICY IF EXISTS "Owners can manage tenant roles" ON public.user_roles;
+DROP POLICY IF EXISTS "Owners manage tenant roles (no master_admin)" ON public.user_roles;
+REVOKE INSERT, UPDATE, DELETE ON public.user_roles FROM authenticated;
 CREATE POLICY "rbac view roles" ON public.user_roles FOR SELECT TO authenticated
   USING (
     user_id = auth.uid()
@@ -491,6 +942,13 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+DROP TRIGGER IF EXISTS trg_apply_fin_payment ON public.financial_payments;
+CREATE TRIGGER trg_apply_fin_payment
+  AFTER INSERT ON public.financial_payments
+  FOR EACH ROW EXECUTE FUNCTION public.apply_financial_payment();
+REVOKE ALL ON FUNCTION public.apply_financial_payment() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.apply_financial_payment() TO service_role;
 
 -- Atomic SLA + notification creation used by the communications intake flow.
 CREATE OR REPLACE FUNCTION public.create_intake_followup(
@@ -629,6 +1087,10 @@ GRANT EXECUTE ON FUNCTION public.replace_tenant_member_role(uuid, public.app_rol
 
 -- Persist an inbound Meta message, inbox preview, unread counter and urgent
 -- notification in one transaction. Retries are idempotent by external ID.
+CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_messages_external_message_id_unique
+  ON public.whatsapp_messages (tenant_id, external_message_id)
+  WHERE external_message_id IS NOT NULL;
+
 CREATE OR REPLACE FUNCTION public.ingest_meta_whatsapp_message(
   p_tenant_id uuid,
   p_conversation_id uuid,
@@ -702,3 +1164,41 @@ SET file_size_limit = 26214400,
       'image/png', 'image/jpeg'
     ]
 WHERE id = 'documents';
+
+-- Fail with one consolidated message if the reconciled contract is incomplete.
+DO $contract_check$
+DECLARE
+  missing_relations text[];
+  missing_functions text[];
+BEGIN
+  SELECT array_agg(name ORDER BY name) INTO missing_relations
+  FROM (VALUES
+    ('public.documents'), ('public.deadline_audit_log'),
+    ('public.tenant_subscriptions'), ('public.billing_webhook_events')
+  ) AS required(name)
+  WHERE to_regclass(name) IS NULL;
+
+  SELECT array_agg(signature ORDER BY signature) INTO missing_functions
+  FROM (VALUES
+    ('public.tenant_has_subscription_access(uuid)'),
+    ('public.soft_delete_case(uuid,integer)'),
+    ('public.soft_delete_deadline(uuid,integer)'),
+    ('public.update_deadline(uuid,integer,jsonb)'),
+    ('public.toggle_deadline_completion(uuid,integer)'),
+    ('public.create_intake_followup(uuid,text)'),
+    ('public.ingest_meta_whatsapp_message(uuid,uuid,text,text,timestamptz,text[],text,boolean,text)')
+  ) AS required(signature)
+  WHERE to_regprocedure(signature) IS NULL;
+
+  IF missing_relations IS NOT NULL OR missing_functions IS NOT NULL THEN
+    RAISE EXCEPTION 'ENTERPRISE_CONTRACT_INCOMPLETE relations=% functions=%',
+      COALESCE(missing_relations, ARRAY[]::text[]),
+      COALESCE(missing_functions, ARRAY[]::text[]);
+  END IF;
+END;
+$contract_check$;
+
+SELECT
+  'enterprise_p0_ready' AS status,
+  count(*) AS tenants_with_subscription
+FROM public.tenant_subscriptions;
