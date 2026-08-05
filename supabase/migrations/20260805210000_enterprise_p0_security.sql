@@ -72,6 +72,43 @@ DROP POLICY IF EXISTS "Authenticated can create tenant (onboarding)" ON public.t
 DROP POLICY IF EXISTS "Onboarding insert tenant" ON public.tenants;
 REVOKE INSERT ON public.tenants FROM authenticated;
 
+-- Some production projects were created before the documents migration was
+-- registered in migration history. Repair that schema drift here because the
+-- P0 policies and the current application both depend on this table.
+CREATE TABLE IF NOT EXISTS public.documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  client_id uuid REFERENCES public.clients(id) ON DELETE CASCADE,
+  case_id uuid REFERENCES public.cases(id) ON DELETE CASCADE,
+  uploaded_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  file_name text NOT NULL,
+  file_path text NOT NULL,
+  file_size bigint NOT NULL DEFAULT 0 CHECK (file_size >= 0),
+  file_type text NOT NULL,
+  document_type text NOT NULL DEFAULT 'other',
+  description text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.documents TO authenticated;
+GRANT ALL ON public.documents TO service_role;
+CREATE INDEX IF NOT EXISTS documents_tenant_created_idx
+  ON public.documents (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS documents_case_idx
+  ON public.documents (case_id) WHERE case_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS documents_client_idx
+  ON public.documents (client_id) WHERE client_id IS NOT NULL;
+DROP TRIGGER IF EXISTS trg_documents_updated ON public.documents;
+CREATE TRIGGER trg_documents_updated
+  BEFORE UPDATE ON public.documents
+  FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('documents', 'documents', false)
+ON CONFLICT (id) DO NOTHING;
+
 -- Defense in depth for every browser-originated business write, including
 -- SECURITY DEFINER RPCs. Service-role webhooks keep operating with auth.uid null.
 CREATE OR REPLACE FUNCTION public.enforce_business_write_access()
@@ -118,17 +155,20 @@ $$;
 DO $triggers$
 DECLARE table_name text;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY[
-    'clients','cases','case_movements','deadlines','financial_entries','financial_payments',
-    'dre_settings','documents','client_activities','whatsapp_conversations','whatsapp_messages'
-  ] LOOP
+  FOR table_name IN
+    SELECT unnest(ARRAY[
+      'clients','cases','case_movements','deadlines','financial_entries','financial_payments',
+      'dre_settings','documents','client_activities','whatsapp_conversations','whatsapp_messages'
+    ]::text[])
+  LOOP
+    IF to_regclass(format('public.%I', table_name)) IS NULL THEN CONTINUE; END IF;
     EXECUTE format('DROP TRIGGER IF EXISTS trg_enterprise_write_access ON public.%I', table_name);
     EXECUTE format(
       'CREATE TRIGGER trg_enterprise_write_access BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.enforce_business_write_access()',
       table_name
     );
   END LOOP;
-END
+END;
 $triggers$;
 
 -- RBAC read/write policies. Triggers remain the final write guard for RPCs.
