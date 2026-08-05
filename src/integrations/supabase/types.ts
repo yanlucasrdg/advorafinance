@@ -1350,6 +1350,10 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["deadlines"]["Row"]
       }
+      create_intake_followup: {
+        Args: { p_client_id: string; p_contact_name: string }
+        Returns: string
+      }
       current_tenant_id: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -1359,6 +1363,20 @@ export type Database = {
         Returns: boolean
       }
       is_master_admin: { Args: { _user_id: string }; Returns: boolean }
+      ingest_meta_whatsapp_message: {
+        Args: {
+          p_body: string
+          p_category: string
+          p_conversation_id: string
+          p_created_at: string
+          p_external_message_id: string
+          p_notification_body: string
+          p_tags: string[]
+          p_tenant_id: string
+          p_urgent: boolean
+        }
+        Returns: boolean
+      }
       move_client_stage: {
         Args: {
           p_client_id: string
@@ -1374,6 +1392,23 @@ export type Database = {
           p_next_status: string
         }
         Returns: Database["public"]["Tables"]["cases"]["Row"]
+      }
+      provision_tenant_member: {
+        Args: {
+          p_email: string
+          p_full_name: string
+          p_phone: string
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      replace_tenant_member_role: {
+        Args: {
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_user_id: string
+        }
+        Returns: undefined
       }
       metrics_agenda: { Args: never; Returns: Json }
       metrics_comunicacoes: { Args: never; Returns: Json }

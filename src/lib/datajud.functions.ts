@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { validateCNJ, type CNJValidation } from "@/lib/cnj";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { requireActiveSubscription, requireServerRole } from "@/lib/authorization.server";
 
 export { validateCNJ };
 export type { CNJValidation };
@@ -215,6 +216,8 @@ export const lookupDatajud = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((d) => z.object({ numero: z.string().min(1).max(64) }).parse(d))
   .handler(async ({ data, context }) => {
+    await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer"]);
+    await requireActiveSubscription(context);
     await enforceRateLimit(context.supabase, "datajud_lookup");
     return fetchFromDataJud(data.numero);
   });
@@ -225,6 +228,8 @@ export const syncCaseMovements = createServerFn({ method: "POST" })
   .validator((d) => z.object({ caseId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer"]);
+    await requireActiveSubscription(context);
     await enforceRateLimit(supabase, "datajud_sync");
     const { data: caseRow, error: caseErr } = await supabase
       .from("cases")

@@ -29,6 +29,7 @@ import { useCases } from "@/hooks/use-cases";
 import { CaseKanban } from "@/components/processos/case-kanban";
 import type { Tables } from "@/integrations/supabase/types";
 import type { Case, Client, Deadline, Entry, Movement, Party } from "@/hooks/use-cases";
+import { safeDocumentFileName, validateDocumentFile } from "@/lib/document-upload";
 
 function maskCNJ(raw: string): string {
   const d = (raw ?? "").replace(/\D/g, "").slice(0, 20);
@@ -195,9 +196,9 @@ function Processos() {
     }
   };
 
-  const removeCase = async (id: string) => {
+  const removeCase = async (caseItem: Case) => {
     try {
-      await remove.mutateAsync(id);
+      await remove.mutateAsync(caseItem);
     } catch {
       // toast handled in hook
     }
@@ -278,14 +279,18 @@ function Processos() {
 
   async function uploadCaseDocument(file: File) {
     if (!profile?.tenant_id || !selected) return;
+    const validationError = validateDocumentFile(file);
+    if (validationError) { toast.error(validationError); return; }
     setUploadingDoc(true);
+    let uploadedPath: string | null = null;
     try {
-      const fileName = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+      const fileName = `${crypto.randomUUID()}-${safeDocumentFileName(file.name)}`;
       const filePath = `${profile.tenant_id}/${selected.id}/${fileName}`;
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(filePath, file, { cacheControl: "3600", upsert: false });
       if (uploadError) throw uploadError;
+      uploadedPath = filePath;
 
       const { error: insertError } = await supabase.from("documents").insert({
         tenant_id: profile.tenant_id,
@@ -298,13 +303,18 @@ function Processos() {
         document_type: docType,
         description: docDescription || null,
       });
-      if (insertError) throw insertError;
+      if (insertError) {
+        await supabase.storage.from("documents").remove([filePath]);
+        uploadedPath = null;
+        throw insertError;
+      }
 
       toast.success("Documento carregado com sucesso");
       setDocDescription("");
       setDocType("other");
       await loadCaseDocuments(selected.id);
     } catch (err: unknown) {
+      if (uploadedPath) await supabase.storage.from("documents").remove([uploadedPath]);
       const message = err instanceof Error ? err.message : "Falha ao enviar documento";
       toast.error(message);
     } finally {
@@ -572,7 +582,7 @@ function Processos() {
                     <td className="px-4 py-3"><Badge variant="outline" className={`${stage.text} ${stage.ring}`}>{stage.label}</Badge></td>
                     <td className="px-4 py-3 text-emerald-300 tabular-nums">{success}%</td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">{formatBRL(c.value_cents ?? 0)}</td>
-                    <td className="px-4 py-3 text-right"><Button size="icon" variant="ghost" className="size-7" onClick={e => { e.stopPropagation(); removeCase(c.id); }}><Trash2 className="size-3.5" /></Button></td>
+                    <td className="px-4 py-3 text-right"><Button size="icon" variant="ghost" className="size-7" onClick={e => { e.stopPropagation(); removeCase(c); }}><Trash2 className="size-3.5" /></Button></td>
                   </tr>
                 );
               })}
@@ -732,7 +742,7 @@ function Processos() {
                         </div>
                       </div>
                       <Input placeholder="Descrição opcional" value={docDescription} onChange={e => setDocDescription(e.target.value)} />
-                      <input type="file" ref={docFileInputRef} className="hidden" onChange={handleDocFileChange} />
+            <input type="file" ref={docFileInputRef} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.png,.jpg,.jpeg" onChange={handleDocFileChange} />
                     </div>
                     {docsLoading ? (
                       <div className="glass rounded-xl p-4 text-sm text-muted-foreground">Carregando documentos...</div>

@@ -35,7 +35,6 @@ import {
   type FinRow, type DreConfig,
 } from "@/lib/metrics";
 import { toast } from "sonner";
-import * as XLSX from "xlsx-js-style";
 
 export const Route = createFileRoute("/_authenticated/financeiro")({
   head: () => ({ meta: [{ title: "Financeiro — Advora" }] }),
@@ -302,100 +301,6 @@ function Financeiro() {
     ]);
   };
 
-  const exportExcel = () => {
-    if (!filtered.length) {
-      toast.error("Não há lançamentos no filtro atual para exportar.");
-      return;
-    }
-
-    const asDate = (value: string | null | undefined) => {
-      if (!value) return undefined;
-      const date = value.length === 10 ? new Date(`${value}T00:00:00`) : new Date(value);
-      return Number.isNaN(date.getTime()) ? undefined : date;
-    };
-    const rows = filtered.map((entry) => ({
-      "Descrição": entry.description,
-      "Tipo": entry.kind === "receita" ? "Receita" : "Despesa",
-      "Status": entry.status,
-      "Categoria": entry.category ?? "",
-      "Cliente": entry.clients?.name ?? clientMap.get(entry.client_id ?? "")?.name ?? "",
-      "Valor (R$)": (entry.amount_cents ?? 0) / 100,
-      "Valor pago (R$)": (entry.paid_amount_cents ?? 0) / 100,
-      "Vencimento": asDate(entry.due_date),
-      "Pagamento": asDate(entry.paid_at),
-      "Método de pagamento": entry.payment_method ?? "",
-      "Conciliação": entry.settlement_status ?? "",
-    }));
-
-    const brand = "3B2DC7";
-    const navy = "111827";
-    const border: NonNullable<XLSX.CellStyle["border"]>["top"] = {
-      style: "thin",
-      color: { rgb: "D1D5DB" },
-    };
-    const titleStyle: XLSX.CellStyle = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 18 }, fill: { fgColor: { rgb: navy } }, alignment: { vertical: "center" } };
-    const subTitleStyle: XLSX.CellStyle = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 }, fill: { fgColor: { rgb: brand } }, alignment: { vertical: "center" } };
-    const headerStyle: XLSX.CellStyle = { font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 }, fill: { fgColor: { rgb: brand } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: { top: border, bottom: border, left: border, right: border } };
-    const sheet = XLSX.utils.aoa_to_sheet([]);
-    XLSX.utils.sheet_add_json(sheet, rows, {
-      cellDates: true,
-      dateNF: "dd/mm/yyyy",
-      origin: "A7",
-    });
-    sheet["A1"] = { t: "s", v: "ADVORA LEGAL OS — RELATÓRIO FINANCEIRO", s: titleStyle };
-    sheet["A2"] = { t: "s", v: `Período: ${PERIOD_LABELS[filters.period]}  •  Emitido em ${new Date().toLocaleDateString("pt-BR")}`, s: subTitleStyle };
-    sheet["!merges"] = [XLSX.utils.decode_range("A1:K1"), XLSX.utils.decode_range("A2:K2")];
-    sheet["!rows"] = [{ hpt: 28 }, { hpt: 20 }];
-    const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1");
-    for (let column = range.s.c; column <= range.e.c; column += 1) {
-      const header = sheet[XLSX.utils.encode_cell({ r: 6, c: column })];
-      if (header) header.s = headerStyle;
-    }
-    for (let row = range.s.r + 1; row <= range.e.r; row += 1) {
-      for (const column of [5, 6]) {
-        const cell = sheet[XLSX.utils.encode_cell({ r: row, c: column })];
-        if (cell) cell.z = 'R$ #,##0.00';
-      }
-      for (const column of [7, 8]) {
-        const cell = sheet[XLSX.utils.encode_cell({ r: row, c: column })];
-        if (cell) cell.z = "dd/mm/yyyy";
-      }
-    }
-    sheet["!cols"] = [
-      { wch: 36 }, { wch: 13 }, { wch: 14 }, { wch: 20 }, { wch: 26 },
-      { wch: 15 }, { wch: 17 }, { wch: 14 }, { wch: 14 }, { wch: 22 }, { wch: 16 },
-    ];
-    sheet["!autofilter"] = { ref: XLSX.utils.encode_range(range) };
-
-    const summary = XLSX.utils.aoa_to_sheet([
-      ["ADVORA LEGAL OS — RESUMO EXECUTIVO"],
-      [`Período: ${PERIOD_LABELS[filters.period]}`],
-      [],
-      ["Receita do período", "Despesas do período", "Resultado", "A receber"],
-      [kpis.revMonth / 100, kpis.expMonth / 100, kpis.profitMonth / 100, kpis.openReceivable / 100],
-      [],
-      ["DRE", "Valor (R$)"],
-      ["Receita bruta", dre.receitaBruta / 100],
-      ["Deduções", dre.deducoes / 100],
-      ["Receita líquida", dre.receitaLiquida / 100],
-      ["Resultado do período", dre.resultado / 100],
-    ]);
-    summary["A1"].s = titleStyle;
-    summary["A2"].s = subTitleStyle;
-    summary["!merges"] = [XLSX.utils.decode_range("A1:D1"), XLSX.utils.decode_range("A2:D2")];
-    for (const address of ["A4", "B4", "C4", "D4", "A7", "B7"]) summary[address].s = headerStyle;
-    for (const address of ["A5", "B5", "C5", "D5", "B8", "B9", "B10", "B11"]) {
-      if (summary[address]) summary[address].z = 'R$ #,##0.00';
-    }
-    summary["!cols"] = [{ wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, summary, "Resumo executivo");
-    XLSX.utils.book_append_sheet(workbook, sheet, "Lançamentos");
-    XLSX.writeFile(workbook, `advora-financeiro-${new Date().toISOString().slice(0, 10)}.xlsx`, { compression: true });
-    toast.success(`${rows.length} lançamento(s) exportado(s) para Excel.`);
-  };
-
   const exportReconciled = () => {
     const rows = filtered.filter((e) => e.settlement_status === "conciliado" || (e.settlement_status === "confirmado" && e.status === "pago"));
     downloadCsv("conciliados", [
@@ -481,8 +386,7 @@ function Financeiro() {
                 <Button variant="outline" size="sm"><Download className="size-4 mr-1.5" /> Exportar</Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-56 p-1">
-                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2 font-medium" onClick={exportExcel}><FileDown className="size-3.5" /> Planilha Excel (.xlsx)</button>
-                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportCSV}><FileDown className="size-3.5" /> Todos os lançamentos</button>
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2 font-medium" onClick={exportCSV}><FileDown className="size-3.5" /> Todos os lançamentos (.csv)</button>
                 <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportReconciled}><FileDown className="size-3.5" /> Somente conciliados</button>
                 <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportDre}><FileDown className="size-3.5" /> DRE do período</button>
                 <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportCashFlow}><FileDown className="size-3.5" /> Fluxo de caixa</button>

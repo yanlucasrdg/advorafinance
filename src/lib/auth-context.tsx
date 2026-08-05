@@ -1,6 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  canAccessModule,
+  normalizeRoles,
+  primaryRole,
+  type AppModule,
+  type AppRole,
+} from "@/lib/permissions";
 
 type Profile = {
   id: string;
@@ -26,7 +33,10 @@ type AuthCtx = {
   session: Session | null;
   profile: Profile | null;
   branding: TenantBranding | null;
+  roles: AppRole[];
+  primaryRole: AppRole | null;
   loading: boolean;
+  can: (module: AppModule) => boolean;
   refreshProfile: () => Promise<void>;
   refreshBranding: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -39,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [branding, setBranding] = useState<TenantBranding | null>(null);
+  const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadBranding = useCallback(async (tenantId: string) => {
@@ -51,12 +62,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadProfile = useCallback(async (uid: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, tenant_id, full_name, email, avatar_url, locale, theme")
-      .eq("id", uid)
-      .maybeSingle();
+    const [{ data }, { data: roleRows }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, tenant_id, full_name, email, avatar_url, locale, theme")
+        .eq("id", uid)
+        .maybeSingle(),
+      supabase.from("user_roles").select("role").eq("user_id", uid),
+    ]);
     const nextProfile = data as Profile | null;
+    setRoles(normalizeRoles((roleRows ?? []).map((row) => row.role)));
     setProfile(nextProfile);
     if (nextProfile?.tenant_id) await loadBranding(nextProfile.tenant_id);
     else setBranding(null);
@@ -71,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setProfile(null);
         setBranding(null);
+        setRoles([]);
       }
     });
 
@@ -96,10 +112,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setProfile(null);
     setBranding(null);
+    setRoles([]);
   }, []);
 
+  const can = useCallback((module: AppModule) => canAccessModule(roles, module), [roles]);
+
   return (
-    <Ctx.Provider value={{ user, session, profile, branding, loading, refreshProfile, refreshBranding, signOut }}>
+    <Ctx.Provider value={{ user, session, profile, branding, roles, primaryRole: primaryRole(roles), loading, can, refreshProfile, refreshBranding, signOut }}>
       {children}
     </Ctx.Provider>
   );

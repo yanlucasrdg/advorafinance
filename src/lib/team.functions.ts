@@ -43,7 +43,7 @@ export const inviteTeamMember = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data) => InviteSchema.parse(data))
   .handler(async ({ data, context }) => {
-    const tenantId = await requireOwner(context);
+    await requireOwner(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: invited, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(data.email, {
@@ -52,26 +52,17 @@ export const inviteTeamMember = createServerFn({ method: "POST" })
     if (inviteError || !invited.user) throw new Error(inviteError?.message ?? "Não foi possível enviar o convite.");
 
     const userId = invited.user.id;
-    const { error: profileError } = await supabaseAdmin.from("profiles").upsert({
-      id: userId,
-      tenant_id: tenantId,
-      full_name: data.fullName,
-      email: data.email,
-      phone: data.phone || null,
-    } as never);
-    if (profileError) throw new Error(profileError.message);
-
-    const { error: removeRolesError } = await supabaseAdmin
-      .from("user_roles")
-      .delete()
-      .eq("tenant_id", tenantId)
-      .eq("user_id", userId);
-    if (removeRolesError) throw new Error(removeRolesError.message);
-
-    const { error: insertRoleError } = await supabaseAdmin
-      .from("user_roles")
-      .insert({ user_id: userId, tenant_id: tenantId, role: data.role } as never);
-    if (insertRoleError) throw new Error(insertRoleError.message);
+    const { error: provisionError } = await context.supabase.rpc("provision_tenant_member", {
+      p_user_id: userId,
+      p_full_name: data.fullName,
+      p_email: data.email,
+      p_phone: data.phone ?? "",
+      p_role: data.role,
+    });
+    if (provisionError) {
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      throw new Error(provisionError.message);
+    }
 
     return { userId };
   });
@@ -80,31 +71,12 @@ export const changeTeamMemberRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data) => ChangeRoleSchema.parse(data))
   .handler(async ({ data, context }) => {
-    const tenantId = await requireOwner(context);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-    const { data: currentRoles, error: currentRoleError } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("tenant_id", tenantId)
-      .eq("user_id", data.userId);
-    if (currentRoleError) throw new Error(currentRoleError.message);
-    if (!currentRoles?.length) throw new Error("Usuário não pertence a este escritório.");
-    if (currentRoles.some((entry: { role: string }) => entry.role === "owner" || entry.role === "master_admin")) {
-      throw new Error("A função de um proprietário não pode ser alterada nesta tela.");
-    }
-
-    const { error: removeRolesError } = await supabaseAdmin
-      .from("user_roles")
-      .delete()
-      .eq("tenant_id", tenantId)
-      .eq("user_id", data.userId);
-    if (removeRolesError) throw new Error(removeRolesError.message);
-
-    const { error: insertRoleError } = await supabaseAdmin
-      .from("user_roles")
-      .insert({ user_id: data.userId, tenant_id: tenantId, role: data.role } as never);
-    if (insertRoleError) throw new Error(insertRoleError.message);
+    await requireOwner(context);
+    const { error } = await context.supabase.rpc("replace_tenant_member_role", {
+      p_user_id: data.userId,
+      p_role: data.role,
+    });
+    if (error) throw new Error(error.message);
 
     return { ok: true };
   });

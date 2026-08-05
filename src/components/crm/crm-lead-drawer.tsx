@@ -47,6 +47,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { metaWhatsAppSendText } from "@/lib/meta-whatsapp.functions";
 import { askCopilot } from "@/lib/copilot.functions";
 import type { ClientCardData } from "./crm-kanban-card";
+import { safeDocumentFileName, validateDocumentFile } from "@/lib/document-upload";
 
 type CrmLeadDrawerProps = {
   client: ClientCardData | null;
@@ -378,16 +379,20 @@ export function CrmLeadDrawer({
 
   async function uploadClientDocument(file: File) {
     if (!profile?.tenant_id || !client) return;
+    const validationError = validateDocumentFile(file);
+    if (validationError) { toast.error(validationError); return; }
     const targetClient = client;
     const requestedSession = getCurrentSession();
     setUploadingDoc(true);
+    let uploadedPath: string | null = null;
     try {
-      const fileName = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+      const fileName = `${crypto.randomUUID()}-${safeDocumentFileName(file.name)}`;
       const filePath = `${profile.tenant_id}/clients/${targetClient.id}/${fileName}`;
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(filePath, file, { cacheControl: "3600", upsert: false });
       if (uploadError) throw uploadError;
+      uploadedPath = filePath;
 
       const { error: insertError } = await supabase.from("documents").insert({
         tenant_id: profile.tenant_id,
@@ -400,13 +405,18 @@ export function CrmLeadDrawer({
         document_type: docType,
         description: docDescription || null,
       });
-      if (insertError) throw insertError;
+      if (insertError) {
+        await supabase.storage.from("documents").remove([filePath]);
+        uploadedPath = null;
+        throw insertError;
+      }
       if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
       setDocDescription("");
       setDocType("other");
       await loadClientDocuments(targetClient.id, requestedSession);
       toast.success("Documento enviado");
     } catch (err: unknown) {
+      if (uploadedPath) await supabase.storage.from("documents").remove([uploadedPath]);
       if (isDrawerSessionCurrent(requestedSession, getCurrentSession())) {
         toast.error("Não foi possível enviar o documento.");
       }
@@ -977,7 +987,8 @@ export function CrmLeadDrawer({
               />
               <input
                 ref={fileRef}
-                type="file"
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.png,.jpg,.jpeg"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];

@@ -84,7 +84,9 @@ export async function handleKirvanoWebhook(request: Request, bindings: Bindings)
 
   let payload: KirvanoPayload;
   try {
-    payload = await request.json() as KirvanoPayload;
+    const rawBody = await request.text();
+    if (new TextEncoder().encode(rawBody).byteLength > 64_000) return new Response("Payload too large", { status: 413 });
+    payload = JSON.parse(rawBody) as KirvanoPayload;
   } catch {
     return new Response("Invalid JSON", { status: 400 });
   }
@@ -117,6 +119,22 @@ export async function handleKirvanoWebhook(request: Request, bindings: Bindings)
     return Response.json({ received: true, ignored: true });
   }
 
+  const incomingEventAt = normalizeDate(payload.created_at) ?? new Date().toISOString();
+  const { data: currentSubscription } = await admin
+    .from("tenant_subscriptions")
+    .select("last_event_at")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (currentSubscription?.last_event_at && new Date(currentSubscription.last_event_at) > new Date(incomingEventAt)) {
+    await admin.from("billing_webhook_events").update({
+      tenant_id: tenantId,
+      processing_status: "ignored",
+      processed_at: new Date().toISOString(),
+      error_message: "stale_event",
+    }).eq("id", inserted.id);
+    return Response.json({ received: true, stale: true });
+  }
+
   const product = payload.products?.find((entry) => !entry.is_order_bump);
   const nextCharge = normalizeDate(payload.plan?.next_charge_date);
   const now = new Date().toISOString();
@@ -141,7 +159,7 @@ export async function handleKirvanoWebhook(request: Request, bindings: Bindings)
     current_period_end: nextCharge,
     cancel_at_period_end: cancelAtPeriodEnd,
     grace_ends_at: status === "past_due" ? new Date(Date.now() + 3 * 86_400_000).toISOString() : null,
-    last_event_at: normalizeDate(payload.created_at) ?? now,
+    last_event_at: incomingEventAt,
     updated_at: now,
   }, { onConflict: "tenant_id" });
 
@@ -155,4 +173,3 @@ export async function handleKirvanoWebhook(request: Request, bindings: Bindings)
   await admin.from("billing_webhook_events").update({ tenant_id: tenantId, processing_status: "processed", processed_at: now }).eq("id", inserted.id);
   return Response.json({ received: true });
 }
-

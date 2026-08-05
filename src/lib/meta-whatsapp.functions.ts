@@ -3,6 +3,7 @@ import { getServerEnv } from "@/integrations/supabase/runtime-env.server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { encryptMetaAccessToken, decryptMetaAccessToken } from "@/lib/meta-whatsapp-credentials.server";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { requireActiveSubscription, requireServerRole } from "@/lib/authorization.server";
 
 type MetaChannel = { id: string; tenantId: string; phoneNumberId: string; accessToken: string };
 type MetaConnectionRow = { instance_id: string; tenant_id: string; phone_number_id: string; business_account_id: string; access_token_ciphertext: string; status: string; connected_at: string | null; last_error: string | null };
@@ -79,6 +80,7 @@ async function findOrCreateConversation(channel: MetaChannel, phone: string, cli
 export const metaWhatsAppStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireServerRole(context, ["master_admin", "owner", "admin"]);
     const tenantId = await tenantForUser(context.userId);
     const config = await configuredEmbeddedSignup();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -99,6 +101,8 @@ export const metaWhatsAppCompleteEmbeddedSignup = createServerFn({ method: "POST
     return { code, businessAccountId, phoneNumberId, displayPhoneNumber };
   })
   .handler(async ({ data, context }) => {
+    await requireServerRole(context, ["master_admin", "owner", "admin"]);
+    await requireActiveSubscription(context);
     const tenantId = await tenantForUser(context.userId);
     const { accessToken, expiresIn } = await exchangeEmbeddedSignupCode(data.code);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -141,6 +145,8 @@ export const metaWhatsAppSendText = createServerFn({ method: "POST" })
     return { phone, message, clientId: typeof input?.clientId === "string" && input.clientId.length > 0 ? input.clientId : undefined };
   })
   .handler(async ({ data, context }) => {
+    await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer", "secretary"]);
+    await requireActiveSubscription(context);
     await enforceRateLimit(context.supabase, "zapi_send_text");
     const channel = await loadMetaChannel(context.userId);
     const response = await fetch(`https://graph.facebook.com/v25.0/${channel.phoneNumberId}/messages`, {

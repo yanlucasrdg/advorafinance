@@ -215,15 +215,22 @@ export function useCases() {
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("cases").delete().eq("id", id);
+    mutationFn: async (caseItem: Pick<Case, "id" | "status_version">) => {
+      const { error } = await supabase.rpc("soft_delete_case", {
+        p_case_id: caseItem.id,
+        p_expected_version: caseItem.status_version,
+      });
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cases", tenantId] });
       toast.success("Processo removido");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => toast.error(
+      /CASE_STATUS_CONFLICT/i.test(err.message)
+        ? "Este processo foi alterado por outra pessoa. Atualize a carteira e tente novamente."
+        : "Não foi possível remover o processo.",
+    ),
   });
 
   return {

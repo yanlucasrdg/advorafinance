@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { getServerEnv } from "@/integrations/supabase/runtime-env.server";
+import { requireActiveSubscription, requireServerRole } from "@/lib/authorization.server";
 
 const Schema = z.object({ prompt: z.string().min(1).max(4000) });
 
@@ -10,12 +11,7 @@ export const clearCopilotHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("tenant_id")
-      .eq("id", userId)
-      .maybeSingle();
-    if (profileError || !profile?.tenant_id) throw new Error("Não foi possível identificar o escritório atual.");
+    const { tenantId } = await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer"]);
 
     // A exclusão usa a credencial de servidor depois de confirmar a sessão e
     // o tenant do usuário. Assim, uma política RLS sem DELETE não faz a tela
@@ -24,7 +20,8 @@ export const clearCopilotHistory = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("ai_messages")
       .delete()
-      .eq("tenant_id", profile.tenant_id);
+      .eq("tenant_id", tenantId)
+      .eq("user_id", userId);
     if (error) throw new Error("Não foi possível limpar o histórico agora.");
     return { cleared: true };
   });
@@ -34,6 +31,8 @@ export const askCopilot = createServerFn({ method: "POST" })
   .validator((d) => Schema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer"]);
+    await requireActiveSubscription(context);
     await enforceRateLimit(supabase, "copilot_prompt");
 
     // contexto do tenant: pega tenant_id e amostras pequenas

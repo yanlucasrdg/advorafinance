@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { requireActiveSubscription, requireServerRole } from "@/lib/authorization.server";
 
 type ZapiStatus = {
   connected: boolean;
@@ -108,6 +109,7 @@ export const zapiStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<ZapiStatus> => {
     try {
+      await requireServerRole(context, ["master_admin", "owner", "admin"]);
       await enforceRateLimit(context.supabase, "zapi_status");
       const creds = await loadTenantCreds(context.userId);
       const data = await zapiFetch<{
@@ -138,6 +140,7 @@ export const zapiQrCode = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{ image: string | null; error?: string }> => {
     try {
+      await requireServerRole(context, ["master_admin", "owner", "admin"]);
       await enforceRateLimit(context.supabase, "zapi_qr_code");
       const creds = await loadTenantCreds(context.userId);
       const data = await zapiFetch<{ value?: string }>(creds, "/qr-code/image");
@@ -157,6 +160,7 @@ export const zapiDevice = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<ZapiDevice | null> => {
     try {
+      await requireServerRole(context, ["master_admin", "owner", "admin"]);
       await enforceRateLimit(context.supabase, "zapi_device");
       const creds = await loadTenantCreds(context.userId);
       return await zapiFetch<ZapiDevice>(creds, "/device");
@@ -168,6 +172,7 @@ export const zapiDevice = createServerFn({ method: "GET" })
 export const zapiDisconnect = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireServerRole(context, ["master_admin", "owner", "admin"]);
     await enforceRateLimit(context.supabase, "zapi_connection_action");
     const creds = await loadTenantCreds(context.userId);
     await zapiFetch(creds, "/disconnect");
@@ -177,6 +182,7 @@ export const zapiDisconnect = createServerFn({ method: "POST" })
 export const zapiRestart = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await requireServerRole(context, ["master_admin", "owner", "admin"]);
     await enforceRateLimit(context.supabase, "zapi_connection_action");
     const creds = await loadTenantCreds(context.userId);
     await zapiFetch(creds, "/restart");
@@ -193,6 +199,8 @@ export const zapiSendText = createServerFn({ method: "POST" })
     return { phone, message };
   })
   .handler(async ({ data, context }) => {
+    await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer", "secretary"]);
+    await requireActiveSubscription(context);
     await enforceRateLimit(context.supabase, "zapi_send_text");
     const creds = await loadTenantCreds(context.userId);
     return await zapiFetch<{ zaapId?: string; messageId?: string; id?: string }>(

@@ -430,27 +430,11 @@ function Comunicacoes() {
       // Primeiro atendimento: uma pendência de SLA é criada junto com o lead.
       // Isso dá visibilidade na Agenda sem precisar depender de memória ou planilhas.
       if (clientId) {
-        const dueAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-        const { error: deadlineError } = await supabase.from("deadlines").insert({
-          tenant_id: profile.tenant_id,
-          client_id: clientId,
-          title: `Responder novo contato: ${newContact.name.trim()}`,
-          due_at: dueAt,
-          kind: "primeiro_atendimento",
-          priority: "high",
-          notes: "Criado automaticamente ao iniciar uma conversa pelo módulo de Comunicações.",
+        const { error: followupError } = await supabase.rpc("create_intake_followup", {
+          p_client_id: clientId,
+          p_contact_name: newContact.name.trim(),
         });
-        if (deadlineError) console.warn("Não foi possível criar SLA do novo contato", deadlineError.message);
-
-        await supabase.from("notifications").insert({
-          tenant_id: profile.tenant_id,
-          user_id: user?.id ?? null,
-          kind: "novo_lead",
-          severity: "info",
-          title: "Novo contato em triagem",
-          body: `${newContact.name.trim()} precisa de uma primeira resposta em até 15 minutos.`,
-          link_action: "/comunicacoes",
-        });
+        if (followupError) throw new Error(`Contato criado, mas o SLA não pôde ser registrado: ${followupError.message}`);
       }
 
       if (newContact.message.trim() && data) {

@@ -93,12 +93,13 @@ function qualifyInboundMessage(body: string): Qualification {
 async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBindings) {
   const supabaseUrl = binding(env, "SUPABASE_URL");
   const serviceRole = binding(env, "SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceRole) return;
+  if (!supabaseUrl || !serviceRole) throw new Error("META_PERSISTENCE_NOT_CONFIGURED");
 
   const { createClient } = await import("@supabase/supabase-js");
   const supabase = createClient(supabaseUrl, serviceRole, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  let persistenceFailures = 0;
 
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
@@ -111,12 +112,14 @@ async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBind
         .select("id, tenant_id")
         .eq("external_instance_id", phoneNumberId)
         .maybeSingle();
-      if (instanceError || !instance) continue;
+      if (instanceError) { persistenceFailures += 1; continue; }
+      if (!instance) continue;
 
       for (const status of value?.statuses ?? []) {
         if (!status.id || !status.status) continue;
-        await supabase.from("whatsapp_messages").update({ status: status.status })
+        const { error: statusError } = await supabase.from("whatsapp_messages").update({ status: status.status })
           .eq("tenant_id", instance.tenant_id).eq("external_message_id", status.id);
+        if (statusError) persistenceFailures += 1;
       }
 
       const contacts = new Map((value?.contacts ?? []).map((contact) => [contact.wa_id, contact.profile?.name]));
@@ -131,7 +134,7 @@ async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBind
           .eq("instance_id", instance.id)
           .eq("contact_phone", phone)
           .maybeSingle();
-        if (existingConversationError) continue;
+        if (existingConversationError) { persistenceFailures += 1; continue; }
 
         const { data: conversation, error: conversationError } = existingConversation
           ? { data: existingConversation, error: null }
@@ -144,51 +147,38 @@ async function persistWebhookEvents(payload: MetaWebhookPayload, env: WorkerBind
             assignment_status: "new",
             category: "triagem",
           }).select("id, tags, assignment_status, category").single();
-        if (conversationError || !conversation) continue;
+        if (conversationError || !conversation) { persistenceFailures += 1; continue; }
 
         const body = messageBody(message);
-        const { error: messageError } = await supabase.from("whatsapp_messages").insert({
-          tenant_id: instance.tenant_id,
-          conversation_id: conversation.id,
-          direction: "inbound",
-          body,
-          status: "received",
-          external_message_id: message.id,
-          created_at: message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : new Date().toISOString(),
+        const qualification = qualifyInboundMessage(body);
+        const knownQueues = ["Triagem", "Jurídico", "Financeiro", "Secretaria"];
+        const currentTags = conversation.tags ?? [];
+        const manuallyRouted = conversation.category && conversation.category !== "triagem";
+        const category = manuallyRouted ? conversation.category as ServiceQueue : qualification.queue;
+        const nextTags = Array.from(new Set([
+          ...currentTags.filter((tag: string) => !knownQueues.includes(tag)),
+          ...(qualification.urgent ? ["Urgente"] : []),
+        ]));
+        const createdAt = message.timestamp
+          ? new Date(Number(message.timestamp) * 1000).toISOString()
+          : new Date().toISOString();
+        const { error: ingestError } = await supabase.rpc("ingest_meta_whatsapp_message", {
+          p_tenant_id: instance.tenant_id,
+          p_conversation_id: conversation.id,
+          p_body: body,
+          p_external_message_id: message.id,
+          p_created_at: createdAt,
+          p_tags: nextTags,
+          p_category: category,
+          p_urgent: qualification.urgent,
+          p_notification_body: `A conversa foi encaminhada para ${QUEUE_LABELS[category]}. Revise a mensagem e assuma o atendimento.`,
         });
-
-        // The unique index makes retries a no-op; only a newly stored message
-        // updates the inbox preview and unread count.
-        if (!messageError) {
-          const qualification = qualifyInboundMessage(body);
-          const knownQueues = ["Triagem", "Jurídico", "Financeiro", "Secretaria"];
-          const currentTags = conversation.tags ?? [];
-          const manuallyRouted = conversation.category && conversation.category !== "triagem";
-          const nextTags = Array.from(new Set([
-            ...currentTags.filter((tag: string) => !knownQueues.includes(tag)),
-            ...(qualification.urgent ? ["Urgente"] : []),
-          ]));
-          await supabase.from("whatsapp_conversations").update({
-            last_message: body,
-            last_message_at: message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : new Date().toISOString(),
-            unread_count: 1,
-            tags: nextTags,
-            category: manuallyRouted ? conversation.category : qualification.queue,
-          }).eq("id", conversation.id);
-
-          if (qualification.urgent) {
-            await supabase.from("notifications").insert({
-              tenant_id: instance.tenant_id,
-              kind: "atendimento_urgente",
-              severity: "warning",
-              title: "Novo atendimento com indício de urgência",
-              body: `A conversa foi encaminhada para ${QUEUE_LABELS[manuallyRouted ? conversation.category as ServiceQueue : qualification.queue]}. Revise a mensagem e assuma o atendimento.`,
-              link_action: "/comunicacoes",
-            });
-          }
-        }
+        if (ingestError) persistenceFailures += 1;
       }
     }
+  }
+  if (persistenceFailures > 0) {
+    throw new Error(`META_PERSISTENCE_FAILED:${persistenceFailures}`);
   }
 }
 
@@ -216,7 +206,11 @@ export async function handleMetaWhatsAppWebhook(request: Request, env: WorkerBin
   const appSecret = binding(env, "META_APP_SECRET");
   if (!appSecret) return new Response("Webhook not configured", { status: 503 });
 
+  const declaredLength = Number(request.headers.get("content-length") ?? 0);
+  if (declaredLength > 1_000_000) return new Response("Payload too large", { status: 413 });
+
   const body = await request.text();
+  if (encoder.encode(body).byteLength > 1_000_000) return new Response("Payload too large", { status: 413 });
   const signature = request.headers.get("x-hub-signature-256");
   console.log("Meta WhatsApp webhook request", { hasSignature: Boolean(signature), bytes: body.length });
   if (!(await validMetaSignature(body, signature, appSecret))) {
@@ -238,9 +232,8 @@ export async function handleMetaWhatsAppWebhook(request: Request, env: WorkerBin
   try {
     await persistWebhookEvents(payload, env);
   } catch (error) {
-    // Meta retries non-2xx responses. We acknowledge a valid delivery and log
-    // the server-side persistence error without exposing request contents.
     console.error("Failed to persist Meta WhatsApp webhook", error);
+    return new Response("Persistence failed", { status: 500 });
   }
 
   return new Response("EVENT_RECEIVED", { status: 200 });

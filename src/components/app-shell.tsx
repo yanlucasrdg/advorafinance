@@ -29,6 +29,7 @@ import { UserMenu } from "@/components/user-menu";
 import { NotificationsPopover } from "@/components/notifications-popover";
 import { BRAND_CSS_VARIABLE_NAMES, getBrandCssVariables } from "@/lib/brand-palettes";
 import { getBillingOverview } from "@/lib/billing.functions";
+import { ROUTE_MODULES } from "@/lib/permissions";
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard };
 type NavGroup = { title: string; items: NavItem[] };
@@ -76,7 +77,7 @@ const labelByPath: Record<string, string> = Object.fromEntries(
 );
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { profile, branding, signOut } = useAuth();
+  const { profile, branding, signOut, can } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
@@ -178,7 +179,13 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-        {navGroups.map((group) => (
+        {navGroups.map((group) => ({
+          ...group,
+          items: group.items.filter((item) => {
+            const module = ROUTE_MODULES[item.to];
+            return module ? can(module) : true;
+          }),
+        })).filter((group) => group.items.length > 0).map((group) => (
           <div key={group.title}>
             <div className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
               {group.title}
