@@ -10,6 +10,14 @@ const migration = readFileSync(
   "utf8",
 );
 
+const repairMigration = readFileSync(
+  new URL(
+    "../../supabase/migrations/20260805025000_repair_client_activities.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
 describe("CRM clients data contract migration", () => {
   it("protege a mudança de etapa com versão esperada e row lock", () => {
     expect(migration).toContain("p_expected_version integer");
@@ -50,5 +58,15 @@ describe("CRM clients data contract migration", () => {
     expect(migration).toContain("ADD COLUMN IF NOT EXISTS stage_entered_at timestamptz");
     expect(migration).toContain("ALTER COLUMN stage_entered_at SET NOT NULL");
     expect(migration).toContain("NEW.stage_entered_at := now()");
+  });
+
+  it("repara ambientes sem a tabela transacional de auditoria", () => {
+    expect(repairMigration).toContain(
+      "CREATE TABLE IF NOT EXISTS public.client_activities",
+    );
+    expect(repairMigration).toContain(
+      "ALTER TABLE public.client_activities ENABLE ROW LEVEL SECURITY",
+    );
+    expect(repairMigration).toContain('CREATE POLICY "tenant insert activities"');
   });
 });
