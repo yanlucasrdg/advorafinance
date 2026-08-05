@@ -83,6 +83,66 @@ export type FinanceiroMetrics = {
   series: { bucket: string; receita: number; despesa: number }[];
 };
 
+export type FinancialReports = {
+  meta: {
+    schemaVersion: number;
+    generatedAt: string;
+    timezone: string;
+    currency: "BRL";
+    basis: "cash";
+    agingAsOf: string;
+  };
+  period: { from: string; to: string; timezone: string };
+  dre: {
+    receitaBruta: number;
+    deducoes: number;
+    receitaLiquida: number;
+    custos: number;
+    lucroBruto: number;
+    desOp: number;
+    resultadoOperacional: number;
+    desFin: number;
+    resultado: number;
+    margem: number;
+    buckets: Record<string, number>;
+    config: { applyCogs: boolean; enabledCategories: string[] };
+  };
+  cashFlow: {
+    daily: { bucket: string; entradas: number; saidas: number; saldo: number }[];
+    direct: {
+      entradasOp: number;
+      saidasOp: number;
+      caixaGerado: number;
+      byMethod: Record<string, { entradas: number; saidas: number }>;
+    };
+    indirect: {
+      available: false;
+      reason: "requires_competence_ledger";
+    };
+  };
+  aging: {
+    key: "not_due" | "days_1_30" | "days_31_60" | "days_61_90" | "days_90_plus" | "no_due_date";
+    value: number;
+    count: number;
+  }[];
+  groups: {
+    clients: FinancialReportGroup[];
+    cases: FinancialReportGroup[];
+    areas: FinancialReportGroup[];
+    responsibles: FinancialReportGroup[];
+  };
+};
+
+export type FinancialReportGroup = {
+  id?: string | null;
+  name: string;
+  value: number;
+  revenue: number;
+  expense: number;
+  net: number;
+  count: number;
+};
+
 export type DashboardMetrics = {
   financeiro: FinanceiroMetrics;
   processos: ProcessosMetrics;
@@ -318,6 +378,48 @@ export function useMetricsFinanceiro(
       const { data, error } = await supabase.rpc("metrics_financeiro", args);
       if (error) throw error;
       return data as FinanceiroMetrics;
+    },
+    staleTime: 15_000,
+  });
+}
+
+export function useFinancialReports(
+  opts: { from: string; to: string; clientId?: string; area?: string; responsible?: string },
+) {
+  const { profile } = useAuth();
+  const tenant = profile?.tenant_id ?? null;
+  const key = [
+    "financial_reports",
+    tenant,
+    opts.from,
+    opts.to,
+    opts.clientId ?? null,
+    opts.area ?? null,
+    opts.responsible ?? null,
+  ];
+  useRealtimeTables(
+    [
+      "financial_entries",
+      "financial_payments",
+      "financial_payment_reversals",
+      "cases",
+      "clients",
+      "profiles",
+      "dre_settings",
+    ],
+    [key],
+  );
+  return useQuery<FinancialReports>({
+    queryKey: key,
+    enabled: !!tenant,
+    queryFn: async () => {
+      const args: Record<string, string> = { _from: opts.from, _to: opts.to };
+      if (opts.clientId) args._client_id = opts.clientId;
+      if (opts.area) args._area = opts.area;
+      if (opts.responsible) args._responsible = opts.responsible;
+      const { data, error } = await supabase.rpc("financial_reports", args);
+      if (error) throw error;
+      return data as unknown as FinancialReports;
     },
     staleTime: 15_000,
   });

@@ -4,7 +4,7 @@
  * Correções desta versão (Auditoria 2026-07-25):
  * - Validação Zod em create, createPayment
  * - markAllNotificationsRead agora filtra por tenant_id (fix crítico)
- * - Limite de 500 registros por query
+ * - Listas operacionais limitadas a 500; relatórios usam RPCs agregadas sem truncamento
  * - Tipagens explícitas sem `as any`
  */
 
@@ -54,6 +54,10 @@ export function useFinance() {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const tenantId = profile?.tenant_id ?? null;
+  const invalidateFinancialSummaries = () => {
+    void qc.invalidateQueries({ queryKey: ["metrics_financeiro"] });
+    void qc.invalidateQueries({ queryKey: ["financial_reports"] });
+  };
 
   useRealtimeTables(
     ["financial_entries", "cases", "clients", "financial_audit_log", "notifications", "dre_settings", "financial_payments", "financial_payment_reversals"],
@@ -72,6 +76,8 @@ export function useFinance() {
     queryKey: ["fin", "entries", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
+      // Esta coleção alimenta somente tabelas/ações operacionais. Totais e
+      // relatórios são calculados no banco por financial_reports/metrics_financeiro.
       const { data, error } = await supabase
         .from("financial_entries")
         .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,paid_amount_cents,settlement_status,category,payment_method,clients(name)")
@@ -169,6 +175,7 @@ export function useFinance() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
+      invalidateFinancialSummaries();
       toast.success("Lançamento criado");
     },
     onError: (err: Error) => toast.error(err.message),
@@ -181,6 +188,7 @@ export function useFinance() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
+      invalidateFinancialSummaries();
       toast.success("Lançamento removido");
     },
     onError: (err: Error) => {
@@ -231,6 +239,7 @@ export function useFinance() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["fin", "dre_settings", tenantId] });
+      invalidateFinancialSummaries();
       toast.success("Configuração do DRE atualizada");
     },
     onError: (err: Error) => toast.error(err.message),
@@ -250,6 +259,7 @@ export function useFinance() {
       qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
       qc.invalidateQueries({ queryKey: ["fin", "audit", tenantId] });
       qc.invalidateQueries({ queryKey: ["fin", "payments", payload.entry_id] });
+      invalidateFinancialSummaries();
       toast.success("Baixa registrada");
     },
     onError: (err: Error) => toast.error(err.message),
@@ -264,6 +274,7 @@ export function useFinance() {
       qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
       qc.invalidateQueries({ queryKey: ["fin", "audit", tenantId] });
       qc.invalidateQueries({ queryKey: ["fin", "payments", entryId] });
+      invalidateFinancialSummaries();
       toast.success("Lançamento conciliado");
     },
     onError: (err: Error) => {
@@ -290,6 +301,7 @@ export function useFinance() {
       qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
       qc.invalidateQueries({ queryKey: ["fin", "audit", tenantId] });
       qc.invalidateQueries({ queryKey: ["fin", "payments", entry.id] });
+      invalidateFinancialSummaries();
       toast.success("Baixa estornada com registro de auditoria");
     },
     onError: (err: Error) => {

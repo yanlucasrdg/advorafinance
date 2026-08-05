@@ -32,10 +32,10 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useGlobalFilters, PERIOD_LABELS, type PeriodKey } from "@/lib/global-filters";
 import { useFinance, useFinancialPayments, useFinancialAuditEntry, type PaymentRow } from "@/hooks/use-finance";
-import { useMetricsFinanceiro } from "@/hooks/use-metrics";
+import { useFinancialReports, useMetricsFinanceiro, type FinancialReports } from "@/hooks/use-metrics";
+import { formatDateOnly } from "@/lib/global-filter-utils";
 import {
-  financeKpis, revenueByMonth, fmtBRL, fmtBRLCompact, pctDelta,
-  dreReport, cashFlowDirect, cashFlowIndirect, DRE_CATEGORIES, DEFAULT_DRE_CONFIG,
+  fmtBRL, fmtBRLCompact, pctDelta, DRE_CATEGORIES, DEFAULT_DRE_CONFIG,
   type FinRow, type DreConfig,
 } from "@/lib/metrics";
 import { toast } from "sonner";
@@ -69,6 +69,37 @@ const TOOLTIP_STYLE = {
 
 const PIE_COLORS = ["#5B4CF0", "#7C6BFF", "#16A34A", "#F59E0B", "#DC2626", "#0EA5E9", "#EC4899", "#94A3B8"];
 
+const EMPTY_DRE: FinancialReports["dre"] = {
+  receitaBruta: 0,
+  deducoes: 0,
+  receitaLiquida: 0,
+  custos: 0,
+  lucroBruto: 0,
+  desOp: 0,
+  resultadoOperacional: 0,
+  desFin: 0,
+  resultado: 0,
+  margem: 0,
+  buckets: {},
+  config: { applyCogs: true, enabledCategories: [] },
+};
+
+const EMPTY_DIRECT: FinancialReports["cashFlow"]["direct"] = {
+  entradasOp: 0,
+  saidasOp: 0,
+  caixaGerado: 0,
+  byMethod: {},
+};
+
+const AGING_PRESENTATION: Record<FinancialReports["aging"][number]["key"], { label: string; color: string }> = {
+  not_due: { label: "A vencer", color: "#5B4CF0" },
+  days_1_30: { label: "1–30d", color: "#F59E0B" },
+  days_31_60: { label: "31–60d", color: "#F97316" },
+  days_61_90: { label: "61–90d", color: "#EF4444" },
+  days_90_plus: { label: "90+d", color: "#B91C1C" },
+  no_due_date: { label: "Sem vencimento", color: "#94A3B8" },
+};
+
 function Financeiro() {
   const { profile } = useAuth();
   const tenantId = profile?.tenant_id ?? null;
@@ -98,10 +129,7 @@ function Financeiro() {
     reversePayment,
   } = useFinance();
 
-  const loading = isLoading;
-
   const caseMap = useMemo(() => new Map(cases.map((c) => [c.id, c])), [cases]);
-  const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients]);
 
   // Apply global filters (area/responsible/client via case join)
   const filtered = useMemo(() => {
@@ -116,32 +144,42 @@ function Financeiro() {
     });
   }, [entries, filters.area, filters.responsible, filters.clientId, caseMap]);
 
-  const kpisLocal = useMemo(() => financeKpis(filtered), [filtered]);
-  const { data: kpisRpc } = useMetricsFinanceiro({
+  const metricsQuery = useMetricsFinanceiro({
     clientId: filters.clientId || undefined,
     area: filters.area || undefined,
     responsible: filters.responsible || undefined,
   });
+  const reportsQuery = useFinancialReports({
+    from: formatDateOnly(range.start),
+    to: formatDateOnly(range.end),
+    clientId: filters.clientId || undefined,
+    area: filters.area || undefined,
+    responsible: filters.responsible || undefined,
+  });
+  const kpisRpc = metricsQuery.data;
+  const reports = reportsQuery.data;
+  const reportsError = metricsQuery.isError || reportsQuery.isError;
+  const reportEmptyMessage = (emptyMessage: string) =>
+    reportsQuery.isLoading ? "Carregando relatório..." : reportsQuery.isError ? "Relatório indisponível" : emptyMessage;
+
   const kpis = {
-    revMonth:         kpisRpc?.rev_month          ?? kpisLocal.revMonth,
-    revPrev:          kpisRpc?.rev_prev           ?? kpisLocal.revPrev,
-    revYear:          kpisRpc?.rev_year           ?? kpisLocal.revYear,
-    rev12:            kpisRpc?.rev_12             ?? kpisLocal.rev12,
-    expMonth:         kpisRpc?.exp_month          ?? kpisLocal.expMonth,
-    expYear:          kpisRpc?.exp_year           ?? kpisLocal.expYear,
-    openReceivable:   kpisRpc?.open_receivable    ?? kpisLocal.openReceivable,
-    overdueReceivable:kpisRpc?.overdue_receivable ?? kpisLocal.overdueReceivable,
-    openPayable:      kpisRpc?.open_payable       ?? kpisLocal.openPayable,
-    overduePayable:   kpisRpc?.overdue_payable    ?? kpisLocal.overduePayable,
-    delinquencyPct:   kpisRpc?.delinquency_pct    ?? kpisLocal.delinquencyPct,
-    ticketAvg:        kpisRpc?.ticket_avg         ?? kpisLocal.ticketAvg,
-    profitMonth:      kpisRpc?.profit_month       ?? kpisLocal.profitMonth,
-    profitYear:       kpisRpc?.profit_year        ?? kpisLocal.profitYear,
-    clientRev:        kpisLocal.clientRev,
+    revMonth:          kpisRpc?.rev_month ?? 0,
+    revPrev:           kpisRpc?.rev_prev ?? 0,
+    revYear:           kpisRpc?.rev_year ?? 0,
+    rev12:             kpisRpc?.rev_12 ?? 0,
+    expMonth:          kpisRpc?.exp_month ?? 0,
+    expYear:           kpisRpc?.exp_year ?? 0,
+    openReceivable:    kpisRpc?.open_receivable ?? 0,
+    overdueReceivable: kpisRpc?.overdue_receivable ?? 0,
+    openPayable:       kpisRpc?.open_payable ?? 0,
+    overduePayable:    kpisRpc?.overdue_payable ?? 0,
+    delinquencyPct:    kpisRpc?.delinquency_pct ?? 0,
+    ticketAvg:         kpisRpc?.ticket_avg ?? 0,
+    profitMonth:       kpisRpc?.profit_month ?? 0,
+    profitYear:        kpisRpc?.profit_year ?? 0,
   };
   const series12 = useMemo(() => {
-    if (!kpisRpc?.series) return revenueByMonth(filtered, 12);
-    return kpisRpc.series.map((point) => {
+    return (kpisRpc?.series ?? []).map((point) => {
       const [year, month] = point.bucket.split("-").map(Number);
       return {
         key: point.bucket,
@@ -150,89 +188,44 @@ function Financeiro() {
         despesa: point.despesa,
       };
     });
-  }, [filtered, kpisRpc?.series]);
+  }, [kpisRpc?.series]);
 
-  // Daily flow inside the selected period range
   const dailySeries = useMemo(() => {
-    const days: { key: string; label: string; entradas: number; saidas: number; saldo: number }[] = [];
-    const start = new Date(range.start); start.setHours(0, 0, 0, 0);
-    const end = new Date(range.end); end.setHours(0, 0, 0, 0);
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const k = d.toISOString().slice(0, 10);
-      days.push({ key: k, label: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), entradas: 0, saidas: 0, saldo: 0 });
-    }
-    const idx = Object.fromEntries(days.map((d, i) => [d.key, i]));
-    filtered.forEach((e) => {
-      if (e.status !== "pago" || !e.paid_at) return;
-      const k = e.paid_at.slice(0, 10);
-      const i = idx[k];
-      if (i === undefined) return;
-      if (e.kind === "receita") days[i].entradas += e.amount_cents;
-      else days[i].saidas += e.amount_cents;
-    });
-    let running = 0;
-    days.forEach((d) => { running += d.entradas - d.saidas; d.saldo = running; });
-    return days;
-  }, [filtered, range.start, range.end]);
-
-  // Aging of receivables (open)
-  const aging = useMemo(() => {
-    const buckets = [
-      { label: "A vencer", days: [-Infinity, 0], value: 0, color: "#5B4CF0" },
-      { label: "1-30d", days: [1, 30], value: 0, color: "#F59E0B" },
-      { label: "31-60d", days: [31, 60], value: 0, color: "#F97316" },
-      { label: "61-90d", days: [61, 90], value: 0, color: "#EF4444" },
-      { label: "90+d", days: [91, Infinity], value: 0, color: "#B91C1C" },
-    ];
-    const now = new Date();
-    filtered.forEach((e) => {
-      if (e.kind !== "receita" || e.status === "pago" || !e.due_date) return;
-      const diff = Math.floor((now.getTime() - new Date(e.due_date).getTime()) / 86400000);
-      const b = buckets.find((b) => diff >= b.days[0] && diff <= b.days[1]);
-      if (b) b.value += e.amount_cents;
-    });
-    return buckets;
-  }, [filtered]);
-
-  // Top clients by paid revenue
-  const topClients = useMemo(() => {
-    const arr = Object.entries(kpis.clientRev).map(([cid, v]) => ({
-      name: clientMap.get(cid)?.name ?? "—",
-      value: v,
+    return (reports?.cashFlow.daily ?? []).map((point) => ({
+      key: point.bucket,
+      label: new Date(`${point.bucket}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+      entradas: point.entradas,
+      saidas: point.saidas,
+      saldo: point.saldo,
     }));
-    arr.sort((a, b) => b.value - a.value);
-    return arr.slice(0, 6);
-  }, [kpis.clientRev, clientMap]);
+  }, [reports?.cashFlow.daily]);
 
-  // Revenue by area (via case join, paid receitas)
-  const areaSeries = useMemo(() => {
-    const m: Record<string, number> = {};
-    filtered.forEach((e) => {
-      if (e.kind !== "receita" || e.status !== "pago") return;
-      const c = e.case_id ? caseMap.get(e.case_id) : null;
-      const a = (c?.area ?? "Sem área").trim() || "Sem área";
-      m[a] = (m[a] ?? 0) + e.amount_cents;
-    });
-    return Object.entries(m).map(([area, value]) => ({ area, value })).sort((a, b) => b.value - a.value);
-  }, [filtered, caseMap]);
+  const aging = useMemo(() => {
+    return (reports?.aging ?? []).map((bucket) => ({
+      ...bucket,
+      ...AGING_PRESENTATION[bucket.key],
+    }));
+  }, [reports?.aging]);
 
-  // Revenue by responsible (attorney)
-  const respSeries = useMemo(() => {
-    const m: Record<string, number> = {};
-    filtered.forEach((e) => {
-      if (e.kind !== "receita" || e.status !== "pago") return;
-      const c = e.case_id ? caseMap.get(e.case_id) : null;
-      const r = (c?.responsible ?? "Sem responsável").trim() || "Sem responsável";
-      m[r] = (m[r] ?? 0) + e.amount_cents;
-    });
-    return Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
-  }, [filtered, caseMap]);
+  const topClients = reports?.groups.clients ?? [];
+  const caseSeries = reports?.groups.cases ?? [];
+  const areaSeries = useMemo(
+    () => (reports?.groups.areas ?? []).map((group) => ({ ...group, area: group.name })),
+    [reports?.groups.areas],
+  );
+  const respSeries = reports?.groups.responsibles ?? [];
 
   // Linear projection next 3 months (based on last 6m paid receitas)
   const projection = useMemo(() => {
-    const last6 = series12.slice(-6).map((s) => s.receita);
+    const now = new Date();
+    const currentBucket = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const completeMonths = series12.filter((point) => point.key !== currentBucket);
+    const source = completeMonths.slice(-6);
+    const last6 = source.map((s) => s.receita);
     const n = last6.length;
-    if (n < 2) return [] as { label: string; receita: number; projecao: number }[];
+    if (n < 3 || last6.filter((value) => value > 0).length < 3) {
+      return [] as { label: string; receita: number; projecao: number }[];
+    }
     const xs = last6.map((_, i) => i);
     const meanX = xs.reduce((a, b) => a + b, 0) / n;
     const meanY = last6.reduce((a, b) => a + b, 0) / n;
@@ -240,9 +233,8 @@ function Financeiro() {
     const den = xs.reduce((s, x) => s + (x - meanX) ** 2, 0) || 1;
     const slope = num / den;
     const intercept = meanY - slope * meanX;
-    const now = new Date();
     const out: { label: string; receita: number; projecao: number }[] = [];
-    series12.slice(-6).forEach((s) => out.push({ label: s.label, receita: s.receita, projecao: 0 }));
+    source.forEach((s) => out.push({ label: s.label, receita: s.receita, projecao: 0 }));
     for (let i = 1; i <= 3; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
       const label = d.toLocaleDateString("pt-BR", { month: "short" }) + `/${String(d.getFullYear()).slice(2)}`;
@@ -258,10 +250,8 @@ function Financeiro() {
     categoryMap: dreConfigData.category_map ?? {},
   } : DEFAULT_DRE_CONFIG, [dreConfigData]);
 
-  // DRE + Cash Flow (period-scoped)
-  const dre = useMemo(() => dreReport(filtered, range.start, range.end, dreConfig), [filtered, range.start, range.end, dreConfig]);
-  const cashDirect = useMemo(() => cashFlowDirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
-  const cashIndirect = useMemo(() => cashFlowIndirect(filtered, range.start, range.end), [filtered, range.start, range.end]);
+  const dre = reports?.dre ?? EMPTY_DRE;
+  const cashDirect = reports?.cashFlow.direct ?? EMPTY_DIRECT;
 
   // Recent audit log
   const unreadCount = (notifications ?? []).filter((n) => !n.read_at).length;
@@ -331,6 +321,7 @@ function Financeiro() {
   };
 
   const exportDre = () => {
+    if (!reports) return toast.error("Aguarde o carregamento do relatório agregado.");
     downloadCsv(`dre_${filters.period}`, [
       ["Linha", "Valor (R$)"],
       ["Receita bruta", (dre.receitaBruta / 100).toFixed(2).replace(".", ",")],
@@ -347,6 +338,7 @@ function Financeiro() {
   };
 
   const exportCashFlow = () => {
+    if (!reports) return toast.error("Aguarde o carregamento do relatório agregado.");
     downloadCsv(`fluxo_caixa_${filters.period}`, [
       ["Método", "Linha", "Valor (R$)"],
       ["Direto", "Entradas operacionais", (cashDirect.entradasOp / 100).toFixed(2).replace(".", ",")],
@@ -355,11 +347,7 @@ function Financeiro() {
       ...Object.entries(cashDirect.byMethod).map(([m, v]) => [
         "Direto", `Por método: ${m}`, ((v.entradas - v.saidas) / 100).toFixed(2).replace(".", ","),
       ] as (string | number)[]),
-      ["Indireto", "Resultado operacional", (cashIndirect.resultadoOperacional / 100).toFixed(2).replace(".", ",")],
-      ["Indireto", "Δ Recebíveis", (cashIndirect.variacaoRecebiveis / 100).toFixed(2).replace(".", ",")],
-      ["Indireto", "Δ Pagáveis", (cashIndirect.variacaoPagaveis / 100).toFixed(2).replace(".", ",")],
-      ["Indireto", "Caixa operacional", (cashIndirect.caixaOperacional / 100).toFixed(2).replace(".", ",")],
-      ["Indireto", "Caixa final", (cashIndirect.caixaFinal / 100).toFixed(2).replace(".", ",")],
+      ["Indireto", "Status", "Indisponível: requer ledger contábil por competência"],
     ]);
   };
 
@@ -401,8 +389,8 @@ function Financeiro() {
                 <Button variant="outline" size="sm"><Download className="size-4 mr-1.5" /> Exportar</Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-56 p-1">
-                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2 font-medium" onClick={exportCSV}><FileDown className="size-3.5" /> Todos os lançamentos (.csv)</button>
-                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportReconciled}><FileDown className="size-3.5" /> Somente conciliados</button>
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2 font-medium" onClick={exportCSV}><FileDown className="size-3.5" /> Lançamentos exibidos (.csv)</button>
+                <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportReconciled}><FileDown className="size-3.5" /> Conciliados exibidos</button>
                 <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportDre}><FileDown className="size-3.5" /> DRE do período</button>
                 <button className="w-full text-left px-3 py-2 text-xs rounded-md hover:bg-muted flex items-center gap-2" onClick={exportCashFlow}><FileDown className="size-3.5" /> Fluxo de caixa</button>
               </PopoverContent>
@@ -448,6 +436,27 @@ function Financeiro() {
           </div>
         }
       />
+
+      {reportsError && (
+        <div className="mb-5 flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+            <div>
+              <p className="text-sm font-semibold">Não foi possível carregar todos os agregados</p>
+              <p className="text-xs text-muted-foreground">
+                Os blocos disponíveis continuam íntegros; os indisponíveis não usam a lista operacional como fallback.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { void metricsQuery.refetch(); void reportsQuery.refetch(); }}
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      )}
 
       {/* Realtime + filter bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
@@ -500,8 +509,10 @@ function Financeiro() {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold truncate">{k.label}</p>
-                {loading ? (
+                {metricsQuery.isLoading ? (
                   <div className="h-6 w-20 skeleton mt-2" />
+                ) : metricsQuery.isError ? (
+                  <p className="text-[18px] font-bold text-muted-foreground mt-1">—</p>
                 ) : (
                   <p className="text-[18px] font-bold tabular-nums mt-1 truncate">{k.value}</p>
                 )}
@@ -551,7 +562,7 @@ function Financeiro() {
         <div className="rounded-2xl border border-border bg-card p-5">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Aging de recebíveis</p>
           {aging.every((b) => b.value === 0) ? (
-            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">Sem recebíveis em aberto</div>
+            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">{reportEmptyMessage("Sem recebíveis em aberto")}</div>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={aging} layout="vertical" margin={{ left: 40 }}>
@@ -576,11 +587,11 @@ function Financeiro() {
             <div className="flex items-center gap-3 text-[10px]">
               <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-success" /> Entradas</span>
               <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-destructive" /> Saídas</span>
-              <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-primary" /> Saldo</span>
+              <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-primary" /> Acumulado no período</span>
             </div>
           </div>
           {dailySeries.every((d) => d.entradas === 0 && d.saidas === 0) ? (
-            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">Sem movimentações no período</div>
+            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">{reportEmptyMessage("Sem movimentações no período")}</div>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={dailySeries}>
@@ -619,12 +630,12 @@ function Financeiro() {
         </div>
       </div>
 
-      {/* Charts row 3: top clients + area + responsavel */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
+      {/* Charts row 3: server-side financial groupings */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
         <div className="rounded-2xl border border-border bg-card p-5">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Top clientes (YTD)</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Top clientes — {PERIOD_LABELS[filters.period]}</p>
           {topClients.length === 0 ? (
-            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">Sem receita registrada</div>
+            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">{reportEmptyMessage("Sem receita registrada")}</div>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={topClients} layout="vertical" margin={{ left: 20 }}>
@@ -639,9 +650,26 @@ function Financeiro() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-5">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Receita por área</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Top processos — {PERIOD_LABELS[filters.period]}</p>
+          {caseSeries.length === 0 ? (
+            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">{reportEmptyMessage("Sem receita vinculada a processos")}</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={caseSeries} layout="vertical" margin={{ left: 20 }}>
+                <CartesianGrid stroke="#EEF0F4" horizontal={false} />
+                <XAxis type="number" stroke="#6B7280" fontSize={10} tickFormatter={(v) => fmtBRLCompact(v)} />
+                <YAxis type="category" dataKey="name" stroke="#6B7280" fontSize={10} width={110} tickFormatter={(v) => v.slice(0, 18)} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => fmtBRL(Number(v))} />
+                <Bar dataKey="value" fill="#0EA5E9" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Receita por área — {PERIOD_LABELS[filters.period]}</p>
           {areaSeries.length === 0 ? (
-            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">Sem receita por área</div>
+            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">{reportEmptyMessage("Sem receita por área")}</div>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
@@ -656,9 +684,9 @@ function Financeiro() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-5">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Receita por responsável</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Receita por responsável — {PERIOD_LABELS[filters.period]}</p>
           {respSeries.length === 0 ? (
-            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">Sem receita por responsável</div>
+            <div className="h-[220px] grid place-items-center text-xs text-muted-foreground">{reportEmptyMessage("Sem receita por responsável")}</div>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={respSeries}>
@@ -682,21 +710,30 @@ function Financeiro() {
               <BookOpen className="size-4 text-primary" />
               <h3 className="text-sm font-semibold">DRE — {PERIOD_LABELS[filters.period]}</h3>
             </div>
-            <Badge variant="outline" className="text-[10px]">Margem líquida {dre.margem.toFixed(1)}%</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[10px]">Regime de caixa</Badge>
+              <Badge variant="outline" className="text-[10px]">Margem líquida {reports ? `${dre.margem.toFixed(1)}%` : "—"}</Badge>
+            </div>
           </div>
-          <table className="w-full text-sm">
-            <tbody className="[&_tr]:border-b [&_tr]:border-border/60 [&_tr:last-child]:border-0">
-              <DreRow label="Receita bruta" value={dre.receitaBruta} tone="pos" />
-              <DreRow label="(−) Impostos e deduções" value={-dre.deducoes} tone="neg" indent />
-              <DreRow label="= Receita líquida" value={dre.receitaLiquida} bold />
-              <DreRow label="(−) Custos dos serviços" value={-dre.custos} tone="neg" indent />
-              <DreRow label="= Lucro bruto" value={dre.lucroBruto} bold />
-              <DreRow label="(−) Despesas operacionais e administrativas" value={-dre.desOp} tone="neg" indent />
-              <DreRow label="= Resultado operacional" value={dre.resultadoOperacional} bold />
-              <DreRow label="(−) Despesas financeiras" value={-dre.desFin} tone="neg" indent />
-              <DreRow label="= Resultado do período" value={dre.resultado} big tone={dre.resultado >= 0 ? "pos" : "neg"} />
-            </tbody>
-          </table>
+          {reports ? (
+            <table className="w-full text-sm">
+              <tbody className="[&_tr]:border-b [&_tr]:border-border/60 [&_tr:last-child]:border-0">
+                <DreRow label="Receita bruta" value={dre.receitaBruta} tone="pos" />
+                <DreRow label="(−) Impostos e deduções" value={-dre.deducoes} tone="neg" indent />
+                <DreRow label="= Receita líquida" value={dre.receitaLiquida} bold />
+                <DreRow label="(−) Custos dos serviços" value={-dre.custos} tone="neg" indent />
+                <DreRow label="= Lucro bruto" value={dre.lucroBruto} bold />
+                <DreRow label="(−) Despesas operacionais e administrativas" value={-dre.desOp} tone="neg" indent />
+                <DreRow label="= Resultado operacional" value={dre.resultadoOperacional} bold />
+                <DreRow label="(−) Despesas financeiras" value={-dre.desFin} tone="neg" indent />
+                <DreRow label="= Resultado do período" value={dre.resultado} big tone={dre.resultado >= 0 ? "pos" : "neg"} />
+              </tbody>
+            </table>
+          ) : (
+            <div className="grid min-h-48 place-items-center text-xs text-muted-foreground">
+              {reportEmptyMessage("Sem movimentações no período")}
+            </div>
+          )}
         </div>
 
         {/* Cash Flow method toggle */}
@@ -713,35 +750,41 @@ function Financeiro() {
               <TabsTrigger value="indirect" className="text-xs">Indireto</TabsTrigger>
             </TabsList>
             <TabsContent value="direct" className="mt-3 space-y-1.5">
-              <RowLine label="Entradas operacionais" value={cashDirect.entradasOp} tone="pos" />
-              <RowLine label="Saídas operacionais" value={-cashDirect.saidasOp} tone="neg" />
-              <div className="h-px bg-border my-2" />
-              <RowLine label="Caixa gerado" value={cashDirect.caixaGerado} bold />
-              <div className="mt-3">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Por método</p>
-                {Object.keys(cashDirect.byMethod).length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Sem movimentações</p>
-                ) : (
-                  <div className="space-y-1">
-                    {Object.entries(cashDirect.byMethod).map(([m, v]) => (
-                      <div key={m} className="flex items-center justify-between text-xs">
-                        <span className="capitalize text-muted-foreground">{m}</span>
-                        <span className="tabular-nums">{fmtBRL(v.entradas - v.saidas)}</span>
+              {reports ? (
+                <>
+                  <RowLine label="Entradas operacionais" value={cashDirect.entradasOp} tone="pos" />
+                  <RowLine label="Saídas operacionais" value={-cashDirect.saidasOp} tone="neg" />
+                  <div className="h-px bg-border my-2" />
+                  <RowLine label="Caixa gerado" value={cashDirect.caixaGerado} bold />
+                  <div className="mt-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Por método</p>
+                    {Object.keys(cashDirect.byMethod).length === 0 ? (
+                      <p className="text-xs text-muted-foreground">Sem movimentações</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {Object.entries(cashDirect.byMethod).map(([m, v]) => (
+                          <div key={m} className="flex items-center justify-between text-xs">
+                            <span className="capitalize text-muted-foreground">{m}</span>
+                            <span className="tabular-nums">{fmtBRL(v.entradas - v.saidas)}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
+                </>
+              ) : (
+                <div className="grid min-h-40 place-items-center text-xs text-muted-foreground">
+                  {reportEmptyMessage("Sem movimentações no período")}
+                </div>
+              )}
             </TabsContent>
-            <TabsContent value="indirect" className="mt-3 space-y-1.5">
-              <RowLine label="Resultado operacional" value={cashIndirect.resultadoOperacional} />
-              <RowLine label="(−) Δ Recebíveis" value={-cashIndirect.variacaoRecebiveis} tone="neg" />
-              <RowLine label="(+) Δ Pagáveis" value={cashIndirect.variacaoPagaveis} tone="pos" />
-              <div className="h-px bg-border my-2" />
-              <RowLine label="Caixa operacional" value={cashIndirect.caixaOperacional} bold />
-              <RowLine label="(−) Despesas financeiras" value={-dre.desFin} tone="neg" />
-              <div className="h-px bg-border my-2" />
-              <RowLine label="Caixa final" value={cashIndirect.caixaFinal} big bold />
+            <TabsContent value="indirect" className="mt-3">
+              <div className="rounded-xl border border-border bg-muted/30 p-4">
+                <p className="text-xs font-semibold">Ainda não disponível com precisão contábil</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  O método indireto exige regime de competência, saldos de abertura e eventos não-caixa. O sistema não apresenta uma estimativa como se fosse um demonstrativo contábil.
+                </p>
+              </div>
             </TabsContent>
           </Tabs>
         </div>
@@ -753,7 +796,7 @@ function Financeiro() {
           title="Contas a receber"
           icon={<Receipt className="size-4 text-primary" />}
           rows={contasReceber}
-          loading={loading}
+          loading={isLoading}
           onReconcile={setReconcileEntry}
           onDelete={removeEntry}
           emptyMsg="Nenhum recebível em aberto"
@@ -762,7 +805,7 @@ function Financeiro() {
           title="Contas a pagar"
           icon={<ReceiptText className="size-4 text-destructive" />}
           rows={contasPagar}
-          loading={loading}
+          loading={isLoading}
           onReconcile={setReconcileEntry}
           onDelete={removeEntry}
           emptyMsg="Nenhuma despesa em aberto"

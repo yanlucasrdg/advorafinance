@@ -1457,6 +1457,16 @@ export type Database = {
         Returns: string
       }
       current_tenant_id: { Args: never; Returns: string }
+      financial_reports: {
+        Args: {
+          _area?: string
+          _client_id?: string
+          _from?: string
+          _responsible?: string
+          _to?: string
+        }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
