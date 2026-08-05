@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Trash2, TrendingUp, TrendingDown, Wallet, DollarSign, AlertCircle,
   CircleDollarSign, ArrowUpRight, ArrowDownRight, Download, Radio, Sparkles,
   Receipt, ReceiptText, Brain, ShieldCheck, History, BookOpen, Check,
-  Settings2, Bell, FileDown, Undo2,
+  Settings2, Bell, FileDown, Undo2, ChevronsUpDown, LoaderCircle,
 } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -32,7 +33,13 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useGlobalFilters, PERIOD_LABELS, type PeriodKey } from "@/lib/global-filters";
 import { useFinance, useFinancialPayments, useFinancialAuditEntry, type PaymentRow } from "@/hooks/use-finance";
-import { useFinancialReports, useMetricsFinanceiro, type FinancialReports } from "@/hooks/use-metrics";
+import {
+  useFinancialReportFilterOptions,
+  useFinancialReports,
+  useMetricsFinanceiro,
+  type FinancialReportFilterDimension,
+  type FinancialReports,
+} from "@/hooks/use-metrics";
 import { formatDateOnly } from "@/lib/global-filter-utils";
 import {
   fmtBRL, fmtBRLCompact, pctDelta, DRE_CATEGORIES, DEFAULT_DRE_CONFIG,
@@ -49,8 +56,8 @@ type Entry = FinRow & {
   id: string;
   description: string;
   clients?: { name: string } | null;
+  cases?: { client_id: string | null; area: string | null; responsible: string | null } | null;
 };
-type CaseLite = { id: string; area: string | null; responsible: string | null };
 type ClientLite = { id: string; name: string };
 type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
 type NotificationRow = { id: string; kind: string; title: string; body: string | null; entry_id: string | null; read_at: string | null; created_at: string };
@@ -114,7 +121,6 @@ function Financeiro() {
 
   const {
     entries,
-    cases,
     clients,
     dreConfigData,
     auditLogs,
@@ -129,20 +135,16 @@ function Financeiro() {
     reversePayment,
   } = useFinance();
 
-  const caseMap = useMemo(() => new Map(cases.map((c) => [c.id, c])), [cases]);
-
-  // Apply global filters (area/responsible/client via case join)
+  // Operational rows stay paginated, but their relation is fetched in the same
+  // query so applying a report filter never depends on a separate 500-case page.
   const filtered = useMemo(() => {
     return entries.filter((e) => {
-      if (filters.clientId && e.client_id !== filters.clientId) return false;
-      if (filters.area || filters.responsible) {
-        const c = e.case_id ? caseMap.get(e.case_id) : null;
-        if (filters.area && (c?.area ?? "") !== filters.area) return false;
-        if (filters.responsible && (c?.responsible ?? "") !== filters.responsible) return false;
-      }
+      if (filters.clientId && (e.client_id ?? e.cases?.client_id) !== filters.clientId) return false;
+      if (filters.area && (e.cases?.area?.trim() ?? "") !== filters.area) return false;
+      if (filters.responsible && (e.cases?.responsible ?? "") !== filters.responsible) return false;
       return true;
     });
-  }, [entries, filters.area, filters.responsible, filters.clientId, caseMap]);
+  }, [entries, filters.area, filters.responsible, filters.clientId]);
 
   const metricsQuery = useMetricsFinanceiro({
     clientId: filters.clientId || undefined,
@@ -351,9 +353,6 @@ function Financeiro() {
     ]);
   };
 
-  const areasList = useMemo(() => Array.from(new Set(cases.map((c) => c.area).filter(Boolean) as string[])).sort(), [cases]);
-  const respsList = useMemo(() => Array.from(new Set(cases.map((c) => c.responsible).filter(Boolean) as string[])).sort(), [cases]);
-
   const revDelta = pctDelta(kpis.revMonth, kpis.revPrev);
 
   const kpiCards = [
@@ -478,27 +477,30 @@ function Financeiro() {
               </button>
             ))}
           </div>
-          <Select value={filters.area ?? "__all"} onValueChange={(v) => setFilter("area", v === "__all" ? null : v)}>
-            <SelectTrigger className="w-[150px] h-9 text-xs"><SelectValue placeholder="Área" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all">Todas as áreas</SelectItem>
-              {areasList.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filters.responsible ?? "__all"} onValueChange={(v) => setFilter("responsible", v === "__all" ? null : v)}>
-            <SelectTrigger className="w-[170px] h-9 text-xs"><SelectValue placeholder="Responsável" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all">Todos responsáveis</SelectItem>
-              {respsList.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filters.clientId ?? "__all"} onValueChange={(v) => setFilter("clientId", v === "__all" ? null : v)}>
-            <SelectTrigger className="w-[180px] h-9 text-xs"><SelectValue placeholder="Cliente" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all">Todos clientes</SelectItem>
-              {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <ReportFilterSelect
+            dimension="area"
+            value={filters.area}
+            allLabel="Todas as áreas"
+            searchPlaceholder="Buscar área..."
+            className="w-[150px]"
+            onChange={(value) => setFilter("area", value)}
+          />
+          <ReportFilterSelect
+            dimension="responsible"
+            value={filters.responsible}
+            allLabel="Todos responsáveis"
+            searchPlaceholder="Buscar responsável..."
+            className="w-[190px]"
+            onChange={(value) => setFilter("responsible", value)}
+          />
+          <ReportFilterSelect
+            dimension="client"
+            value={filters.clientId}
+            allLabel="Todos clientes"
+            searchPlaceholder="Buscar cliente..."
+            className="w-[190px]"
+            onChange={(value) => setFilter("clientId", value)}
+          />
         </div>
       </div>
 
@@ -867,6 +869,101 @@ function Financeiro() {
         onSaved={() => qc.invalidateQueries({ queryKey: ["fin", "dre_settings", tenantId] })}
       />
     </div>
+  );
+}
+
+function ReportFilterSelect({
+  dimension,
+  value,
+  allLabel,
+  searchPlaceholder,
+  className,
+  onChange,
+}: {
+  dimension: FinancialReportFilterDimension;
+  value: string | null;
+  allLabel: string;
+  searchPlaceholder: string;
+  className?: string;
+  onChange: (value: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [knownLabels, setKnownLabels] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedSearch(search), 250);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
+
+  const optionsQuery = useFinancialReportFilterOptions(dimension, debouncedSearch);
+  const options = optionsQuery.data ?? [];
+  const selectedLabel = value
+    ? options.find((option) => option.id === value)?.label ?? knownLabels[value] ?? "Filtro selecionado"
+    : allLabel;
+
+  const selectOption = (nextValue: string | null, label?: string) => {
+    if (nextValue && label) {
+      setKnownLabels((current) => ({ ...current, [nextValue]: label }));
+    }
+    onChange(nextValue);
+    setOpen(false);
+    setSearch("");
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={`h-9 justify-between gap-2 px-3 text-xs font-normal ${className ?? ""}`}
+        >
+          <span className="truncate">{selectedLabel}</span>
+          <ChevronsUpDown className="size-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[280px] p-0">
+        <Command shouldFilter={false}>
+          <CommandInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder={searchPlaceholder}
+          />
+          <CommandList>
+            <CommandGroup>
+              <CommandItem value="__all" onSelect={() => selectOption(null)}>
+                <Check className={`size-4 ${value === null ? "opacity-100" : "opacity-0"}`} />
+                {allLabel}
+              </CommandItem>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.id}
+                  value={option.id}
+                  onSelect={() => selectOption(option.id, option.label)}
+                >
+                  <Check className={`size-4 ${value === option.id ? "opacity-100" : "opacity-0"}`} />
+                  <span className="truncate">{option.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {optionsQuery.isFetching && (
+              <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
+                <LoaderCircle className="size-3.5 animate-spin" /> Buscando...
+              </div>
+            )}
+            {!optionsQuery.isFetching && optionsQuery.isError && (
+              <div className="py-3 text-center text-xs text-destructive">Não foi possível buscar as opções.</div>
+            )}
+            {!optionsQuery.isFetching && !optionsQuery.isError && options.length === 0 && (
+              <CommandEmpty>Nenhum resultado.</CommandEmpty>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 

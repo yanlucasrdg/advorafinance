@@ -26,8 +26,8 @@ export type Entry = FinRow & {
   id: string;
   description: string;
   clients?: { name: string } | null;
+  cases?: { client_id: string | null; area: string | null; responsible: string | null } | null;
 };
-export type CaseLite = { id: string; area: string | null; responsible: string | null };
 export type ClientLite = { id: string; name: string };
 export type PaymentReversalRow = {
   id: string;
@@ -63,7 +63,6 @@ export function useFinance() {
     ["financial_entries", "cases", "clients", "financial_audit_log", "notifications", "dre_settings", "financial_payments", "financial_payment_reversals"],
     [
       ["fin", "entries", tenantId],
-      ["fin", "cases", tenantId],
       ["fin", "clients", tenantId],
       ["fin", "dre_settings", tenantId],
       ["fin", "audit", tenantId],
@@ -80,22 +79,12 @@ export function useFinance() {
       // relatórios são calculados no banco por financial_reports/metrics_financeiro.
       const { data, error } = await supabase
         .from("financial_entries")
-        .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,paid_amount_cents,settlement_status,category,payment_method,clients(name)")
+        .select("id,description,amount_cents,kind,status,due_date,paid_at,client_id,case_id,paid_amount_cents,settlement_status,category,payment_method,clients(name),cases(client_id,area,responsible)")
         .is("deleted_at", null)
         .order("due_date", { ascending: false, nullsFirst: false })
         .limit(500);
       if (error) throw new Error(error.message);
       return (data ?? []) as unknown as Entry[];
-    },
-  });
-
-  const casesQ = useQuery({
-    queryKey: ["fin", "cases", tenantId],
-    enabled: !!tenantId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("cases").select("id,area,responsible").is("deleted_at", null).limit(500);
-      if (error) throw new Error(error.message);
-      return (data ?? []) as CaseLite[];
     },
   });
 
@@ -320,12 +309,11 @@ export function useFinance() {
 
   return {
     entries:       entriesQ.data ?? [],
-    cases:         casesQ.data ?? [],
     clients:       clientsQ.data ?? [],
     dreConfigData: dreCfgQ.data,
     auditLogs:     auditQ.data ?? [],
     notifications: notifQ.data ?? [],
-    isLoading:     entriesQ.isLoading || casesQ.isLoading || clientsQ.isLoading,
+    isLoading:     entriesQ.isLoading || clientsQ.isLoading,
     isError:       entriesQ.isError,
     error:         entriesQ.error,
     create,

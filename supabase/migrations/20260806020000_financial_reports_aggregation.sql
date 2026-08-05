@@ -71,10 +71,11 @@ DECLARE
   v_tenant_id uuid := public.current_tenant_id();
   v_timezone text := public.tenant_timezone();
   v_today date := public.tz_today();
-  v_from date := COALESCE(_from, date_trunc('month', public.tz_today())::date);
   v_to date := COALESCE(_to, public.tz_today());
+  v_from date := COALESCE(_from, date_trunc('month', v_to)::date);
   v_from_at timestamptz;
   v_to_exclusive_at timestamptz;
+  v_area text := NULLIF(btrim(_area), '');
   v_responsible uuid;
   v_result jsonb;
 BEGIN
@@ -115,7 +116,7 @@ BEGIN
     SELECT
       entry.id,
       entry.tenant_id,
-      entry.client_id,
+      COALESCE(entry.client_id, legal_case.client_id) AS client_id,
       entry.case_id,
       entry.kind,
       entry.category,
@@ -133,22 +134,20 @@ BEGIN
         legal_case.responsible::text
       ) AS responsible_name
     FROM public.financial_entries entry
-    LEFT JOIN public.clients client
-      ON client.id = entry.client_id
-      AND client.tenant_id = entry.tenant_id
-      AND client.deleted_at IS NULL
     LEFT JOIN public.cases legal_case
       ON legal_case.id = entry.case_id
       AND legal_case.tenant_id = entry.tenant_id
-      AND legal_case.deleted_at IS NULL
+    LEFT JOIN public.clients client
+      ON client.id = COALESCE(entry.client_id, legal_case.client_id)
+      AND client.tenant_id = entry.tenant_id
     LEFT JOIN public.profiles responsible_profile
       ON responsible_profile.id = legal_case.responsible
       AND responsible_profile.tenant_id = entry.tenant_id
     WHERE entry.tenant_id = v_tenant_id
       AND entry.deleted_at IS NULL
       AND entry.status <> 'cancelado'
-      AND (_client_id IS NULL OR entry.client_id = _client_id)
-      AND (_area IS NULL OR legal_case.area = _area)
+      AND (_client_id IS NULL OR COALESCE(entry.client_id, legal_case.client_id) = _client_id)
+      AND (v_area IS NULL OR NULLIF(btrim(legal_case.area), '') = v_area)
       AND (v_responsible IS NULL OR legal_case.responsible = v_responsible)
   ), movements AS MATERIALIZED (
     SELECT
@@ -387,7 +386,7 @@ BEGIN
       'resultadoOperacional', dre.resultado_operacional,
       'desFin', dre.despesas_financeiras,
       'resultado', dre.resultado,
-      'margem', CASE WHEN dre.receita_bruta <> 0
+      'margem', CASE WHEN dre.receita_bruta > 0
         THEN (dre.resultado::numeric / dre.receita_bruta) * 100 ELSE 0 END,
       'buckets', dre.buckets,
       'config', jsonb_build_object(
@@ -470,5 +469,108 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.financial_report_filter_options(
+  _dimension text,
+  _search text DEFAULT NULL,
+  _limit integer DEFAULT 40
+)
+RETURNS TABLE (id text, label text)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_tenant_id uuid := public.current_tenant_id();
+  v_search text := NULLIF(btrim(_search), '');
+  v_limit integer := LEAST(GREATEST(COALESCE(_limit, 40), 1), 50);
+BEGIN
+  IF v_tenant_id IS NULL THEN RAISE EXCEPTION 'FINANCIAL_AUTH_REQUIRED'; END IF;
+  IF NOT public.financial_has_any_tenant_role(ARRAY['owner', 'admin']::public.app_role[]) THEN
+    RAISE EXCEPTION 'ROLE_ACCESS_DENIED';
+  END IF;
+  IF NOT public.financial_tenant_has_subscription_access(v_tenant_id) THEN
+    RAISE EXCEPTION 'SUBSCRIPTION_ACCESS_DENIED';
+  END IF;
+
+  IF _dimension = 'client' THEN
+    RETURN QUERY
+    SELECT
+      client.id::text,
+      COALESCE(NULLIF(btrim(client.name), ''), 'Cliente sem nome')
+    FROM public.clients client
+    WHERE client.tenant_id = v_tenant_id
+      AND (
+        v_search IS NULL
+        OR client.name ILIKE '%' || v_search || '%'
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM public.financial_entries entry
+        LEFT JOIN public.cases legal_case
+          ON legal_case.id = entry.case_id
+          AND legal_case.tenant_id = entry.tenant_id
+        WHERE entry.tenant_id = v_tenant_id
+          AND entry.deleted_at IS NULL
+          AND entry.status <> 'cancelado'
+          AND COALESCE(entry.client_id, legal_case.client_id) = client.id
+      )
+    ORDER BY 2, 1
+    LIMIT v_limit;
+  ELSIF _dimension = 'area' THEN
+    RETURN QUERY
+    SELECT area_option.name, area_option.name
+    FROM (
+      SELECT NULLIF(btrim(legal_case.area), '') AS name
+      FROM public.cases legal_case
+      JOIN public.financial_entries entry
+        ON entry.case_id = legal_case.id
+        AND entry.tenant_id = legal_case.tenant_id
+        AND entry.deleted_at IS NULL
+        AND entry.status <> 'cancelado'
+      WHERE legal_case.tenant_id = v_tenant_id
+        AND NULLIF(btrim(legal_case.area), '') IS NOT NULL
+      GROUP BY NULLIF(btrim(legal_case.area), '')
+    ) area_option
+    WHERE v_search IS NULL OR area_option.name ILIKE '%' || v_search || '%'
+    ORDER BY area_option.name
+    LIMIT v_limit;
+  ELSIF _dimension = 'responsible' THEN
+    RETURN QUERY
+    SELECT
+      responsible_profile.id::text,
+      COALESCE(
+        NULLIF(btrim(responsible_profile.full_name), ''),
+        NULLIF(btrim(responsible_profile.email), ''),
+        responsible_profile.id::text
+      )
+    FROM public.profiles responsible_profile
+    WHERE responsible_profile.tenant_id = v_tenant_id
+      AND (
+        v_search IS NULL
+        OR responsible_profile.full_name ILIKE '%' || v_search || '%'
+        OR responsible_profile.email ILIKE '%' || v_search || '%'
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM public.cases legal_case
+        JOIN public.financial_entries entry
+          ON entry.case_id = legal_case.id
+          AND entry.tenant_id = legal_case.tenant_id
+          AND entry.deleted_at IS NULL
+          AND entry.status <> 'cancelado'
+        WHERE legal_case.tenant_id = v_tenant_id
+          AND legal_case.responsible = responsible_profile.id
+      )
+    ORDER BY 2, 1
+    LIMIT v_limit;
+  ELSE
+    RAISE EXCEPTION 'FINANCIAL_REPORT_DIMENSION_INVALID';
+  END IF;
+END;
+$$;
+
 REVOKE ALL ON FUNCTION public.financial_reports(date, date, uuid, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.financial_reports(date, date, uuid, text, text) TO authenticated;
+REVOKE ALL ON FUNCTION public.financial_report_filter_options(text, text, integer) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.financial_report_filter_options(text, text, integer) TO authenticated;

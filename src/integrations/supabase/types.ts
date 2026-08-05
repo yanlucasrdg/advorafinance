@@ -1467,6 +1467,17 @@ export type Database = {
         }
         Returns: Json
       }
+      financial_report_filter_options: {
+        Args: {
+          _dimension: string
+          _limit?: number
+          _search?: string
+        }
+        Returns: {
+          id: string
+          label: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

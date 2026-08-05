@@ -58,6 +58,17 @@ describe("Server-side financial reports", () => {
     expect(financeRoute).toContain("Top processos");
   });
 
+  it("busca filtros no banco sem depender das listas operacionais", () => {
+    expect(migration).toContain("financial_report_filter_options");
+    expect(migration).toContain("_dimension = 'client'");
+    expect(migration).toContain("_dimension = 'area'");
+    expect(migration).toContain("_dimension = 'responsible'");
+    expect(metricsHook).toContain('rpc("financial_report_filter_options"');
+    expect(financeRoute).toContain("ReportFilterSelect");
+    expect(financeRoute).not.toContain("areasList");
+    expect(financeRoute).not.toContain("respsList");
+  });
+
   it("impõe tenant, RBAC e limites de período no RPC", () => {
     expect(migration).toContain("FINANCIAL_LEDGER_MIGRATION_REQUIRED");
     expect(migration).toContain("entry.tenant_id = v_tenant_id");

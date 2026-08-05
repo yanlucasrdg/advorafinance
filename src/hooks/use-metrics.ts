@@ -143,6 +143,9 @@ export type FinancialReportGroup = {
   count: number;
 };
 
+export type FinancialReportFilterDimension = "client" | "area" | "responsible";
+export type FinancialReportFilterOption = { id: string; label: string };
+
 export type DashboardMetrics = {
   financeiro: FinanceiroMetrics;
   processos: ProcessosMetrics;
@@ -422,6 +425,32 @@ export function useFinancialReports(
       return data as unknown as FinancialReports;
     },
     staleTime: 15_000,
+  });
+}
+
+export function useFinancialReportFilterOptions(
+  dimension: FinancialReportFilterDimension,
+  search: string,
+) {
+  const { profile } = useAuth();
+  const tenant = profile?.tenant_id ?? null;
+  const normalizedSearch = search.trim();
+  const key = ["financial_report_filter_options", tenant, dimension, normalizedSearch] as const;
+  useRealtimeTables(["financial_entries", "cases", "clients", "profiles"], [key]);
+
+  return useQuery<FinancialReportFilterOption[]>({
+    queryKey: key,
+    enabled: !!tenant,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("financial_report_filter_options", {
+        _dimension: dimension,
+        _search: normalizedSearch || undefined,
+        _limit: 50,
+      });
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
   });
 }
 
