@@ -2,6 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type CSSProperties } from "react";
 import { Check, Download, ImageIcon, Palette, ShieldCheck } from "lucide-react";
 import { PageHeader, Panel } from "@/components/data-table-shell";
+import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -264,17 +265,12 @@ function Config() {
                   backgroundColor: `color-mix(in srgb, ${brand.primary_color} 10%, transparent)`,
                 }}
               >
-                {brand.logo_url ? (
-                  <img
-                    src={brand.logo_url}
-                    alt="Prévia do logotipo"
-                    className="size-8 object-contain"
-                  />
-                ) : (
-                  <span className="text-sm font-bold" style={{ color: brand.primary_color }}>
-                    {(brand.brand_name || "A")[0].toUpperCase()}
-                  </span>
-                )}
+                <BrandMark
+                  logoUrl={brand.logo_url}
+                  brandName={brand.brand_name}
+                  className="size-8"
+                  fallbackClassName="text-sm"
+                />
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold truncate">{brand.brand_name || "Sua marca"}</p>

@@ -23,8 +23,8 @@ import {
   CircleAlert,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import advoraLogo from "@/assets/advora-logo.png.asset.json";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { BrandMark } from "@/components/brand-mark";
 import { UserMenu } from "@/components/user-menu";
 import { NotificationsPopover } from "@/components/notifications-popover";
 import { BRAND_CSS_VARIABLE_NAMES, getBrandCssVariables } from "@/lib/brand-palettes";
@@ -154,10 +154,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Brand */}
       <div className="px-5 h-[72px] flex items-center gap-3 border-b border-sidebar-border">
         <div className="size-9 rounded-xl border border-primary/20 bg-primary-soft grid place-items-center overflow-hidden shrink-0">
-          <img
-            src={branding?.logo_url ?? advoraLogo.url}
-            alt={branding?.brand_name ?? "Advora"}
-            className="size-7 object-contain"
+          <BrandMark
+            logoUrl={branding?.logo_url}
+            brandName={branding?.brand_name ?? "Advora"}
+            className="size-7"
+            fallbackClassName="text-sm"
           />
         </div>
         <div className="leading-tight min-w-0 flex-1">
