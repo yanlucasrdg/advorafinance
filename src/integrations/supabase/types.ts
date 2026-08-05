@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      billing_webhook_events: {
+        Row: {
+          checkout_id: string | null
+          error_message: string | null
+          event_key: string
+          event_type: string
+          id: string
+          processed_at: string | null
+          processing_status: string
+          received_at: string
+          sale_id: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          checkout_id?: string | null
+          error_message?: string | null
+          event_key: string
+          event_type: string
+          id?: string
+          processed_at?: string | null
+          processing_status?: string
+          received_at?: string
+          sale_id?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          checkout_id?: string | null
+          error_message?: string | null
+          event_key?: string
+          event_type?: string
+          id?: string
+          processed_at?: string | null
+          processing_status?: string
+          received_at?: string
+          sale_id?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_webhook_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_messages: {
         Row: {
           content: string
@@ -830,6 +877,77 @@ export type Database = {
           },
         ]
       }
+      tenant_subscriptions: {
+        Row: {
+          billing_interval: Database["public"]["Enums"]["billing_interval"] | null
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string | null
+          customer_email: string | null
+          grace_ends_at: string | null
+          id: string
+          kirvano_checkout_id: string | null
+          kirvano_offer_id: string | null
+          kirvano_product_id: string | null
+          kirvano_sale_id: string | null
+          last_event_at: string | null
+          plan: Database["public"]["Enums"]["tenant_plan"]
+          provider: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          tenant_id: string
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          billing_interval?: Database["public"]["Enums"]["billing_interval"] | null
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          customer_email?: string | null
+          grace_ends_at?: string | null
+          id?: string
+          kirvano_checkout_id?: string | null
+          kirvano_offer_id?: string | null
+          kirvano_product_id?: string | null
+          kirvano_sale_id?: string | null
+          last_event_at?: string | null
+          plan?: Database["public"]["Enums"]["tenant_plan"]
+          provider?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          tenant_id: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billing_interval?: Database["public"]["Enums"]["billing_interval"] | null
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          customer_email?: string | null
+          grace_ends_at?: string | null
+          id?: string
+          kirvano_checkout_id?: string | null
+          kirvano_offer_id?: string | null
+          kirvano_product_id?: string | null
+          kirvano_sale_id?: string | null
+          last_event_at?: string | null
+          plan?: Database["public"]["Enums"]["tenant_plan"]
+          provider?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          tenant_id?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           created_at: string
@@ -1312,7 +1430,23 @@ export type Database = {
         | "secretary"
         | "intern"
         | "client"
-      tenant_plan: "trial" | "starter" | "professional" | "enterprise"
+      billing_interval: "monthly" | "annual"
+      subscription_status:
+        | "trialing"
+        | "active"
+        | "past_due"
+        | "canceled"
+        | "expired"
+        | "refunded"
+        | "chargeback"
+      tenant_plan:
+        | "trial"
+        | "starter"
+        | "professional"
+        | "enterprise"
+        | "essential"
+        | "performance"
+        | "business"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1449,7 +1583,25 @@ export const Constants = {
         "intern",
         "client",
       ],
-      tenant_plan: ["trial", "starter", "professional", "enterprise"],
+      billing_interval: ["monthly", "annual"],
+      subscription_status: [
+        "trialing",
+        "active",
+        "past_due",
+        "canceled",
+        "expired",
+        "refunded",
+        "chargeback",
+      ],
+      tenant_plan: [
+        "trial",
+        "starter",
+        "professional",
+        "enterprise",
+        "essential",
+        "performance",
+        "business",
+      ],
     },
   },
 } as const

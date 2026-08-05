@@ -3,6 +3,7 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { handleMetaWhatsAppWebhook } from "./lib/meta-webhook.server";
+import { handleKirvanoWebhook } from "./lib/kirvano-webhook.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -46,9 +47,14 @@ export default {
       // TanStack server functions execute through the Nitro handler. Keep the
       // immutable Worker bindings available to their server-only helpers.
       (globalThis as CloudflareRuntime).__env__ = (env ?? {}) as Record<string, unknown>;
-      if (new URL(request.url).pathname === "/webhooks/whatsapp") {
+      const pathname = new URL(request.url).pathname;
+      if (pathname === "/webhooks/whatsapp") {
         const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
         return await handleMetaWhatsAppWebhook(request, bindings);
+      }
+      if (pathname === "/webhooks/kirvano") {
+        const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
+        return await handleKirvanoWebhook(request, bindings);
       }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

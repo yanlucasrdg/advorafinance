@@ -26,6 +26,7 @@ import { Route as AuthenticatedCopilotoRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedConfigRouteImport } from './routes/_authenticated/config'
 import { Route as AuthenticatedComunicacoesRouteImport } from './routes/_authenticated/comunicacoes'
 import { Route as AuthenticatedAutomacoesRouteImport } from './routes/_authenticated/automacoes'
+import { Route as AuthenticatedAssinaturaRouteImport } from './routes/_authenticated/assinatura'
 import { Route as AuthenticatedAgendaRouteImport } from './routes/_authenticated/agenda'
 import { Route as AuthenticatedAdminUsuariosRouteImport } from './routes/_authenticated/admin.usuarios'
 
@@ -116,6 +117,11 @@ const AuthenticatedAutomacoesRoute = AuthenticatedAutomacoesRouteImport.update({
   path: '/automacoes',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAssinaturaRoute = AuthenticatedAssinaturaRouteImport.update({
+  id: '/assinatura',
+  path: '/assinatura',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAgendaRoute = AuthenticatedAgendaRouteImport.update({
   id: '/agenda',
   path: '/agenda',
@@ -133,6 +139,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/agenda': typeof AuthenticatedAgendaRoute
+  '/assinatura': typeof AuthenticatedAssinaturaRoute
   '/automacoes': typeof AuthenticatedAutomacoesRoute
   '/comunicacoes': typeof AuthenticatedComunicacoesRoute
   '/config': typeof AuthenticatedConfigRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/onboarding': typeof OnboardingRoute
   '/agenda': typeof AuthenticatedAgendaRoute
+  '/assinatura': typeof AuthenticatedAssinaturaRoute
   '/automacoes': typeof AuthenticatedAutomacoesRoute
   '/comunicacoes': typeof AuthenticatedComunicacoesRoute
   '/config': typeof AuthenticatedConfigRoute
@@ -174,6 +182,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/_authenticated/agenda': typeof AuthenticatedAgendaRoute
+  '/_authenticated/assinatura': typeof AuthenticatedAssinaturaRoute
   '/_authenticated/automacoes': typeof AuthenticatedAutomacoesRoute
   '/_authenticated/comunicacoes': typeof AuthenticatedComunicacoesRoute
   '/_authenticated/config': typeof AuthenticatedConfigRoute
@@ -196,6 +205,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/onboarding'
     | '/agenda'
+    | '/assinatura'
     | '/automacoes'
     | '/comunicacoes'
     | '/config'
@@ -215,6 +225,7 @@ export interface FileRouteTypes {
     | '/'
     | '/onboarding'
     | '/agenda'
+    | '/assinatura'
     | '/automacoes'
     | '/comunicacoes'
     | '/config'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/onboarding'
     | '/_authenticated/agenda'
+    | '/_authenticated/assinatura'
     | '/_authenticated/automacoes'
     | '/_authenticated/comunicacoes'
     | '/_authenticated/config'
@@ -380,6 +392,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAutomacoesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/assinatura': {
+      id: '/_authenticated/assinatura'
+      path: '/assinatura'
+      fullPath: '/assinatura'
+      preLoaderRoute: typeof AuthenticatedAssinaturaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/agenda': {
       id: '/_authenticated/agenda'
       path: '/agenda'
@@ -399,6 +418,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgendaRoute: typeof AuthenticatedAgendaRoute
+  AuthenticatedAssinaturaRoute: typeof AuthenticatedAssinaturaRoute
   AuthenticatedAutomacoesRoute: typeof AuthenticatedAutomacoesRoute
   AuthenticatedComunicacoesRoute: typeof AuthenticatedComunicacoesRoute
   AuthenticatedConfigRoute: typeof AuthenticatedConfigRoute
@@ -415,6 +435,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgendaRoute: AuthenticatedAgendaRoute,
+  AuthenticatedAssinaturaRoute: AuthenticatedAssinaturaRoute,
   AuthenticatedAutomacoesRoute: AuthenticatedAutomacoesRoute,
   AuthenticatedComunicacoesRoute: AuthenticatedComunicacoesRoute,
   AuthenticatedConfigRoute: AuthenticatedConfigRoute,

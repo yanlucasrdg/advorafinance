@@ -19,6 +19,8 @@ import {
   X,
   ChevronRight,
   ShieldCheck,
+  CreditCard,
+  CircleAlert,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import advoraLogo from "@/assets/advora-logo.png.asset.json";
@@ -26,6 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserMenu } from "@/components/user-menu";
 import { NotificationsPopover } from "@/components/notifications-popover";
 import { BRAND_CSS_VARIABLE_NAMES, getBrandCssVariables } from "@/lib/brand-palettes";
+import { getBillingOverview } from "@/lib/billing.functions";
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard };
 type NavGroup = { title: string; items: NavItem[] };
@@ -58,6 +61,7 @@ const navGroups: NavGroup[] = [
     title: "Sistema",
     items: [
       { to: "/integracoes", label: "Integrações", icon: Plug },
+      { to: "/assinatura", label: "Plano e cobrança", icon: CreditCard },
       { to: "/config", label: "Configurações", icon: Settings },
     ],
   },
@@ -77,6 +81,25 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [billingAlert, setBillingAlert] = useState<{ tone: "warning" | "danger"; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!profile?.tenant_id) return;
+    let active = true;
+    getBillingOverview().then((billing) => {
+      if (!active) return;
+      if (["expired", "refunded", "chargeback"].includes(billing.status)) {
+        setBillingAlert({ tone: "danger", message: "Sua assinatura está inativa. Regularize o plano para voltar a criar novos registros." });
+      } else if (billing.status === "past_due") {
+        setBillingAlert({ tone: "warning", message: "Não conseguimos confirmar a renovação. Atualize o pagamento para evitar a suspensão." });
+      } else if (billing.status === "trialing" && billing.trialEndsAt && new Date(billing.trialEndsAt).getTime() - Date.now() < 3 * 86_400_000) {
+        setBillingAlert({ tone: "warning", message: "Seu período de experiência termina em breve. Escolha um plano para continuar sem interrupções." });
+      } else {
+        setBillingAlert(null);
+      }
+    }).catch(() => setBillingAlert(null));
+    return () => { active = false; };
+  }, [profile?.tenant_id]);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -304,6 +327,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             <UserMenu />
           </div>
         </header>
+        {billingAlert && (
+          <div className={`flex items-center justify-center gap-2 border-b px-4 py-2 text-center text-xs ${billingAlert.tone === "danger" ? "border-destructive/20 bg-destructive/8 text-destructive" : "border-warning/25 bg-warning/10 text-foreground"}`}>
+            <CircleAlert className="size-3.5 shrink-0" />
+            <span>{billingAlert.message}</span>
+            <Link to="/assinatura" className="ml-1 font-semibold underline underline-offset-2">Ver assinatura</Link>
+          </div>
+        )}
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </div>
