@@ -304,7 +304,7 @@ export function useMetricsFinanceiro(
     opts.area ?? null,
     opts.responsible ?? null,
   ];
-  useRealtimeTables(["financial_entries", "cases"], [key]);
+  useRealtimeTables(["financial_entries", "financial_payments", "financial_payment_reversals", "cases"], [key]);
   return useQuery<FinanceiroMetrics>({
     queryKey: key,
     enabled: !!tenant,

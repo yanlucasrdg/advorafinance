@@ -29,7 +29,23 @@ export type Entry = FinRow & {
 };
 export type CaseLite = { id: string; area: string | null; responsible: string | null };
 export type ClientLite = { id: string; name: string };
-export type PaymentRow = { id: string; entry_id: string; amount_cents: number; paid_at: string; method: string | null; notes: string | null };
+export type PaymentReversalRow = {
+  id: string;
+  amount_cents: number;
+  reason: string;
+  reversed_at: string;
+  created_by: string | null;
+};
+export type PaymentRow = {
+  id: string;
+  entry_id: string;
+  amount_cents: number;
+  paid_at: string;
+  method: string | null;
+  notes: string | null;
+  financial_payment_reversals: PaymentReversalRow[];
+  reversed_amount_cents: number;
+};
 export type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
 export type NotificationRow = { id: string; kind: string; title: string; body: string | null; entry_id: string | null; read_at: string | null; created_at: string };
 export type DreSettingsRow = { tenant_id: string; apply_cogs: boolean; enabled_categories: string[]; category_map: Record<string, string> };
@@ -40,7 +56,7 @@ export function useFinance() {
   const tenantId = profile?.tenant_id ?? null;
 
   useRealtimeTables(
-    ["financial_entries", "cases", "clients", "financial_audit_log", "notifications", "dre_settings", "financial_payments"],
+    ["financial_entries", "cases", "clients", "financial_audit_log", "notifications", "dre_settings", "financial_payments", "financial_payment_reversals"],
     [
       ["fin", "entries", tenantId],
       ["fin", "cases", tenantId],
@@ -250,7 +266,44 @@ export function useFinance() {
       qc.invalidateQueries({ queryKey: ["fin", "payments", entryId] });
       toast.success("Lançamento conciliado");
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      const message = /FINANCIAL_ENTRY_NOT_FULLY_PAID/i.test(err.message)
+        ? "O lançamento precisa estar integralmente pago antes da conciliação."
+        : /ROLE_ACCESS_DENIED/i.test(err.message)
+          ? "Somente proprietário ou administrador pode conciliar lançamentos."
+          : "Não foi possível conciliar o lançamento.";
+      toast.error(message);
+    },
+  });
+
+  const reversePayment = useMutation({
+    mutationFn: async ({ paymentId, reason, amountCents }: { paymentId: string; reason: string; amountCents?: number }) => {
+      const { data, error } = await supabase.rpc("reverse_financial_payment", {
+        p_payment_id: paymentId,
+        p_reason: reason.trim(),
+        p_amount_cents: amountCents,
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    onSuccess: (entry) => {
+      qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
+      qc.invalidateQueries({ queryKey: ["fin", "audit", tenantId] });
+      qc.invalidateQueries({ queryKey: ["fin", "payments", entry.id] });
+      toast.success("Baixa estornada com registro de auditoria");
+    },
+    onError: (err: Error) => {
+      const message = /FINANCIAL_ENTRY_RECONCILED/i.test(err.message)
+        ? "Lançamentos conciliados não podem ter baixas estornadas."
+        : /FINANCIAL_REVERSAL_REASON_REQUIRED/i.test(err.message)
+          ? "Informe um motivo com pelo menos 5 caracteres."
+          : /FINANCIAL_REVERSAL_AMOUNT_INVALID|FINANCIAL_REVERSAL_EXCEEDS_ENTRY_PAID/i.test(err.message)
+            ? "O valor do estorno é inválido para esta baixa."
+            : /ROLE_ACCESS_DENIED/i.test(err.message)
+              ? "Somente proprietário ou administrador pode estornar baixas."
+              : "Não foi possível estornar a baixa.";
+      toast.error(message);
+    },
   });
 
   return {
@@ -269,6 +322,7 @@ export function useFinance() {
     saveDreSettings,
     createPayment,
     reconcile,
+    reversePayment,
   };
 }
 
@@ -279,11 +333,18 @@ export function useFinancialPayments(entryId: string | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("financial_payments")
-        .select("id,entry_id,amount_cents,paid_at,method,notes")
+        .select("id,entry_id,amount_cents,paid_at,method,notes,financial_payment_reversals(id,amount_cents,reason,reversed_at,created_by)")
         .eq("entry_id", entryId!)
         .order("paid_at", { ascending: false });
       if (error) throw new Error(error.message);
-      return (data ?? []) as PaymentRow[];
+      return (data ?? []).map((payment) => {
+        const reversals = payment.financial_payment_reversals ?? [];
+        return {
+          ...payment,
+          financial_payment_reversals: reversals,
+          reversed_amount_cents: reversals.reduce((total, reversal) => total + reversal.amount_cents, 0),
+        } satisfies PaymentRow;
+      });
     },
   });
 }

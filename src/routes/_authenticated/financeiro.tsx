@@ -5,7 +5,7 @@ import {
   Plus, Trash2, TrendingUp, TrendingDown, Wallet, DollarSign, AlertCircle,
   CircleDollarSign, ArrowUpRight, ArrowDownRight, Download, Radio, Sparkles,
   Receipt, ReceiptText, Brain, ShieldCheck, History, BookOpen, Check,
-  Settings2, Bell, FileDown,
+  Settings2, Bell, FileDown, Undo2,
 } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -25,9 +25,13 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/lib/auth-context";
 import { useGlobalFilters, PERIOD_LABELS, type PeriodKey } from "@/lib/global-filters";
-import { useFinance, useFinancialPayments, useFinancialAuditEntry } from "@/hooks/use-finance";
+import { useFinance, useFinancialPayments, useFinancialAuditEntry, type PaymentRow } from "@/hooks/use-finance";
 import { useMetricsFinanceiro } from "@/hooks/use-metrics";
 import {
   financeKpis, revenueByMonth, fmtBRL, fmtBRLCompact, pctDelta,
@@ -48,7 +52,6 @@ type Entry = FinRow & {
 };
 type CaseLite = { id: string; area: string | null; responsible: string | null };
 type ClientLite = { id: string; name: string };
-type PaymentRow = { id: string; entry_id: string; amount_cents: number; paid_at: string; method: string | null; notes: string | null };
 type AuditRow = { id: string; entry_id: string | null; action: string; created_at: string; actor_id: string | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
 type NotificationRow = { id: string; kind: string; title: string; body: string | null; entry_id: string | null; read_at: string | null; created_at: string };
 type DreSettingsRow = { tenant_id: string; apply_cogs: boolean; enabled_categories: string[]; category_map: Record<string, string> };
@@ -92,6 +95,7 @@ function Financeiro() {
     saveDreSettings,
     createPayment,
     reconcile,
+    reversePayment,
   } = useFinance();
 
   const loading = isLoading;
@@ -135,7 +139,18 @@ function Financeiro() {
     profitYear:       kpisRpc?.profit_year        ?? kpisLocal.profitYear,
     clientRev:        kpisLocal.clientRev,
   };
-  const series12 = useMemo(() => revenueByMonth(filtered, 12), [filtered]);
+  const series12 = useMemo(() => {
+    if (!kpisRpc?.series) return revenueByMonth(filtered, 12);
+    return kpisRpc.series.map((point) => {
+      const [year, month] = point.bucket.split("-").map(Number);
+      return {
+        key: point.bucket,
+        label: `${new Date(year, month - 1, 1).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}/${String(year).slice(2)}`,
+        receita: point.receita,
+        despesa: point.despesa,
+      };
+    });
+  }, [filtered, kpisRpc?.series]);
 
   // Daily flow inside the selected period range
   const dailySeries = useMemo(() => {
@@ -790,6 +805,7 @@ function Financeiro() {
         tenantId={tenantId}
         createPayment={createPayment}
         reconcile={reconcile}
+        reversePayment={reversePayment}
         onClose={() => setReconcileEntry(null)}
         onDone={() => {
           qc.invalidateQueries({ queryKey: ["fin", "entries", tenantId] });
@@ -831,11 +847,13 @@ function RowLine({ label, value, tone, bold, big }: { label: string; value: numb
   );
 }
 
-function ReconcileDialog({ entry, tenantId, createPayment, reconcile, onClose, onDone }: { entry: Entry | null; tenantId: string | null; createPayment: UseFinanceReturn['createPayment']; reconcile: UseFinanceReturn['reconcile']; onClose: () => void; onDone: () => void }) {
+function ReconcileDialog({ entry, tenantId, createPayment, reconcile, reversePayment, onClose, onDone }: { entry: Entry | null; tenantId: string | null; createPayment: UseFinanceReturn['createPayment']; reconcile: UseFinanceReturn['reconcile']; reversePayment: UseFinanceReturn['reversePayment']; onClose: () => void; onDone: () => void }) {
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState("pix");
   const [notes, setNotes] = useState("");
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [reversalTarget, setReversalTarget] = useState<PaymentRow | null>(null);
+  const [reversalReason, setReversalReason] = useState("");
 
   const paymentsQ = useFinancialPayments(entry?.id ?? null);
 
@@ -859,11 +877,27 @@ function ReconcileDialog({ entry, tenantId, createPayment, reconcile, onClose, o
     });
     setAmount(0); setNotes("");
     onDone();
+    onClose();
   };
 
   const handleReconcile = async () => {
     if (!entry) return;
     await reconcile.mutateAsync(entry.id);
+    onDone();
+    onClose();
+  };
+
+  const handleReverse = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (!reversalTarget || reversalReason.trim().length < 5) return;
+    const remainingPayment = reversalTarget.amount_cents - reversalTarget.reversed_amount_cents;
+    await reversePayment.mutateAsync({
+      paymentId: reversalTarget.id,
+      reason: reversalReason,
+      amountCents: remainingPayment,
+    });
+    setReversalTarget(null);
+    setReversalReason("");
     onDone();
     onClose();
   };
@@ -921,7 +955,9 @@ function ReconcileDialog({ entry, tenantId, createPayment, reconcile, onClose, o
                   <Label>Observação</Label>
                   <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
                 </div>
-                <Button onClick={registerPayment}><Check className="size-4 mr-1" /> Registrar baixa</Button>
+                <Button onClick={registerPayment} disabled={createPayment.isPending}>
+                  <Check className="size-4 mr-1" /> {createPayment.isPending ? "Registrando..." : "Registrar baixa"}
+                </Button>
               </div>
             )}
 
@@ -931,27 +967,100 @@ function ReconcileDialog({ entry, tenantId, createPayment, reconcile, onClose, o
                 <p className="text-xs text-muted-foreground">Sem baixas registradas</p>
               ) : (
                 <ul className="divide-y divide-border/60">
-                  {(paymentsQ.data ?? []).map((p) => (
-                    <li key={p.id} className="flex items-center justify-between py-1.5 text-xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Badge variant="outline" className="text-[10px] capitalize">{p.method ?? "—"}</Badge>
-                        <span className="tabular-nums">{fmtBRL(p.amount_cents)}</span>
+                  {(paymentsQ.data ?? []).map((p) => {
+                    const netAmount = p.amount_cents - p.reversed_amount_cents;
+                    return (
+                    <li key={p.id} className="flex items-center justify-between gap-3 py-2 text-xs">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] capitalize">{p.method ?? "—"}</Badge>
+                          <span className="tabular-nums">{fmtBRL(netAmount)}</span>
+                          {p.reversed_amount_cents > 0 && (
+                            <Badge variant="outline" className="text-[10px] text-destructive border-destructive/40">
+                              {netAmount === 0 ? "Estornado" : "Estorno parcial"}
+                            </Badge>
+                          )}
+                        </div>
+                        {p.reversed_amount_cents > 0 && (
+                          <div className="space-y-0.5 text-[10px] text-muted-foreground">
+                            <p>Original {fmtBRL(p.amount_cents)} · estornado {fmtBRL(p.reversed_amount_cents)}</p>
+                            {p.financial_payment_reversals.map((reversal) => (
+                              <p key={reversal.id} title={new Date(reversal.reversed_at).toLocaleString("pt-BR")}>
+                                Motivo: {reversal.reason}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <span className="text-muted-foreground">{new Date(p.paid_at).toLocaleDateString("pt-BR")}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-muted-foreground">{new Date(p.paid_at).toLocaleDateString("pt-BR")}</span>
+                        {netAmount > 0 && entry.settlement_status !== "conciliado" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[10px] text-destructive hover:text-destructive"
+                            onClick={() => { setReversalTarget(p); setReversalReason(""); }}
+                          >
+                            <Undo2 className="mr-1 size-3" /> Estornar
+                          </Button>
+                        )}
+                      </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
             </div>
 
             {entry.settlement_status !== "conciliado" && paid >= total && total > 0 && (
-              <Button variant="outline" onClick={handleReconcile} className="w-full">
-                <ShieldCheck className="size-4 mr-1" /> Marcar como conciliado
+              <Button variant="outline" onClick={handleReconcile} className="w-full" disabled={reconcile.isPending}>
+                <ShieldCheck className="size-4 mr-1" /> {reconcile.isPending ? "Conciliando..." : "Marcar como conciliado"}
               </Button>
             )}
           </div>
         )}
       </DialogContent>
+
+      <AlertDialog open={!!reversalTarget} onOpenChange={(open) => { if (!open && !reversePayment.isPending) setReversalTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Estornar esta baixa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O saldo do lançamento será recalculado e o estorno ficará permanentemente registrado no histórico de auditoria.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {reversalTarget && (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+                Valor a estornar: <strong>{fmtBRL(reversalTarget.amount_cents - reversalTarget.reversed_amount_cents)}</strong>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="reversal-reason">Motivo do estorno</Label>
+                <Textarea
+                  id="reversal-reason"
+                  value={reversalReason}
+                  onChange={(event) => setReversalReason(event.target.value)}
+                  placeholder="Ex.: pagamento registrado em duplicidade"
+                  rows={3}
+                  maxLength={500}
+                  autoFocus
+                />
+                <p className="text-[11px] text-muted-foreground">Mínimo de 5 caracteres. O motivo não poderá ser alterado.</p>
+              </div>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reversePayment.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleReverse}
+              disabled={reversalReason.trim().length < 5 || reversePayment.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {reversePayment.isPending ? "Estornando..." : "Confirmar estorno"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

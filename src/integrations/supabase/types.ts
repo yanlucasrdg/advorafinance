@@ -783,6 +783,54 @@ export type Database = {
           },
         ]
       }
+      financial_payment_reversals: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          created_by: string | null
+          id: string
+          payment_id: string
+          reason: string
+          reversed_at: string
+          tenant_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payment_id: string
+          reason: string
+          reversed_at?: string
+          tenant_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payment_id?: string
+          reason?: string
+          reversed_at?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_payment_reversals_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "financial_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_payment_reversals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string | null
@@ -1483,6 +1531,14 @@ export type Database = {
       reconcile_financial_entry: {
         Args: { _entry_id: string }
         Returns: undefined
+      }
+      reverse_financial_payment: {
+        Args: {
+          p_amount_cents?: number
+          p_payment_id: string
+          p_reason: string
+        }
+        Returns: Database["public"]["Tables"]["financial_entries"]["Row"]
       }
       soft_delete_client: {
         Args: { p_client_id: string }
