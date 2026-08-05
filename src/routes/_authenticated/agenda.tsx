@@ -36,7 +36,7 @@ type Deadline = {
 
 const KIND_STYLES: Record<string, { ring: string; bg: string; text: string; icon: typeof Gavel; label: string; hex: string }> = {
   audiencia:   { ring: "ring-violet-500/30", bg: "bg-violet-500/10", text: "text-violet-600 dark:text-violet-300", icon: Gavel,          label: "Audiência",  hex: "#8b5cf6" },
-  prazo:       { ring: "ring-rose-500/30",   bg: "bg-rose-500/10",   text: "text-rose-600 dark:text-rose-300",     icon: AlertTriangle,  label: "Prazo",      hex: "#f43f5e" },
+  prazo_processual: { ring: "ring-rose-500/30", bg: "bg-rose-500/10", text: "text-rose-600 dark:text-rose-300", icon: AlertTriangle, label: "Prazo", hex: "#f43f5e" },
   reuniao:     { ring: "ring-sky-500/30",    bg: "bg-sky-500/10",    text: "text-sky-600 dark:text-sky-300",       icon: Users,          label: "Reunião",    hex: "#0ea5e9" },
   compromisso: { ring: "ring-sky-500/30",    bg: "bg-sky-500/10",    text: "text-sky-600 dark:text-sky-300",       icon: Users,          label: "Compromisso",hex: "#0ea5e9" },
   protocolo:   { ring: "ring-emerald-500/30",bg: "bg-emerald-500/10",text: "text-emerald-600 dark:text-emerald-300",icon: FileText,      label: "Protocolo",  hex: "#10b981" },
@@ -57,7 +57,7 @@ function Agenda() {
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
   const [listFilter, setListFilter] = useState<ListFilter>(null);
   const [form, setForm] = useState({
-    title: "", kind: "prazo", due_at: "", case_id: "", client_id: "", priority: "media",
+    title: "", kind: "prazo_processual", due_at: "", case_id: "", client_id: "", priority: "medium",
   });
 
   const now = new Date();
@@ -212,9 +212,10 @@ function Agenda() {
                       <Select value={form.priority} onValueChange={v => setForm({ ...form, priority: v })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="alta">Alta</SelectItem>
-                          <SelectItem value="media">Média</SelectItem>
-                          <SelectItem value="baixa">Baixa</SelectItem>
+                          <SelectItem value="high">Alta</SelectItem>
+                          <SelectItem value="medium">Média</SelectItem>
+                          <SelectItem value="low">Baixa</SelectItem>
+                          <SelectItem value="critical">Crítica</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -251,7 +252,7 @@ function Agenda() {
                         client_id: form.client_id || null,
                       });
                       setOpen(false);
-                      setForm({ title: "", kind: "prazo", due_at: "", case_id: "", client_id: "", priority: "media" });
+                      setForm({ title: "", kind: "prazo_processual", due_at: "", case_id: "", client_id: "", priority: "medium" });
                     } catch {
                       // error handled by mutation toast
                     }
@@ -331,7 +332,7 @@ function Agenda() {
                           <CheckCircle2 className="size-4" />
                         </span>
                         <span
-                          onClick={(e) => { e.stopPropagation(); remove(d.id); }}
+                          onClick={(e) => { e.stopPropagation(); remove(d); }}
                           className="shrink-0 cursor-pointer text-muted-foreground hover:text-rose-400"
                         >
                           <Trash2 className="size-3.5" />
