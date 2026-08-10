@@ -93,7 +93,7 @@ export const metaWhatsAppStatus = createServerFn({ method: "GET" })
 
 export const metaWhatsAppCompleteEmbeddedSignup = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { code: string; businessAccountId: string; phoneNumberId: string; displayPhoneNumber?: string }) => {
+  .inputValidator((input: { code: string; businessAccountId: string; phoneNumberId: string; displayPhoneNumber?: string }) => {
     const code = String(input?.code ?? "").trim();
     const businessAccountId = String(input?.businessAccountId ?? "").trim();
     const phoneNumberId = String(input?.phoneNumberId ?? "").trim();
@@ -137,7 +137,7 @@ export const metaWhatsAppCompleteEmbeddedSignup = createServerFn({ method: "POST
 
 export const metaWhatsAppSendText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { phone: string; message: string; clientId?: string }) => {
+  .inputValidator((input: { phone: string; message: string; clientId?: string }) => {
     const phone = String(input?.phone ?? "").replace(/\D/g, "");
     const message = String(input?.message ?? "").trim();
     if (phone.length < 10 || phone.length > 15) throw new Error("Telefone inválido. Use DDI, DDD e número.");

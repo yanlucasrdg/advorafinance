@@ -214,7 +214,7 @@ async function fetchFromDataJud(numero: string): Promise<DataJudResult> {
 /** Apenas consulta o DataJud (não persiste). Usada no diálogo de import. */
 export const lookupDatajud = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((d) => z.object({ numero: z.string().min(1).max(64) }).parse(d))
+  .inputValidator((d) => z.object({ numero: z.string().min(1).max(64) }).parse(d))
   .handler(async ({ data, context }) => {
     await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer"]);
     await requireActiveSubscription(context);
@@ -225,7 +225,7 @@ export const lookupDatajud = createServerFn({ method: "POST" })
 /** Sincroniza movimentações de um processo já existente. */
 export const syncCaseMovements = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((d) => z.object({ caseId: z.string().uuid() }).parse(d))
+  .inputValidator((d) => z.object({ caseId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer"]);

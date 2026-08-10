@@ -67,7 +67,7 @@ export const getBillingOverview = createServerFn({ method: "GET" })
 
 export const createKirvanoCheckout = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data) => CheckoutSchema.parse(data))
+  .inputValidator((data) => CheckoutSchema.parse(data))
   .handler(async ({ data, context }) => {
     const profile = await requireOwner(context);
     const { getServerEnv } = await import("@/integrations/supabase/runtime-env.server");
