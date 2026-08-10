@@ -62,19 +62,25 @@ export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       // TanStack server functions execute through the Nitro handler. Keep the
-      // immutable Worker bindings available to their server-only helpers.
-      (globalThis as CloudflareRuntime).__env__ = (env ?? {}) as Record<string, unknown>;
+      // immutable Worker bindings available to their server-only helpers. The
+      // Nitro service can call this entry without forwarding `env`, while its
+      // outer Cloudflare handler has already populated globalThis.__env__.
+      // Never replace those bindings with an empty object in that case.
+      const forwardedEnv = env && typeof env === "object"
+        ? env as Record<string, unknown>
+        : undefined;
+      if (forwardedEnv) (globalThis as CloudflareRuntime).__env__ = forwardedEnv;
       const pathname = new URL(request.url).pathname;
       let response: Response;
       if (pathname === "/webhooks/whatsapp") {
-        const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
+        const bindings = (globalThis as CloudflareRuntime).__env__ ?? forwardedEnv ?? {};
         response = await handleMetaWhatsAppWebhook(request, bindings);
       } else if (pathname === "/webhooks/waha") {
         // Keep WAHA ingress on the same authenticated Worker deployment as the CRM.
-        const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
+        const bindings = (globalThis as CloudflareRuntime).__env__ ?? forwardedEnv ?? {};
         response = await handleWahaWebhook(request, bindings);
       } else if (pathname === "/webhooks/kirvano") {
-        const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
+        const bindings = (globalThis as CloudflareRuntime).__env__ ?? forwardedEnv ?? {};
         response = await handleKirvanoWebhook(request, bindings);
       } else {
         const handler = await getServerEntry();
