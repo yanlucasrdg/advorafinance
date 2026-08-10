@@ -70,6 +70,7 @@ export default {
         const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
         response = await handleMetaWhatsAppWebhook(request, bindings);
       } else if (pathname === "/webhooks/waha") {
+        // Keep WAHA ingress on the same authenticated Worker deployment as the CRM.
         const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
         response = await handleWahaWebhook(request, bindings);
       } else if (pathname === "/webhooks/kirvano") {
