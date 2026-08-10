@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { encryptMetaAccessToken, decryptMetaAccessToken } from "@/lib/meta-whatsapp-credentials.server";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { requireActiveSubscription, requireServerRole } from "@/lib/authorization.server";
+import { hasWahaConnection, sendWahaText } from "@/lib/waha.functions";
 
 type MetaChannel = { id: string; tenantId: string; phoneNumberId: string; accessToken: string };
 type MetaConnectionRow = { instance_id: string; tenant_id: string; phone_number_id: string; business_account_id: string; access_token_ciphertext: string; status: string; connected_at: string | null; last_error: string | null };
@@ -148,6 +149,9 @@ export const metaWhatsAppSendText = createServerFn({ method: "POST" })
     await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer", "secretary"]);
     await requireActiveSubscription(context);
     await enforceRateLimit(context.supabase, "zapi_send_text");
+    if (await hasWahaConnection(context.userId)) {
+      return await sendWahaText(context.userId, data);
+    }
     const channel = await loadMetaChannel(context.userId);
     const response = await fetch(`https://graph.facebook.com/v25.0/${channel.phoneNumberId}/messages`, {
       method: "POST",
@@ -168,5 +172,5 @@ export const metaWhatsAppSendText = createServerFn({ method: "POST" })
     });
     if (messageError) throw new Error(messageError.message);
     await supabaseAdmin.from("whatsapp_conversations").update({ last_message: data.message, last_message_at: new Date().toISOString(), unread_count: 0 }).eq("id", conversationId);
-    return { conversationId, externalMessageId: payload.messages?.[0]?.id ?? null };
+    return { conversationId, externalMessageId: payload.messages?.[0]?.id ?? null, provider: "meta" as const };
   });

@@ -73,7 +73,7 @@ const QUEUE_LABELS: Record<ServiceQueue, string> = {
  * person; it only places a new conversation in the appropriate work queue so
  * the office remains in control of every legal interaction.
  */
-function qualifyInboundMessage(body: string): Qualification {
+export function qualifyInboundMessage(body: string): Qualification {
   const text = body.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const includesAny = (terms: string[]) => terms.some((term) => text.includes(term));
   const urgent = includesAny(["urgente", "urgencia", "hoje", "agora", "liminar", "audiencia", "prazo vence", "prisao", "preso"]);

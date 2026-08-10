@@ -4,6 +4,7 @@ import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { handleMetaWhatsAppWebhook } from "./lib/meta-webhook.server";
 import { handleKirvanoWebhook } from "./lib/kirvano-webhook.server";
+import { handleWahaWebhook } from "./lib/waha-webhook.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -68,6 +69,9 @@ export default {
       if (pathname === "/webhooks/whatsapp") {
         const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
         response = await handleMetaWhatsAppWebhook(request, bindings);
+      } else if (pathname === "/webhooks/waha") {
+        const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
+        response = await handleWahaWebhook(request, bindings);
       } else if (pathname === "/webhooks/kirvano") {
         const bindings = (globalThis as CloudflareRuntime).__env__ ?? (env ?? {}) as Record<string, unknown>;
         response = await handleKirvanoWebhook(request, bindings);
