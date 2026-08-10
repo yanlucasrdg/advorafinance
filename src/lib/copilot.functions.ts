@@ -28,7 +28,7 @@ export const clearCopilotHistory = createServerFn({ method: "POST" })
 
 export const askCopilot = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((d) => Schema.parse(d))
+  .inputValidator((d) => Schema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer"]);

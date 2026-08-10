@@ -191,7 +191,7 @@ export const zapiRestart = createServerFn({ method: "POST" })
 
 export const zapiSendText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: { phone: string; message: string }) => {
+  .inputValidator((input: { phone: string; message: string }) => {
     const phone = String(input?.phone ?? "").replace(/\D/g, "");
     const message = String(input?.message ?? "").trim();
     if (!phone || phone.length < 10) throw new Error("Telefone inválido (use DDI+DDD+número, ex.: 5511999999999).");

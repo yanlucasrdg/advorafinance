@@ -41,7 +41,7 @@ async function requireOwner(context: { supabase: SupabaseClient<Database>; userI
 
 export const inviteTeamMember = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data) => InviteSchema.parse(data))
+  .inputValidator((data) => InviteSchema.parse(data))
   .handler(async ({ data, context }) => {
     await requireOwner(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -69,7 +69,7 @@ export const inviteTeamMember = createServerFn({ method: "POST" })
 
 export const changeTeamMemberRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data) => ChangeRoleSchema.parse(data))
+  .inputValidator((data) => ChangeRoleSchema.parse(data))
   .handler(async ({ data, context }) => {
     await requireOwner(context);
     const { error } = await context.supabase.rpc("replace_tenant_member_role", {
