@@ -12,6 +12,7 @@ import { useMetricsComunicacoes } from "@/hooks/use-metrics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -120,6 +121,18 @@ function initials(name: string | null, phone: string | null): string {
   return src.slice(0, 2).toUpperCase();
 }
 
+function formatContactPhone(phone: string | null): string {
+  if (!phone) return "Telefone não informado";
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 13 && digits.startsWith("55")) {
+    return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  }
+  if (digits.length === 12 && digits.startsWith("55")) {
+    return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+  }
+  return phone;
+}
+
 function Comunicacoes() {
   const { profile, user } = useAuth();
   const [convs, setConvs] = useState<Conversation[]>([]);
@@ -135,6 +148,7 @@ function Comunicacoes() {
   const [inboxTab, setInboxTab] = useState<InboxTab>("new");
   const [quickPhone, setQuickPhone] = useState("");
   const [sending, setSending] = useState(false);
+  const [queueUpdating, setQueueUpdating] = useState(false);
   const [draft, setDraft] = useState("");
   const [newTag, setNewTag] = useState("");
   const [openNew, setOpenNew] = useState(false);
@@ -311,12 +325,27 @@ function Comunicacoes() {
   };
 
   const moveToQueue = async (id: string, queue: ServiceQueue) => {
-    const { error } = await supabase.from("whatsapp_conversations")
-      .update({ category: queue, archived_at: null })
-      .eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success(`Atendimento movido para ${QUEUE_META[queue].label}.`);
-    load();
+    const previous = convs.find((conversation) => conversation.id === id)?.category ?? null;
+    if (previous === queue) return;
+    setQueueUpdating(true);
+    setConvs((existing) => existing.map((conversation) => conversation.id === id
+      ? { ...conversation, category: queue, archived_at: null }
+      : conversation));
+    try {
+      const { error } = await supabase.from("whatsapp_conversations")
+        .update({ category: queue, archived_at: null })
+        .eq("id", id);
+      if (error) throw error;
+      toast.success(`Atendimento movido para ${QUEUE_META[queue].label}.`);
+      void load(false);
+    } catch (error) {
+      setConvs((existing) => existing.map((conversation) => conversation.id === id
+        ? { ...conversation, category: previous }
+        : conversation));
+      toast.error(error instanceof Error ? error.message : "Não foi possível atualizar a fila.");
+    } finally {
+      setQueueUpdating(false);
+    }
   };
 
   const addTag = async (id: string, tag: string) => {
@@ -858,19 +887,22 @@ function Comunicacoes() {
           <button
             type="button"
             aria-label="Fechar detalhes do contato"
-            className="absolute inset-0 z-20 bg-black/35 backdrop-blur-[1px] 2xl:hidden"
+            className="absolute inset-0 z-20 bg-black/50 backdrop-blur-sm 2xl:hidden"
             onClick={() => setShowContactPanel(false)}
           />
         )}
 
         {/* ---------- Column 3: Contact panel ---------- */}
-        <aside className={`glass rounded-2xl min-h-0 flex-col overflow-hidden animate-fade-up ${showContactPanel ? "absolute inset-y-0 right-6 z-30 flex w-[min(320px,calc(100%-3rem))] shadow-2xl 2xl:static 2xl:w-auto" : "hidden 2xl:flex"}`}>
-          <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/40 px-4 2xl:hidden">
-            <span className="text-sm font-semibold">Detalhes do contato</span>
+        <aside className={`glass min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/95 shadow-2xl animate-fade-up ${showContactPanel ? "absolute inset-y-0 right-4 z-30 flex w-[min(360px,calc(100%-2rem))] 2xl:static 2xl:w-auto" : "hidden 2xl:flex"}`}>
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/50 bg-background/35 px-4">
+            <div>
+              <div className="text-sm font-semibold text-foreground">Detalhes do contato</div>
+              <div className="text-[10px] text-muted-foreground">Perfil e organização do atendimento</div>
+            </div>
             <button
               type="button"
               onClick={() => setShowContactPanel(false)}
-              className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+              className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground 2xl:hidden"
               aria-label="Fechar detalhes"
             >
               <X className="size-4" />
@@ -881,86 +913,160 @@ function Comunicacoes() {
               Nenhuma conversa aberta.
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="text-center pt-2">
-                <div className={`mx-auto grid place-items-center size-16 rounded-full ${CHANNEL_META[current.channel ?? "whatsapp"].bg} ${CHANNEL_META[current.channel ?? "whatsapp"].color} text-lg font-semibold ring-1 ring-white/10`}>
-                  {initials(current.contact_name, current.contact_phone)}
+            <div className="flex-1 space-y-3 overflow-y-auto p-3.5">
+              <section className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-primary/15 via-background/45 to-emerald-500/[0.06] p-4 text-center shadow-sm">
+                <div aria-hidden className="absolute -right-10 -top-10 size-28 rounded-full bg-primary/10 blur-2xl" />
+                <div className="relative mx-auto w-fit">
+                  <div className={`grid size-18 place-items-center rounded-full ${CHANNEL_META[current.channel ?? "whatsapp"].bg} ${CHANNEL_META[current.channel ?? "whatsapp"].color} text-xl font-bold ring-4 ring-background/70 shadow-lg`}>
+                    {initials(current.contact_name, current.contact_phone)}
+                  </div>
+                  <div className={`absolute -bottom-1 -right-1 grid size-7 place-items-center rounded-full border-2 border-card ${CHANNEL_META[current.channel ?? "whatsapp"].bg} ${CHANNEL_META[current.channel ?? "whatsapp"].color}`}>
+                    {(() => { const I = CHANNEL_META[current.channel ?? "whatsapp"].icon; return <I className="size-3.5" />; })()}
+                  </div>
                 </div>
-                <div className="text-base font-semibold mt-3">{current.contact_name || "Sem nome"}</div>
-                {current.contact_phone && <div className="text-xs text-muted-foreground">{current.contact_phone}</div>}
-              </div>
+                <div className="relative mt-3 text-base font-semibold text-foreground">{current.contact_name || "Contato sem nome"}</div>
+                <div className="relative mt-0.5 font-mono text-[11px] text-muted-foreground">{formatContactPhone(current.contact_phone)}</div>
+                <div className={`relative mx-auto mt-3 inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold ${CHANNEL_META[current.channel ?? "whatsapp"].bg} ${CHANNEL_META[current.channel ?? "whatsapp"].color}`}>
+                  <span className={`size-1.5 rounded-full ${(current.channel ?? "whatsapp") === "whatsapp" ? "bg-emerald-400" : "bg-current"}`} />
+                  {CHANNEL_META[current.channel ?? "whatsapp"].label} conectado
+                </div>
+              </section>
 
-              <div className="space-y-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Canal</div>
-                <div className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium ${CHANNEL_META[current.channel ?? "whatsapp"].bg} ${CHANNEL_META[current.channel ?? "whatsapp"].color}`}>
-                  {(() => { const I = CHANNEL_META[current.channel ?? "whatsapp"].icon; return <I className="size-3.5" />; })()}
-                  {CHANNEL_META[current.channel ?? "whatsapp"].label}
+              <section className="space-y-3.5 rounded-2xl border border-border/60 bg-background/30 p-3.5">
+                <div className="flex items-center gap-2">
+                  <div className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                    <Inbox className="size-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">Atendimento</div>
+                    <div className="text-[10px] text-muted-foreground">Canal e roteamento da conversa</div>
+                  </div>
                 </div>
-              </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor={`contact-queue-${current.id}`} className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Fila de atendimento
+                  </Label>
+                  <Select
+                    value={getConversationQueue(current)}
+                    onValueChange={(value) => void moveToQueue(current.id, value as ServiceQueue)}
+                    disabled={queueUpdating}
+                  >
+                    <SelectTrigger
+                      id={`contact-queue-${current.id}`}
+                      aria-label="Fila de atendimento"
+                      className="h-10 rounded-xl border-border/70 bg-background/70 px-3 text-sm text-foreground shadow-inner transition-colors hover:border-primary/50 focus:ring-2 focus:ring-primary/30"
+                    >
+                      <SelectValue>
+                        <span className="flex items-center gap-2">
+                          <span aria-hidden className={`size-2 rounded-full ${QUEUE_META[getConversationQueue(current)].dot}`} />
+                          {QUEUE_META[getConversationQueue(current)].label}
+                        </span>
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="z-[70] border-border/70 bg-popover text-popover-foreground shadow-2xl">
+                      {(Object.entries(QUEUE_META) as Array<[ServiceQueue, typeof QUEUE_META[ServiceQueue]]>).map(([queue, meta]) => (
+                        <SelectItem key={queue} value={queue} className="h-9 cursor-pointer text-foreground focus:bg-primary/15 focus:text-foreground">
+                          <span className="flex items-center gap-2">
+                            <span aria-hidden className={`size-2 rounded-full ${meta.dot}`} />
+                            {meta.label}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-start gap-2 rounded-xl border border-border/40 bg-muted/25 px-3 py-2.5">
+                  {queueUpdating ? (
+                    <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary" />
+                  ) : (
+                    <span className={`mt-1 size-2 shrink-0 rounded-full ${QUEUE_META[getConversationQueue(current)].dot}`} />
+                  )}
+                  <div>
+                    <div className="text-[11px] font-medium text-foreground">
+                      {queueUpdating ? "Atualizando fila…" : QUEUE_META[getConversationQueue(current)].label}
+                    </div>
+                    <div className="text-[10px] leading-relaxed text-muted-foreground">
+                      {queueUpdating ? "Salvando a nova organização." : "As novas mensagens serão organizadas nesta fila."}
+                    </div>
+                  </div>
+                </div>
+              </section>
 
-              <div className="space-y-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Fila de atendimento</div>
-                <select
-                  value={getConversationQueue(current)}
-                  onChange={(event) => void moveToQueue(current.id, event.target.value as ServiceQueue)}
-                  className="h-8 w-full rounded-md border border-border/60 bg-white/[0.03] px-2 text-xs outline-none focus:border-primary"
-                >
-                  {(Object.entries(QUEUE_META) as Array<[ServiceQueue, typeof QUEUE_META[ServiceQueue]]>).map(([queue, meta]) => (
-                    <option key={queue} value={queue}>{meta.label}</option>
-                  ))}
-                </select>
-                <div className={`flex items-center gap-1.5 text-xs ${QUEUE_META[getConversationQueue(current)].text}`}>
-                  <span className={`size-1.5 rounded-full ${QUEUE_META[getConversationQueue(current)].dot}`} />
-                  Esta conversa está na fila de {QUEUE_META[getConversationQueue(current)].label}.
+              <section className="space-y-3 rounded-2xl border border-border/60 bg-background/30 p-3.5">
+                <div className="flex items-center gap-2">
+                  <div className="grid size-8 place-items-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-300">
+                    <Tag className="size-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">Tags</div>
+                    <div className="text-[10px] text-muted-foreground">Identifique o assunto rapidamente</div>
+                  </div>
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Tag className="size-3" /> Tags</div>
-                <div className="flex flex-wrap gap-1">
-                  {visibleTags(current).map(t => (
-                    <span key={t} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-white/[0.06]">
-                      {t}
-                      <button onClick={() => removeTag(current.id, t)} className="text-muted-foreground hover:text-foreground"><X className="size-2.5" /></button>
-                    </span>
-                  ))}
-                </div>
-                <div className="flex gap-1">
+                {visibleTags(current).length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {visibleTags(current).map(t => (
+                      <span key={t} className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-[11px] font-medium text-foreground">
+                        {t}
+                        <button type="button" aria-label={`Remover tag ${t}`} onClick={() => removeTag(current.id, t)} className="grid size-4 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"><X className="size-2.5" /></button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border/60 px-3 py-2 text-center text-[10px] text-muted-foreground">Nenhuma tag adicionada</div>
+                )}
+                <div className="flex gap-1.5">
                   <Input value={newTag} onChange={e => setNewTag(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTag(current.id, newTag); } }}
-                    placeholder="Nova tag" className="h-7 text-xs bg-white/[0.02]" />
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => addTag(current.id, newTag)}>+</Button>
+                    placeholder="Adicionar tag" className="h-9 rounded-xl bg-background/60 text-xs" />
+                  <Button type="button" size="sm" variant="outline" aria-label="Adicionar tag" className="size-9 shrink-0 rounded-xl p-0 text-base" onClick={() => addTag(current.id, newTag)}>+</Button>
                 </div>
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {QUICK_TAGS.filter(t => !visibleTags(current).includes(t)).map(t => (
-                    <button key={t} onClick={() => addTag(current.id, t)} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.03] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground transition-colors">
-                      + {t}
-                    </button>
-                  ))}
+                <div>
+                  <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Sugestões</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {QUICK_TAGS.filter(t => !visibleTags(current).includes(t)).map(t => (
+                      <button type="button" key={t} onClick={() => addTag(current.id, t)} className="rounded-full border border-dashed border-border/70 px-2.5 py-1 text-[10px] text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/10 hover:text-foreground">
+                        + {t}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </section>
 
-              <div className="space-y-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Atribuída a</div>
-                <div className="text-xs">
-                  {current.assigned_to === user?.id ? (
-                    <span className="text-emerald-300">Você</span>
-                  ) : current.assigned_to ? (
-                    <span className="text-muted-foreground">Outro membro</span>
-                  ) : (
-                    <span className="text-amber-300">Nenhum responsável</span>
-                  )}
+              <section className="space-y-3 rounded-2xl border border-border/60 bg-background/30 p-3.5">
+                <div className="flex items-center gap-2">
+                  <div className="grid size-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+                    <UserPlus className="size-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">Responsável</div>
+                    <div className="text-[10px] text-muted-foreground">Pessoa atendendo esta conversa</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 rounded-xl bg-muted/25 px-3 py-2.5">
+                  <div className="grid size-8 shrink-0 place-items-center rounded-full bg-background text-[11px] font-bold text-foreground ring-1 ring-border/70">
+                    {current.assigned_to === user?.id ? "EU" : current.assigned_to ? "EQ" : "—"}
+                  </div>
+                  <div className="min-w-0">
+                    {current.assigned_to === user?.id ? (
+                      <><div className="text-xs font-semibold text-emerald-600 dark:text-emerald-300">Você</div><div className="text-[10px] text-muted-foreground">Atendimento assumido</div></>
+                    ) : current.assigned_to ? (
+                      <><div className="text-xs font-semibold text-foreground">Outro membro</div><div className="text-[10px] text-muted-foreground">Atribuído à equipe</div></>
+                    ) : (
+                      <><div className="text-xs font-semibold text-amber-600 dark:text-amber-300">Nenhum responsável</div><div className="text-[10px] text-muted-foreground">Disponível para assumir</div></>
+                    )}
+                  </div>
                 </div>
                 {current.assigned_to !== user?.id && (
-                  <Button size="sm" variant="outline" className="h-7 text-xs w-full" onClick={() => assignToMe(current.id)}>
-                    <UserPlus className="size-3 mr-1" /> Assumir conversa
+                  <Button size="sm" variant="outline" className="h-9 w-full rounded-xl text-xs" onClick={() => assignToMe(current.id)}>
+                    <UserPlus className="mr-1.5 size-3.5" /> Assumir conversa
                   </Button>
                 )}
-              </div>
+              </section>
 
-              <div className="space-y-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Criada em</div>
-                <div className="text-xs">{new Date(current.created_at).toLocaleString("pt-BR")}</div>
+              <div className="flex items-center gap-2 px-1 pb-1 pt-0.5 text-[10px] text-muted-foreground">
+                <Clock className="size-3.5" />
+                <span>Conversa iniciada em</span>
+                <time dateTime={current.created_at} className="font-medium text-foreground">{new Date(current.created_at).toLocaleString("pt-BR")}</time>
               </div>
             </div>
           )}
