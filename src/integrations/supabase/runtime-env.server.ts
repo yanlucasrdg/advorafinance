@@ -21,7 +21,15 @@ type BuildTimeEnv = ImportMeta & {
  * retained as a fallback for local Vite/Nitro development.
  */
 export function getServerEnv(name: string): string | undefined {
-  const request = getRequest() as CloudflareRequest | undefined;
+  let request: CloudflareRequest | undefined;
+  try {
+    request = getRequest() as CloudflareRequest | undefined;
+  } catch {
+    // Direct Worker routes (for example signed webhooks) execute outside the
+    // TanStack request context. Their bindings and build-time public values
+    // remain valid fallbacks and must still be readable.
+    request = undefined;
+  }
   const globalBinding = (globalThis as CloudflareGlobal).__env__?.[name];
   if (typeof globalBinding === "string" && globalBinding.length > 0) return globalBinding;
   const binding = request?.runtime?.cloudflare?.env?.[name];
