@@ -166,11 +166,11 @@ export const metaWhatsAppSendText = createServerFn({ method: "POST" })
       if (!client) throw new Error("Cliente não pertence ao escritório atual.");
     }
     const conversationId = await findOrCreateConversation(channel, data.phone, data.clientId);
-    const { error: messageError } = await supabaseAdmin.from("whatsapp_messages").insert({
+    const { data: persistedMessage, error: messageError } = await supabaseAdmin.from("whatsapp_messages").insert({
       tenant_id: channel.tenantId, conversation_id: conversationId, direction: "outbound", body: data.message,
       status: "sent", external_message_id: payload.messages?.[0]?.id ?? null,
-    });
-    if (messageError) throw new Error(messageError.message);
+    }).select("id, conversation_id, direction, body, created_at, status").single();
+    if (messageError || !persistedMessage) throw new Error(messageError?.message ?? "Não foi possível registrar a mensagem enviada.");
     await supabaseAdmin.from("whatsapp_conversations").update({ last_message: data.message, last_message_at: new Date().toISOString(), unread_count: 0 }).eq("id", conversationId);
-    return { conversationId, externalMessageId: payload.messages?.[0]?.id ?? null, provider: "meta" as const };
+    return { conversationId, externalMessageId: payload.messages?.[0]?.id ?? null, provider: "meta" as const, message: persistedMessage };
   });

@@ -124,6 +124,7 @@ function Comunicacoes() {
   const { profile, user } = useAuth();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [pendingMessages, setPendingMessages] = useState<Message[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [showContactPanel, setShowContactPanel] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -142,6 +143,8 @@ function Comunicacoes() {
   const [creating, setCreating] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<string | null>(null);
+  const sendLockRef = useRef(false);
   const sendMetaWhatsApp = useServerFn(metaWhatsAppSendText);
 
   const load = useCallback(async (showSpinner = true) => {
@@ -156,17 +159,26 @@ function Comunicacoes() {
   }, []);
 
   const loadMessages = useCallback(async (conversationId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("whatsapp_messages")
       .select("*")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
       .limit(200);
+    if (error) {
+      console.error("Não foi possível carregar as mensagens:", error);
+      return;
+    }
+    if (selectedRef.current !== conversationId) return;
     setMessages((data ?? []) as Message[]);
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 50);
   }, []);
 
   useEffect(() => { if (profile?.tenant_id) void load(); }, [profile?.tenant_id, load]);
+
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   useEffect(() => {
     if (!selected) { setMessages([]); return; }
@@ -246,6 +258,14 @@ function Comunicacoes() {
 
 
   const current = useMemo(() => convs.find(c => c.id === selected) || null, [convs, selected]);
+  const displayMessages = useMemo(() => {
+    const pending = selected
+      ? pendingMessages.filter((message) => message.conversation_id === selected)
+      : [];
+    return [...messages, ...pending].sort((a, b) => (
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    ));
+  }, [messages, pendingMessages, selected]);
 
   const assignToMe = async (id: string) => {
     if (!user?.id) return;
@@ -319,17 +339,49 @@ function Comunicacoes() {
   };
 
   const send = async () => {
-    if (!current || !draft.trim() || !profile?.tenant_id) return;
+    if (sendLockRef.current || !current || !draft.trim() || !profile?.tenant_id) return;
+    sendLockRef.current = true;
     setSending(true);
     const body = draft.trim();
+    const conversationId = current.id;
+    const phone = current.contact_phone ?? "";
+    const channel = current.channel;
+    const optimisticId = `optimistic-${crypto.randomUUID()}`;
+    const optimisticCreatedAt = new Date().toISOString();
+    setPendingMessages((existing) => [...existing, {
+      id: optimisticId,
+      conversation_id: conversationId,
+      direction: "outbound",
+      body,
+      created_at: optimisticCreatedAt,
+      status: "sending",
+    }]);
+    setConvs((existing) => existing.map((conversation) => conversation.id === conversationId
+      ? { ...conversation, last_message: body, last_message_at: optimisticCreatedAt }
+      : conversation));
+    setDraft("");
+    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 50);
     try {
-      if (current.channel !== "whatsapp") throw new Error("Este canal ainda não está conectado.");
-      await sendMetaWhatsApp({ data: { phone: current.contact_phone ?? "", message: body } });
-      setDraft("");
-      await Promise.all([load(false), loadMessages(current.id)]);
+      if (channel !== "whatsapp") throw new Error("Este canal ainda não está conectado.");
+      const result = await sendMetaWhatsApp({ data: { phone, message: body } });
+      const persistedMessage = result.message as Message;
+      if (selectedRef.current === conversationId) {
+        setMessages((existing) => {
+          if (existing.some((message) => message.id === persistedMessage.id)) return existing;
+          return [...existing, persistedMessage].sort((a, b) => (
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          ));
+        });
+      }
+      setPendingMessages((existing) => existing.filter((message) => message.id !== optimisticId));
+      void load(false);
     } catch (error) {
+      setPendingMessages((existing) => existing.map((message) => message.id === optimisticId
+        ? { ...message, status: "failed" }
+        : message));
       toast.error(error instanceof Error ? error.message : "Não foi possível enviar a mensagem.");
     } finally {
+      sendLockRef.current = false;
       setSending(false);
     }
   };
@@ -762,17 +814,22 @@ function Comunicacoes() {
               </div>
 
               <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-black/10">
-                {messages.length === 0 ? (
+                {displayMessages.length === 0 ? (
                   <div className="text-center text-xs text-muted-foreground py-8">Nenhuma mensagem ainda.</div>
-                ) : messages.map(m => {
+                ) : displayMessages.map(m => {
                   const out = m.direction === "outbound";
                   return (
                     <div key={m.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[70%] rounded-2xl px-3.5 py-2 text-sm ${out ? "bg-[image:var(--gradient-brand)] text-white rounded-br-sm" : "bg-white/[0.06] rounded-bl-sm"}`}>
                         <div className="whitespace-pre-wrap break-words">{m.body}</div>
                         <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${out ? "text-white/70" : "text-muted-foreground"}`}>
-                          <Clock className="size-2.5" />{timeAgo(m.created_at)}
-                          {out && <CheckCheck className="size-3" />}
+                          {m.status === "sending" ? (
+                            <><Loader2 className="size-2.5 animate-spin" />Enviando…</>
+                          ) : m.status === "failed" ? (
+                            <><AlertCircle className="size-2.5" />Não enviada</>
+                          ) : (
+                            <><Clock className="size-2.5" />{timeAgo(m.created_at)}{out && <CheckCheck className="size-3" />}</>
+                          )}
                         </div>
                       </div>
                     </div>

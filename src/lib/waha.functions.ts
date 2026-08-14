@@ -89,13 +89,13 @@ export async function sendWahaText(userId: string, data: { phone: string; messag
   } else if (data.clientId) {
     await supabaseAdmin.from("whatsapp_conversations").update({ client_id: data.clientId }).eq("id", conversationId);
   }
-  const { error: messageError } = await supabaseAdmin.from("whatsapp_messages").insert({
+  const { data: persistedMessage, error: messageError } = await supabaseAdmin.from("whatsapp_messages").insert({
     tenant_id: connection.tenant_id, conversation_id: conversationId, direction: "outbound", body: data.message,
     status: "sent", external_message_id: payload.id ?? null,
-  });
-  if (messageError) throw new Error(messageError.message);
+  }).select("id, conversation_id, direction, body, created_at, status").single();
+  if (messageError || !persistedMessage) throw new Error(messageError?.message ?? "Não foi possível registrar a mensagem enviada.");
   await supabaseAdmin.from("whatsapp_conversations").update({ last_message: data.message, last_message_at: new Date().toISOString(), unread_count: 0 }).eq("id", conversationId);
-  return { conversationId, externalMessageId: payload.id ?? null, provider: "waha" as const };
+  return { conversationId, externalMessageId: payload.id ?? null, provider: "waha" as const, message: persistedMessage };
 }
 
 export const wahaWhatsAppStatus = createServerFn({ method: "GET" })
