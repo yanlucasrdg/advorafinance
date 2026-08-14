@@ -1,5 +1,6 @@
 import { qualifyInboundMessage } from "@/lib/meta-webhook.server";
 import { phoneFromWahaId, wahaStatus } from "@/lib/waha-client.server";
+import { getServerEnv } from "@/integrations/supabase/runtime-env.server";
 
 type WorkerBindings = Record<string, unknown>;
 
@@ -52,8 +53,8 @@ function ackStatus(ackName?: string) {
 }
 
 async function persistWahaEvent(payload: WahaWebhookPayload, env: WorkerBindings) {
-  const supabaseUrl = binding(env, "SUPABASE_URL");
-  const serviceRole = binding(env, "SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseUrl = binding(env, "SUPABASE_URL") ?? getServerEnv("SUPABASE_URL");
+  const serviceRole = binding(env, "SUPABASE_SERVICE_ROLE_KEY") ?? getServerEnv("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRole) throw new Error("WAHA_PERSISTENCE_NOT_CONFIGURED");
   if (!payload.session) return;
 
