@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { phoneFromWahaId, wahaSessionName, wahaStatus } from "./waha-client.server";
+import { phoneFromWahaId, wahaSessionName, wahaSessionRecoveryAction, wahaStatus } from "./waha-client.server";
 
 describe("WAHA provider helpers", () => {
   it("creates a stable session name without punctuation", () => {
@@ -15,8 +15,18 @@ describe("WAHA provider helpers", () => {
 
   it("maps WAHA lifecycle states to the CRM contract", () => {
     expect(wahaStatus("WORKING")).toBe("connected");
+    expect(wahaStatus("STARTING")).toBe("connecting");
     expect(wahaStatus("SCAN_QR_CODE")).toBe("connecting");
+    expect(wahaStatus("PASSKEY_REQUIRED")).toBe("connecting");
+    expect(wahaStatus("PASSKEY_CONFIRMATION_REQUIRED")).toBe("connecting");
     expect(wahaStatus("FAILED")).toBe("error");
     expect(wahaStatus("STOPPED")).toBe("disconnected");
+  });
+
+  it("uses the lifecycle action required by each recoverable status", () => {
+    expect(wahaSessionRecoveryAction("STOPPED")).toBe("start");
+    expect(wahaSessionRecoveryAction("FAILED")).toBe("restart");
+    expect(wahaSessionRecoveryAction("STARTING")).toBeNull();
+    expect(wahaSessionRecoveryAction("WORKING")).toBeNull();
   });
 });

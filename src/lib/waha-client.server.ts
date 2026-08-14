@@ -49,9 +49,20 @@ export function wahaSessionName(tenantId: string) {
 
 export function wahaStatus(status?: string) {
   if (status === "WORKING") return "connected" as const;
-  if (status === "STARTING" || status === "SCAN_QR_CODE") return "connecting" as const;
+  if (
+    status === "STARTING"
+    || status === "SCAN_QR_CODE"
+    || status === "PASSKEY_REQUIRED"
+    || status === "PASSKEY_CONFIRMATION_REQUIRED"
+  ) return "connecting" as const;
   if (status === "FAILED") return "error" as const;
   return "disconnected" as const;
+}
+
+export function wahaSessionRecoveryAction(status?: string) {
+  if (status === "STOPPED") return "start" as const;
+  if (status === "FAILED") return "restart" as const;
+  return null;
 }
 
 export function phoneFromWahaId(value?: string | null) {

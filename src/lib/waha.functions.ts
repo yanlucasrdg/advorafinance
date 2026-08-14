@@ -3,7 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getServerEnv } from "@/integrations/supabase/runtime-env.server";
 import { requireActiveSubscription, requireServerRole } from "@/lib/authorization.server";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { isWahaConfigured, phoneFromWahaId, wahaFetch, wahaSessionName, wahaStatus, type WahaSession } from "@/lib/waha-client.server";
+import { isWahaConfigured, phoneFromWahaId, wahaFetch, wahaSessionName, wahaSessionRecoveryAction, wahaStatus, type WahaSession } from "@/lib/waha-client.server";
 
 type WahaConnection = { instance_id: string; tenant_id: string; session_name: string; status: string; connected_at: string | null; last_error: string | null };
 
@@ -161,8 +161,9 @@ export const wahaWhatsAppConnect = createServerFn({ method: "POST" })
     let session: WahaSession;
     try {
       session = await wahaFetch<WahaSession>(`/api/sessions/${encodeURIComponent(sessionName)}`);
-      if (session.status === "STOPPED" || session.status === "FAILED") {
-        session = await wahaFetch<WahaSession>(`/api/sessions/${encodeURIComponent(sessionName)}/start`, { method: "POST", body: "{}" });
+      const recoveryAction = wahaSessionRecoveryAction(session.status);
+      if (recoveryAction) {
+        session = await wahaFetch<WahaSession>(`/api/sessions/${encodeURIComponent(sessionName)}/${recoveryAction}`, { method: "POST", body: "{}" });
       }
     } catch (error) {
       if ((error as Error & { status?: number }).status !== 404) throw error;
