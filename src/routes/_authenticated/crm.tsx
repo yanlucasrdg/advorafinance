@@ -47,6 +47,7 @@ import { CrmKanbanCard, type ClientCardData } from "@/components/crm/crm-kanban-
 import { CrmLeadDrawer } from "@/components/crm/crm-lead-drawer";
 import { createCsv, parseCrmImportCsv } from "@/lib/crm-csv";
 import { getCrmClientMeta } from "@/lib/crm-client";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp-phone";
 
 function downloadFile(name: string, content: string, mime = "text/csv;charset=utf-8") {
   const blob = new Blob(["\ufeff" + content], { type: mime });
@@ -223,12 +224,15 @@ function CRM() {
   };
 
   const openWhatsapp = (phone: string | null, name: string) => {
-    if (phone) {
-      const cleanPhone = phone.replace(/\D/g, "");
-      const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(`Olá ${name}, tudo bem? Sou do escritório de advocacia.`)}`, "_blank");
-    } else {
+    if (!phone) {
       toast.error("Telefone não cadastrado para este cliente.");
+      return;
+    }
+    try {
+      const formattedPhone = normalizeWhatsAppPhone(phone);
+      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(`Olá ${name}, tudo bem? Sou do escritório de advocacia.`)}`, "_blank");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Telefone inválido.");
     }
   };
 

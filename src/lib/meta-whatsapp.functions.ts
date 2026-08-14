@@ -5,6 +5,7 @@ import { encryptMetaAccessToken, decryptMetaAccessToken } from "@/lib/meta-whats
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { requireActiveSubscription, requireServerRole } from "@/lib/authorization.server";
 import { hasWahaConnection, sendWahaText } from "@/lib/waha.functions";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp-phone";
 
 type MetaChannel = { id: string; tenantId: string; phoneNumberId: string; accessToken: string };
 type MetaConnectionRow = { instance_id: string; tenant_id: string; phone_number_id: string; business_account_id: string; access_token_ciphertext: string; status: string; connected_at: string | null; last_error: string | null };
@@ -138,12 +139,11 @@ export const metaWhatsAppCompleteEmbeddedSignup = createServerFn({ method: "POST
 export const metaWhatsAppSendText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { phone: string; message: string; clientId?: string }) => {
-    const phone = String(input?.phone ?? "").replace(/\D/g, "");
+    const phone = normalizeWhatsAppPhone(input?.phone);
     const message = String(input?.message ?? "").trim();
-    if (phone.length < 10 || phone.length > 15) throw new Error("Telefone inválido. Use DDI, DDD e número.");
     if (!message) throw new Error("Mensagem vazia.");
     if (message.length > 4096) throw new Error("A mensagem excede o limite de 4096 caracteres.");
-    return { phone, message, clientId: typeof input?.clientId === "string" && input.clientId.length > 0 ? input.clientId : undefined };
+    return { phone, message, clientId: typeof input?.clientId === "string" && input.clientId.trim().length > 0 ? input.clientId.trim() : undefined };
   })
   .handler(async ({ data, context }) => {
     await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer", "secretary"]);

@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import { DEADLINE_KIND_VALUES, DEADLINE_PRIORITY_VALUES } from "@/lib/deadline";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp-phone";
 
 // ─────────────────────────────────────────────
 // Primitivos reutilizáveis
@@ -27,15 +28,21 @@ export const docSchema = z
   .optional()
   .nullable();
 
-/** Telefone: strip não-dígitos, mínimo 10 dígitos */
+/** Telefone do WhatsApp: salva E.164 com `+`; números nacionais usam Brasil como padrão. */
 export const phoneSchema = z
   .string()
-  .transform((v) => v.replace(/\D/g, ""))
-  .pipe(
-    z.string().refine((v) => v === "" || v.length >= 10, {
-      message: "Telefone deve ter ao menos 10 dígitos (DDI+DDD+número)",
-    }),
-  )
+  .transform((value, context) => {
+    if (!value.trim()) return "";
+    try {
+      return `+${normalizeWhatsAppPhone(value)}`;
+    } catch (error) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: error instanceof Error ? error.message : "Telefone inválido.",
+      });
+      return z.NEVER;
+    }
+  })
   .optional()
   .nullable();
 

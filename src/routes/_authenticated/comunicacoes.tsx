@@ -20,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { useServerFn } from "@tanstack/react-start";
 import { metaWhatsAppSendText } from "@/lib/meta-whatsapp.functions";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp-phone";
 import { CrmQueuesBar, type LegalQueueId } from "@/components/crm/crm-queues-bar";
 
 
@@ -177,14 +178,14 @@ function Comunicacoes() {
       .from("whatsapp_messages")
       .select("*")
       .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(200);
     if (error) {
       console.error("Não foi possível carregar as mensagens:", error);
       return;
     }
     if (selectedRef.current !== conversationId) return;
-    setMessages((data ?? []) as Message[]);
+    setMessages([...(data ?? [])].reverse() as Message[]);
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 50);
   }, []);
 
@@ -273,9 +274,22 @@ function Comunicacoes() {
 
   const current = useMemo(() => convs.find(c => c.id === selected) || null, [convs, selected]);
   const displayMessages = useMemo(() => {
-    const pending = selected
+    const pendingForConversation = selected
       ? pendingMessages.filter((message) => message.conversation_id === selected)
       : [];
+    const pending = pendingForConversation.filter((localMessage) =>
+      !messages.some((persistedMessage) => {
+        const createdDelta =
+          new Date(persistedMessage.created_at).getTime() -
+          new Date(localMessage.created_at).getTime();
+        return (
+          persistedMessage.direction === "outbound" &&
+          persistedMessage.body === localMessage.body &&
+          createdDelta >= -2_000 &&
+          createdDelta < 120_000
+        );
+      }),
+    );
     return [...messages, ...pending].sort((a, b) => (
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     ));
@@ -373,7 +387,12 @@ function Comunicacoes() {
     setSending(true);
     const body = draft.trim();
     const conversationId = current.id;
-    const phone = current.contact_phone ?? "";
+    const storedPhone = current.contact_phone?.trim() ?? "";
+    // Conversation phones come from WhatsApp and are already canonical. Prefixing
+    // a missing `+` preserves international E.164 numbers instead of guessing BR.
+    const phone = storedPhone.startsWith("+")
+      ? storedPhone
+      : `+${storedPhone.replace(/\D/g, "")}`;
     const channel = current.channel;
     const optimisticId = `optimistic-${crypto.randomUUID()}`;
     const optimisticCreatedAt = new Date().toISOString();
@@ -422,8 +441,13 @@ function Comunicacoes() {
     const raw = newContact.phone.trim();
     if (!raw) errs.phone = "Informe o telefone ou ID.";
     else if (newContact.channel === "whatsapp") {
-      const digits = raw.replace(/\D/g, "");
-      if (digits.length < 10 || digits.length > 15) errs.phone = "Telefone inválido. Use DDI+DDD+número (ex: +5511999999999).";
+      try {
+        normalizeWhatsAppPhone(raw);
+      } catch (error) {
+        errs.phone = error instanceof Error
+          ? error.message
+          : "Telefone inválido. Use DDI, DDD e número (ex.: +55 11 99999-9999).";
+      }
     } else if (newContact.channel === "instagram" || newContact.channel === "messenger") {
       const ok = /^@?[a-zA-Z0-9._]{3,}$/.test(raw) || /^\d{3,}$/.test(raw);
       if (!ok) errs.phone = "Use @usuario ou ID numérico.";
@@ -448,8 +472,11 @@ function Comunicacoes() {
     setCreating(true);
     try {
       const channel = newContact.channel!;
-      const identifier = channel === "whatsapp"
-        ? "+" + newContact.phone.replace(/\D/g, "")
+      const normalizedPhone = channel === "whatsapp"
+        ? normalizeWhatsAppPhone(newContact.phone)
+        : null;
+      const identifier = normalizedPhone
+        ? `+${normalizedPhone}`
         : newContact.phone.trim().replace(/^@/, "");
       let clientId: string | null = null;
 
@@ -477,7 +504,8 @@ function Comunicacoes() {
         .from("whatsapp_conversations")
         .select("id")
         .eq("channel", channel)
-        .eq("contact_phone", identifier)
+        .in("contact_phone", [identifier, normalizedPhone ?? identifier])
+        .limit(1)
         .maybeSingle();
       if (existing?.id) {
         const ok = window.confirm("Este contato já existe. Deseja abrir a conversa existente?");
@@ -488,9 +516,44 @@ function Comunicacoes() {
 
       // Also link/create a client record by phone (WhatsApp only)
       if (channel === "whatsapp") {
-        const { data: cli } = await supabase.from("clients").select("id").eq("phone", identifier).maybeSingle();
-        if (cli) {
-          clientId = cli.id;
+        if (!normalizedPhone) throw new Error("Telefone inválido para o WhatsApp.");
+        const directPhoneVariants = [
+          identifier,
+          normalizedPhone,
+          normalizedPhone.startsWith("55") ? normalizedPhone.slice(2) : identifier,
+        ];
+        const { data: directMatches, error: directMatchError } = await supabase
+          .from("clients")
+          .select("id, phone")
+          .in("phone", directPhoneVariants)
+          .limit(2);
+        if (directMatchError) throw new Error(directMatchError.message);
+
+        let matchingClients = directMatches ?? [];
+        if (matchingClients.length === 0) {
+          const { data: candidates, error: candidateError } = await supabase
+            .from("clients")
+            .select("id, phone")
+            .eq("tenant_id", profile.tenant_id)
+            .not("phone", "is", null)
+            .limit(2_000);
+          if (candidateError) throw new Error(candidateError.message);
+          matchingClients = (candidates ?? []).filter((candidate) => {
+            try {
+              return normalizeWhatsAppPhone(candidate.phone) === normalizedPhone;
+            } catch {
+              return false;
+            }
+          });
+        }
+
+        if (matchingClients.length > 1) {
+          throw new Error(
+            "Há mais de um cliente com este WhatsApp. Revise os cadastros antes de iniciar a conversa.",
+          );
+        }
+        if (matchingClients[0]) {
+          clientId = matchingClients[0].id;
         } else {
           const { data: createdClient, error: clientError } = await supabase.from("clients").insert({
             tenant_id: profile.tenant_id,
@@ -534,7 +597,7 @@ function Comunicacoes() {
 
       if (newContact.message.trim() && data) {
         try {
-          await sendMetaWhatsApp({ data: { phone: identifier.replace(/\D/g, ""), message: newContact.message.trim() } });
+          await sendMetaWhatsApp({ data: { phone: identifier, message: newContact.message.trim() } });
         } catch (e) {
           setNewErrors({ submit: `Não foi possível enviar via WhatsApp. ${e instanceof Error ? e.message : "Verifique a integração."}` });
           setCreating(false);

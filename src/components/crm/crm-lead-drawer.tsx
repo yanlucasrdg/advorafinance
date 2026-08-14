@@ -41,6 +41,9 @@ import {
   RefreshCw,
   History,
   CheckCircle2,
+  CheckCheck,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -50,6 +53,7 @@ import { metaWhatsAppSendText } from "@/lib/meta-whatsapp.functions";
 import { askCopilot } from "@/lib/copilot.functions";
 import type { ClientCardData } from "./crm-kanban-card";
 import { safeDocumentFileName, validateDocumentFile } from "@/lib/document-upload";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp-phone";
 
 type CrmLeadDrawerProps = {
   client: ClientCardData | null;
@@ -71,6 +75,16 @@ type ChatMessage = {
   sender: "client" | "lawyer" | "system";
   text: string;
   time: string;
+  createdAt: string;
+  status?: "sending" | "failed" | "sent";
+};
+
+type PersistedWhatsAppMessage = {
+  id: string;
+  direction: "inbound" | "outbound";
+  body: string | null;
+  created_at: string;
+  status?: string | null;
 };
 
 type LeadTab = "chat" | "ficha" | "ia" | "docs" | "tarefas";
@@ -122,7 +136,9 @@ function isLeadTab(value: string): value is LeadTab {
 function errorMessage(error: unknown, fallback: string) {
   if (
     error instanceof Error &&
-    /^(Telefone não cadastrado|Inicie uma conversa)/.test(error.message)
+    /^(Telefone não cadastrado|Telefone inválido|Inicie uma conversa|Este escritório ainda não conectou o WhatsApp pelo WAHA|A sessão WAHA não está conectada|A sessão WAHA ainda está sendo preparada|Este número não foi encontrado no WhatsApp|Este número já está vinculado a outro cliente|O WhatsApp retornou um contato inválido|WAHA ainda não foi configurado|A mensagem excede o limite)/.test(
+      error.message,
+    )
   ) {
     return error.message;
   }
@@ -134,6 +150,54 @@ function formatChatTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function toChatMessage(message: PersistedWhatsAppMessage): ChatMessage {
+  return {
+    id: message.id,
+    sender: message.direction === "inbound" ? "client" : "lawyer",
+    text: message.body ?? "",
+    time: formatChatTime(message.created_at),
+    createdAt: message.created_at,
+    status: message.direction === "outbound" ? "sent" : undefined,
+  };
+}
+
+function sortChatMessages(messages: ChatMessage[]) {
+  return messages.sort(
+    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  );
+}
+
+function mergeLoadedChatMessages(existing: ChatMessage[], loaded: ChatMessage[]) {
+  const localSending = existing.filter(
+    (message) => message.id.startsWith("optimistic-") && message.status === "sending",
+  );
+  const localFailed = existing.filter(
+    (message) => message.id.startsWith("optimistic-") && message.status === "failed",
+  );
+  const isPersistedCopyOf = (loadedMessage: ChatMessage, localMessage: ChatMessage) => {
+    const createdDelta =
+      new Date(loadedMessage.createdAt).getTime() - new Date(localMessage.createdAt).getTime();
+    return (
+      loadedMessage.sender === "lawyer" &&
+      loadedMessage.text === localMessage.text &&
+      createdDelta >= -2_000 &&
+      createdDelta < 120_000
+    );
+  };
+  const loadedWithoutPendingConfirmation = loaded.filter(
+    (loadedMessage) =>
+      !localSending.some((localMessage) => isPersistedCopyOf(loadedMessage, localMessage)),
+  );
+  const unconfirmedFailures = localFailed.filter(
+    (localMessage) => !loaded.some((loadedMessage) => isPersistedCopyOf(loadedMessage, localMessage)),
+  );
+  return sortChatMessages([
+    ...loadedWithoutPendingConfirmation,
+    ...localSending,
+    ...unconfirmedFailures,
+  ]);
 }
 
 function formatElapsedSince(value: string) {
@@ -223,12 +287,17 @@ export function CrmLeadDrawer({
   const canViewFinancial = roles.some((role) => ["master_admin", "owner", "admin"].includes(role));
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const messageInputRef = React.useRef<HTMLInputElement | null>(null);
+  const chatScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const sendLockRef = React.useRef(false);
+  const activeSendTokenRef = React.useRef<string | null>(null);
+  const conversationIdRef = React.useRef<string | null>(conversationId);
   const clientId = client?.id ?? null;
   const clientNotes = client?.notes ?? null;
   const [stateClientId, setStateClientId] = useState<string | null>(clientId);
   const activeClientIdRef = React.useRef<string | null>(clientId);
   const sessionVersionRef = React.useRef(0);
   activeClientIdRef.current = clientId;
+  conversationIdRef.current = conversationId;
 
   const getCurrentSession = useCallback(
     (): DrawerSession => ({
@@ -240,9 +309,12 @@ export function CrmLeadDrawer({
 
   React.useEffect(() => {
     sessionVersionRef.current += 1;
+    sendLockRef.current = false;
+    activeSendTokenRef.current = null;
     setStateClientId(open ? clientId : null);
     setActiveTab("chat");
     setMessages([]);
+    conversationIdRef.current = null;
     setConversationId(null);
     setInputText("");
     setSending(false);
@@ -273,21 +345,22 @@ export function CrmLeadDrawer({
   const loadMessages = useCallback(async (id: string): Promise<ChatMessage[]> => {
     const { data, error } = await supabase
       .from("whatsapp_messages")
-      .select("id, direction, body, created_at")
+      .select("id, direction, body, created_at, status")
       .eq("conversation_id", id)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(300);
     if (error) throw error;
-    return (data ?? []).map((message) => ({
-      id: message.id,
-      sender: message.direction === "inbound" ? "client" : "lawyer",
-      text: message.body,
-      time: formatChatTime(message.created_at),
-    }));
+    return [...(data ?? [])]
+      .reverse()
+      .map((message) => toChatMessage(message as PersistedWhatsAppMessage));
   }, []);
 
   const loadConversation = useCallback(
-    async (targetClientId: string, requestedSession: DrawerSession) => {
+    async (
+      targetClientId: string,
+      targetPhone: string | null | undefined,
+      requestedSession: DrawerSession,
+    ) => {
       if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
       setChatState("loading");
       setChatError(null);
@@ -304,14 +377,54 @@ export function CrmLeadDrawer({
           .maybeSingle();
         if (error) throw error;
         if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
-        if (!data) {
+        let conversation = data;
+
+        if (!conversation && targetPhone) {
+          let canonicalPhone: string | null = null;
+          try {
+            canonicalPhone = normalizeWhatsAppPhone(targetPhone);
+          } catch {
+            // An invalid client phone is reported when the user tries to send.
+          }
+
+          if (canonicalPhone) {
+            const { data: phoneMatches, error: phoneMatchError } = await supabase
+              .from("whatsapp_conversations")
+              .select("id, client_id")
+              .in("contact_phone", [canonicalPhone, `+${canonicalPhone}`])
+              .limit(2);
+            if (phoneMatchError) throw phoneMatchError;
+            if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
+
+            if (phoneMatches?.length === 1) {
+              const match = phoneMatches[0];
+              if (match.client_id === targetClientId) {
+                conversation = { id: match.id };
+              } else if (match.client_id === null) {
+                const { data: linkedConversation, error: linkError } = await supabase
+                  .from("whatsapp_conversations")
+                  .update({ client_id: targetClientId })
+                  .eq("id", match.id)
+                  .is("client_id", null)
+                  .select("id")
+                  .maybeSingle();
+                if (linkError) throw linkError;
+                if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
+                conversation = linkedConversation;
+              }
+            }
+          }
+        }
+
+        if (!conversation) {
           setChatState("success");
           return;
         }
 
-        const loadedMessages = await loadMessages(data.id);
+        const loadedMessages = await loadMessages(conversation.id);
         if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
-        setConversationId(data.id);
+        conversationIdRef.current = conversation.id;
+        setConversationId(conversation.id);
         setMessages(loadedMessages);
         setChatState("success");
       } catch (error) {
@@ -328,8 +441,8 @@ export function CrmLeadDrawer({
   React.useEffect(() => {
     if (!clientId || !open) return;
     const requestedSession = getCurrentSession();
-    void loadConversation(clientId, requestedSession);
-  }, [clientId, getCurrentSession, loadConversation, open]);
+    void loadConversation(clientId, client?.phone, requestedSession);
+  }, [client?.phone, clientId, getCurrentSession, loadConversation, open]);
 
   React.useEffect(() => {
     if (!conversationId) return;
@@ -349,7 +462,7 @@ export function CrmLeadDrawer({
           void loadMessages(conversationId)
             .then((loadedMessages) => {
               if (active && isDrawerSessionCurrent(subscriptionSession, getCurrentSession())) {
-                setMessages(loadedMessages);
+                setMessages((existing) => mergeLoadedChatMessages(existing, loadedMessages));
                 setChatState("success");
                 setChatError(null);
               }
@@ -366,6 +479,37 @@ export function CrmLeadDrawer({
       void supabase.removeChannel(channel);
     };
   }, [clientId, conversationId, getCurrentSession, loadMessages]);
+
+  React.useEffect(() => {
+    if (!conversationId || !open) return;
+    let active = true;
+    const pollingSession = getCurrentSession();
+    const timer = window.setInterval(() => {
+      void loadMessages(conversationId)
+        .then((loadedMessages) => {
+          if (!active || !isDrawerSessionCurrent(pollingSession, getCurrentSession())) return;
+          setMessages((existing) => mergeLoadedChatMessages(existing, loadedMessages));
+          setChatState("success");
+          setChatError(null);
+        })
+        .catch(() => undefined);
+    }, 5_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [conversationId, getCurrentSession, loadMessages, open]);
+
+  React.useEffect(() => {
+    if (!open || activeTab !== "chat") return;
+    const frame = window.requestAnimationFrame(() => {
+      chatScrollRef.current?.scrollTo({
+        top: chatScrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, messages.length, open]);
 
   React.useEffect(() => {
     if (!clientId || !open) {
@@ -650,36 +794,90 @@ export function CrmLeadDrawer({
   };
 
   const handleSendMessage = async () => {
-    const msg = inputText;
-    if (!msg.trim()) return;
+    const body = inputText.trim();
+    if (sendLockRef.current || !body) return;
     const targetClient = client;
+    if (!targetClient.phone) {
+      toast.error("Telefone não cadastrado para este cliente.");
+      return;
+    }
+    try {
+      normalizeWhatsAppPhone(targetClient.phone);
+    } catch (error) {
+      toast.error(errorMessage(error, "Telefone inválido para envio pelo WhatsApp."));
+      return;
+    }
     const requestedSession = getCurrentSession();
+    const requestedConversationId = conversationIdRef.current;
+    const sendToken = crypto.randomUUID();
+    const optimisticId = `optimistic-${sendToken}`;
+    const optimisticCreatedAt = new Date().toISOString();
+    sendLockRef.current = true;
+    activeSendTokenRef.current = sendToken;
     setSending(true);
+    setInputText("");
+    setChatState("success");
+    setChatError(null);
+    setMessages((existing) =>
+      sortChatMessages([
+        ...existing,
+        {
+          id: optimisticId,
+          sender: "lawyer",
+          text: body,
+          time: formatChatTime(optimisticCreatedAt),
+          createdAt: optimisticCreatedAt,
+          status: "sending",
+        },
+      ]),
+    );
 
     try {
-      if (!targetClient.phone) throw new Error("Telefone não cadastrado para este cliente.");
       const result = await sendTextFn({
         data: {
           phone: targetClient.phone,
-          message: msg,
+          message: body,
           clientId: targetClient.id,
         },
       });
       if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
-      const loadedMessages = await loadMessages(result.conversationId);
-      if (!isDrawerSessionCurrent(requestedSession, getCurrentSession())) return;
-      setInputText("");
+      if (
+        conversationIdRef.current !== requestedConversationId &&
+        conversationIdRef.current !== result.conversationId
+      ) {
+        return;
+      }
+      const persistedMessage = toChatMessage(
+        result.message as PersistedWhatsAppMessage,
+      );
+      conversationIdRef.current = result.conversationId;
       setConversationId(result.conversationId);
-      setMessages(loadedMessages);
+      setMessages((existing) => {
+        const withoutOptimistic = existing.filter((message) => message.id !== optimisticId);
+        if (withoutOptimistic.some((message) => message.id === persistedMessage.id)) {
+          return withoutOptimistic;
+        }
+        return sortChatMessages([...withoutOptimistic, persistedMessage]);
+      });
       setChatState("success");
       setChatError(null);
       toast.success("Mensagem enviada no WhatsApp.");
     } catch (error: unknown) {
       if (isDrawerSessionCurrent(requestedSession, getCurrentSession())) {
+        setMessages((existing) =>
+          existing.map((message) =>
+            message.id === optimisticId ? { ...message, status: "failed" } : message,
+          ),
+        );
         toast.error(errorMessage(error, "Não foi possível enviar a mensagem pelo WhatsApp."));
       }
     } finally {
-      if (isDrawerSessionCurrent(requestedSession, getCurrentSession())) {
+      const ownsSendLock = activeSendTokenRef.current === sendToken;
+      if (ownsSendLock) {
+        activeSendTokenRef.current = null;
+        sendLockRef.current = false;
+      }
+      if (ownsSendLock && isDrawerSessionCurrent(requestedSession, getCurrentSession())) {
         setSending(false);
       }
     }
@@ -885,7 +1083,10 @@ export function CrmLeadDrawer({
             </div>
 
             {/* Chat Messages List */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-muted/10">
+            <div
+              ref={chatScrollRef}
+              className="flex-1 p-4 overflow-y-auto space-y-3 bg-muted/10"
+            >
               {visibleChatState === "loading" && (
                 <div
                   className="h-full min-h-40 grid place-items-center text-center px-6"
@@ -917,7 +1118,7 @@ export function CrmLeadDrawer({
                       size="sm"
                       className="mt-3 gap-1.5"
                       onClick={() => {
-                        void loadConversation(client.id, getCurrentSession());
+                        void loadConversation(client.id, client.phone, getCurrentSession());
                       }}
                     >
                       <RefreshCw className="size-3.5" />
@@ -964,13 +1165,28 @@ export function CrmLeadDrawer({
                       >
                         <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                         <span
-                          className={`block text-[9px] mt-1 text-right ${
+                          className={`flex items-center justify-end gap-1 text-[9px] mt-1 ${
                             msg.sender === "lawyer"
                               ? "text-primary-foreground/70"
                               : "text-muted-foreground"
                           }`}
                         >
-                          {msg.time}
+                          {msg.status === "sending" ? (
+                            <>
+                              <Loader2 className="size-2.5 animate-spin" />
+                              Enviando…
+                            </>
+                          ) : msg.status === "failed" ? (
+                            <>
+                              <AlertCircle className="size-2.5" />
+                              Não enviada
+                            </>
+                          ) : (
+                            <>
+                              {msg.time}
+                              {msg.sender === "lawyer" && <CheckCheck className="size-3" />}
+                            </>
+                          )}
                         </span>
                       </div>
                     )}
@@ -1000,7 +1216,11 @@ export function CrmLeadDrawer({
                 disabled={!sessionReady || sending || !visibleInputText.trim()}
                 onClick={() => handleSendMessage()}
               >
-                <Send className="h-3.5 w-3.5" />
+                {sending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
                 <span>Enviar</span>
               </Button>
             </div>

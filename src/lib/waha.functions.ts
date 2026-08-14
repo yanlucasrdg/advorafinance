@@ -61,34 +61,53 @@ export async function hasWorkingWaha(userId: string) {
 
 export async function sendWahaText(userId: string, data: { phone: string; message: string; clientId?: string }) {
   const connection = await loadWahaConnection(userId);
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  if (data.clientId) {
+    const { data: client, error: clientError } = await supabaseAdmin.from("clients").select("id")
+      .eq("id", data.clientId).eq("tenant_id", connection.tenant_id).maybeSingle();
+    if (clientError) throw new Error(clientError.message);
+    if (!client) throw new Error("Cliente não pertence ao escritório atual.");
+  }
+
   const session = await wahaFetch<WahaSession>(`/api/sessions/${encodeURIComponent(connection.session_name)}`);
   if (session.status !== "WORKING") throw new Error("A sessão WAHA não está conectada. Abra Integrações e leia o QR Code.");
   const exists = await wahaFetch<{ numberExists?: boolean; chatId?: string }>(
     `/api/contacts/check-exists?phone=${encodeURIComponent(data.phone)}&session=${encodeURIComponent(connection.session_name)}`,
   );
   if (!exists.numberExists || !exists.chatId) throw new Error("Este número não foi encontrado no WhatsApp.");
-  const payload = await wahaFetch<{ id?: string }>("/api/sendText", {
-    method: "POST",
-    body: JSON.stringify({ session: connection.session_name, chatId: exists.chatId, text: data.message, linkPreview: false }),
-  });
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  if (data.clientId) {
-    const { data: client } = await supabaseAdmin.from("clients").select("id").eq("id", data.clientId).eq("tenant_id", connection.tenant_id).maybeSingle();
-    if (!client) throw new Error("Cliente não pertence ao escritório atual.");
+  const canonicalPhone = phoneFromWahaId(exists.chatId);
+  if (!canonicalPhone) throw new Error("O WhatsApp retornou um contato inválido para este número.");
+
+  const { data: existing, error: existingError } = await supabaseAdmin.from("whatsapp_conversations")
+    .select("id, client_id, contact_phone").eq("instance_id", connection.instance_id)
+    .in("contact_phone", [canonicalPhone, `+${canonicalPhone}`]).limit(1).maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (existing?.client_id && data.clientId && existing.client_id !== data.clientId) {
+    throw new Error("Este número já está vinculado a outro cliente do escritório.");
   }
-  const { data: existing } = await supabaseAdmin.from("whatsapp_conversations").select("id")
-    .eq("instance_id", connection.instance_id).in("contact_phone", [data.phone, `+${data.phone}`]).maybeSingle();
+
   let conversationId = existing?.id;
   if (!conversationId) {
     const { data: created, error } = await supabaseAdmin.from("whatsapp_conversations").insert({
-      tenant_id: connection.tenant_id, instance_id: connection.instance_id, contact_phone: data.phone,
+      tenant_id: connection.tenant_id, instance_id: connection.instance_id, contact_phone: canonicalPhone,
       client_id: data.clientId ?? null, channel: "whatsapp", assignment_status: "new",
     }).select("id").single();
     if (error) throw new Error(error.message);
     conversationId = created.id;
-  } else if (data.clientId) {
-    await supabaseAdmin.from("whatsapp_conversations").update({ client_id: data.clientId }).eq("id", conversationId);
+  } else if (data.clientId && !existing?.client_id) {
+    const { error } = await supabaseAdmin.from("whatsapp_conversations")
+      .update({ client_id: data.clientId, contact_phone: canonicalPhone }).eq("id", conversationId);
+    if (error) throw new Error(error.message);
+  } else if (existing?.contact_phone !== canonicalPhone) {
+    const { error } = await supabaseAdmin.from("whatsapp_conversations")
+      .update({ contact_phone: canonicalPhone }).eq("id", conversationId);
+    if (error) throw new Error(error.message);
   }
+
+  const payload = await wahaFetch<{ id?: string }>("/api/sendText", {
+    method: "POST",
+    body: JSON.stringify({ session: connection.session_name, chatId: exists.chatId, text: data.message, linkPreview: false }),
+  });
   const { data: persistedMessage, error: messageError } = await supabaseAdmin.from("whatsapp_messages").insert({
     tenant_id: connection.tenant_id, conversation_id: conversationId, direction: "outbound", body: data.message,
     status: "sent", external_message_id: payload.id ?? null,
