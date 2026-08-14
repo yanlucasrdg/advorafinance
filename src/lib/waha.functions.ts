@@ -179,8 +179,38 @@ export const wahaWhatsAppQrCode = createServerFn({ method: "GET" })
     await requireServerRole(context, ["master_admin", "owner", "admin"]);
     await enforceRateLimit(context.supabase, "zapi_qr_code");
     const connection = await loadWahaConnection(context.userId);
-    const qr = await wahaFetch<{ mimetype?: string; data?: string }>(`/api/${encodeURIComponent(connection.session_name)}/auth/qr`, {
-      headers: { Accept: "application/json" },
-    });
-    return { image: qr.data ? `data:${qr.mimetype || "image/png"};base64,${qr.data}` : null };
+    const sessionName = encodeURIComponent(connection.session_name);
+    let lastStatus = "UNKNOWN";
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      let session = await wahaFetch<WahaSession>(`/api/sessions/${sessionName}`);
+      lastStatus = session.status;
+
+      const recoveryAction = wahaSessionRecoveryAction(session.status);
+      if (recoveryAction) {
+        session = await wahaFetch<WahaSession>(`/api/sessions/${sessionName}/${recoveryAction}`, { method: "POST", body: "{}" });
+        lastStatus = session.status;
+      }
+
+      if (session.status === "WORKING") return { image: null, connected: true };
+
+      if (session.status === "SCAN_QR_CODE") {
+        try {
+          const qr = await wahaFetch<{ mimetype?: string; data?: string }>(`/api/${sessionName}/auth/qr`, {
+            headers: { Accept: "application/json" },
+          });
+          return {
+            image: qr.data ? `data:${qr.mimetype || "image/png"};base64,${qr.data}` : null,
+            connected: false,
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+          if (!message.includes("Session status is not as expected") || attempt === 11) throw error;
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+
+    throw new Error(`A sessão WAHA ainda está sendo preparada (${lastStatus}). Aguarde alguns segundos e tente novamente.`);
   });

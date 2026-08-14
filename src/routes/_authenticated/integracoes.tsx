@@ -123,12 +123,18 @@ function IntegracoesPage() {
   const showWahaQr = useCallback(async () => {
     try {
       const result = await getWahaQrCode();
+      if (result.connected) {
+        setWahaQr(null);
+        await refreshWahaStatus();
+        toast.success("WhatsApp conectado pelo WAHA.");
+        return;
+      }
       if (!result.image) throw new Error("O QR Code ainda não está disponível. Aguarde alguns segundos.");
       setWahaQr(result.image);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível carregar o QR Code.");
     }
-  }, [getWahaQrCode]);
+  }, [getWahaQrCode, refreshWahaStatus]);
 
   const startWaha = useCallback(async () => {
     setWahaConnecting(true);
