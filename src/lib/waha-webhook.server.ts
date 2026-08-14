@@ -1,5 +1,5 @@
 import { qualifyInboundMessage } from "@/lib/meta-webhook.server";
-import { phoneFromWahaId, wahaStatus } from "@/lib/waha-client.server";
+import { isInboundWahaMessage, phoneFromWahaId, wahaStatus } from "@/lib/waha-client.server";
 import { getServerEnv } from "@/integrations/supabase/runtime-env.server";
 
 type WorkerBindings = Record<string, unknown>;
@@ -86,7 +86,7 @@ async function persistWahaEvent(payload: WahaWebhookPayload, env: WorkerBindings
     return;
   }
 
-  if (payload.event !== "message" || !payload.payload?.id) return;
+  if (!isInboundWahaMessage(payload.event, payload.payload?.fromMe) || !payload.payload?.id) return;
   const phone = phoneFromWahaId(payload.payload.from);
   if (!phone) return;
   const body = payload.payload.body?.trim() || `Mensagem ${payload.payload.type ?? "recebida"}`;

@@ -65,6 +65,10 @@ export function wahaSessionRecoveryAction(status?: string) {
   return null;
 }
 
+export function isInboundWahaMessage(event?: string, fromMe?: boolean) {
+  return event === "message" && fromMe !== true;
+}
+
 export function phoneFromWahaId(value?: string | null) {
   if (!value || !value.endsWith("@c.us")) return null;
   const phone = value.slice(0, -5).replace(/\D/g, "");

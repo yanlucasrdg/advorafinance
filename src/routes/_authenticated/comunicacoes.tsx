@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   MessageSquare, Send, Search, Archive, UserPlus, Tag, Phone, Instagram,
@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
-import { useRealtimeTables } from "@/hooks/use-realtime-table";
 import { useMetricsComunicacoes } from "@/hooks/use-metrics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,45 +144,59 @@ function Comunicacoes() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const sendMetaWhatsApp = useServerFn(metaWhatsAppSendText);
 
-  useRealtimeTables(["whatsapp_conversations", "whatsapp_messages"], ["comms:convs", "comms:msgs"]);
-
-
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     const { data } = await supabase
       .from("whatsapp_conversations")
       .select("*")
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(200);
     setConvs((data ?? []) as Conversation[]);
-    setLoading(false);
-  };
-  useEffect(() => { if (profile?.tenant_id) load(); }, [profile?.tenant_id]);
+    if (showSpinner) setLoading(false);
+  }, []);
+
+  const loadMessages = useCallback(async (conversationId: string) => {
+    const { data } = await supabase
+      .from("whatsapp_messages")
+      .select("*")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true })
+      .limit(200);
+    setMessages((data ?? []) as Message[]);
+    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 50);
+  }, []);
+
+  useEffect(() => { if (profile?.tenant_id) void load(); }, [profile?.tenant_id, load]);
 
   useEffect(() => {
     if (!selected) { setMessages([]); return; }
-    (async () => {
-      const { data } = await supabase
-        .from("whatsapp_messages")
-        .select("*")
-        .eq("conversation_id", selected)
-        .order("created_at", { ascending: true })
-        .limit(200);
-      setMessages((data ?? []) as Message[]);
-      setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 50);
-    })();
-    // subscribe just for this conversation's messages
-    const ch = supabase.channel(`conv:${selected}`).on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "whatsapp_messages", filter: `conversation_id=eq.${selected}` },
-      (payload) => {
-        const row = payload.new as Message;
-        setMessages((m) => (m.some(x => x.id === row.id) ? m.map(x => x.id === row.id ? row : x) : [...m, row]));
-        setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current!.scrollHeight, behavior: "smooth" }), 50);
-      },
-    ).subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [selected]);
+    void loadMessages(selected);
+  }, [selected, loadMessages]);
+
+  useEffect(() => {
+    if (!profile?.tenant_id) return;
+    const channel = supabase
+      .channel(`comms:${profile.tenant_id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_conversations" }, () => {
+        void load(false);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_messages" }, (payload) => {
+        void load(false);
+        const row = payload.new as Partial<Message>;
+        if (selected && row.conversation_id === selected) void loadMessages(selected);
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [profile?.tenant_id, selected, load, loadMessages]);
+
+  useEffect(() => {
+    if (!profile?.tenant_id) return;
+    const timer = window.setInterval(() => {
+      void load(false);
+      if (selected) void loadMessages(selected);
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [profile?.tenant_id, selected, load, loadMessages]);
 
   const [selectedQueue, setSelectedQueue] = useState<LegalQueueId>("todas");
 
@@ -313,7 +326,7 @@ function Comunicacoes() {
       if (current.channel !== "whatsapp") throw new Error("Este canal ainda não está conectado.");
       await sendMetaWhatsApp({ data: { phone: current.contact_phone ?? "", message: body } });
       setDraft("");
-      await load();
+      await Promise.all([load(false), loadMessages(current.id)]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível enviar a mensagem.");
     } finally {

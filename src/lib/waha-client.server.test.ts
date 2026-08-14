@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { phoneFromWahaId, wahaSessionName, wahaSessionRecoveryAction, wahaStatus } from "./waha-client.server";
+import { isInboundWahaMessage, phoneFromWahaId, wahaSessionName, wahaSessionRecoveryAction, wahaStatus } from "./waha-client.server";
 
 describe("WAHA provider helpers", () => {
   it("creates a stable session name without punctuation", () => {
@@ -28,5 +28,12 @@ describe("WAHA provider helpers", () => {
     expect(wahaSessionRecoveryAction("FAILED")).toBe("restart");
     expect(wahaSessionRecoveryAction("STARTING")).toBeNull();
     expect(wahaSessionRecoveryAction("WORKING")).toBeNull();
+  });
+
+  it("persists only inbound WAHA message events", () => {
+    expect(isInboundWahaMessage("message", false)).toBe(true);
+    expect(isInboundWahaMessage("message", undefined)).toBe(true);
+    expect(isInboundWahaMessage("message", true)).toBe(false);
+    expect(isInboundWahaMessage("message.ack", false)).toBe(false);
   });
 });
