@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   MessageSquare, Send, Search, Archive, UserPlus, Tag, Phone, Instagram,
   Facebook, CheckCheck, Circle, Filter, Sparkles, Inbox, Clock, X, Loader2,
-  AlertCircle,
+  AlertCircle, PanelRight,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -126,6 +126,7 @@ function Comunicacoes() {
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [showContactPanel, setShowContactPanel] = useState(false);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [channelFilter, setChannelFilter] = useState<"all" | Channel>("all");
@@ -574,7 +575,7 @@ function Comunicacoes() {
       </div>
 
       {/* Split view */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 px-6 pb-6 lg:grid-cols-[minmax(300px,380px)_1fr_minmax(260px,320px)] lg:px-8">
+      <div className="relative grid min-h-0 flex-1 grid-cols-1 gap-4 px-6 pb-6 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] lg:px-8 2xl:grid-cols-[minmax(300px,380px)_minmax(0,1fr)_minmax(260px,320px)]">
         {/* ---------- Column 1: Conversations list ---------- */}
         <aside className="glass rounded-2xl flex flex-col min-h-0 overflow-hidden animate-fade-up">
           <div className="grid grid-cols-3 gap-1 border-b border-border/40 p-2">
@@ -726,6 +727,16 @@ function Comunicacoes() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2 text-xs 2xl:hidden"
+                    onClick={() => setShowContactPanel(true)}
+                    aria-label="Abrir detalhes do contato"
+                  >
+                    <PanelRight className="size-3.5 xl:mr-1" />
+                    <span className="hidden xl:inline">Detalhes</span>
+                  </Button>
                   {current.assigned_to !== user?.id && (
                     <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => assignToMe(current.id)}>
                       <UserPlus className="size-3.5 mr-1" /> Atribuir a mim
@@ -773,8 +784,28 @@ function Comunicacoes() {
           )}
         </section>
 
+        {showContactPanel && (
+          <button
+            type="button"
+            aria-label="Fechar detalhes do contato"
+            className="absolute inset-0 z-20 bg-black/35 backdrop-blur-[1px] 2xl:hidden"
+            onClick={() => setShowContactPanel(false)}
+          />
+        )}
+
         {/* ---------- Column 3: Contact panel ---------- */}
-        <aside className="glass rounded-2xl flex flex-col min-h-0 overflow-hidden animate-fade-up hidden lg:flex">
+        <aside className={`glass rounded-2xl min-h-0 flex-col overflow-hidden animate-fade-up ${showContactPanel ? "absolute inset-y-0 right-6 z-30 flex w-[min(320px,calc(100%-3rem))] shadow-2xl 2xl:static 2xl:w-auto" : "hidden 2xl:flex"}`}>
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/40 px-4 2xl:hidden">
+            <span className="text-sm font-semibold">Detalhes do contato</span>
+            <button
+              type="button"
+              onClick={() => setShowContactPanel(false)}
+              className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+              aria-label="Fechar detalhes"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
           {!current ? (
             <div className="flex-1 grid place-items-center text-center px-6 text-xs text-muted-foreground">
               Nenhuma conversa aberta.
