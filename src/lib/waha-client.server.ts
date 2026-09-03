@@ -6,6 +6,12 @@ export type WahaSession = {
   name: string;
   status: WahaSessionStatus;
   me?: { id?: string; pushName?: string } | null;
+  config?: Record<string, unknown> & {
+    metadata?: Record<string, unknown>;
+    ignore?: Record<string, unknown>;
+    noweb?: { store?: { enabled?: boolean; fullSync?: boolean } };
+    webhooks?: Array<{ url?: string; events?: string[]; hmac?: { key?: string } }>;
+  };
 };
 
 function wahaConfig() {
@@ -70,7 +76,87 @@ export function isInboundWahaMessage(event?: string, fromMe?: boolean) {
 }
 
 export function phoneFromWahaId(value?: string | null) {
-  if (!value || !value.endsWith("@c.us")) return null;
-  const phone = value.slice(0, -5).replace(/\D/g, "");
+  if (typeof value !== "string" || !value) return null;
+  const suffix = value.endsWith("@c.us") ? "@c.us" : value.endsWith("@s.whatsapp.net") ? "@s.whatsapp.net" : null;
+  if (!suffix) return null;
+  const match = value.slice(0, -suffix.length).match(/^(\d+)(?::\d+)?$/);
+  const phone = match?.[1] ?? "";
   return phone.length >= 10 && phone.length <= 15 ? phone : null;
+}
+
+export function phoneFromWahaPhoneNumber(value?: string | null) {
+  if (typeof value !== "string" || !value) return null;
+  const fromId = phoneFromWahaId(value);
+  if (fromId) return fromId;
+  const phone = value.replace(/^\+/, "");
+  return /^\d{10,15}$/.test(phone) ? phone : null;
+}
+
+export function wahaLidFromId(value?: string | null) {
+  return typeof value === "string" && /^\d+@lid$/.test(value) ? value : null;
+}
+
+export function wahaMessageCreatedAt(value?: number | string, fallback = new Date()) {
+  const timestamp = Number(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return fallback.toISOString();
+  const date = new Date(timestamp > 10_000_000_000 ? timestamp : timestamp * 1000);
+  return Number.isNaN(date.getTime()) ? fallback.toISOString() : date.toISOString();
+}
+
+type WahaLidLookup = (sessionName: string, lid: string) => Promise<string | null>;
+
+export type WahaContactPayload = {
+  chatId?: string;
+  from?: string;
+  participant?: string;
+  _data?: {
+    key?: { remoteJid?: string; remoteJidAlt?: string; participant?: string; participantAlt?: string };
+    Info?: { Chat?: string; Sender?: string; SenderAlt?: string };
+  };
+};
+
+const unsupportedChatSuffixes = ["@g.us", "@newsletter", "@broadcast"];
+
+export function wahaInboundContactIdentifiers(payload: WahaContactPayload) {
+  const chatIdentifiers = [
+    payload.chatId,
+    payload.from,
+    payload._data?.key?.remoteJid,
+    payload._data?.Info?.Chat,
+  ];
+  if (chatIdentifiers.some((value) => typeof value === "string" && unsupportedChatSuffixes.some((suffix) => value.endsWith(suffix)))) {
+    return [];
+  }
+  return [
+    payload.from,
+    payload.chatId,
+    payload._data?.key?.remoteJidAlt,
+    payload._data?.Info?.SenderAlt,
+    payload._data?.key?.participantAlt,
+    payload._data?.key?.remoteJid,
+    payload._data?.Info?.Sender,
+    payload.participant,
+    payload._data?.key?.participant,
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+}
+
+async function lookupWahaPhoneByLid(sessionName: string, lid: string) {
+  const mapping = await wahaFetch<{ pn?: string | null }>(
+    `/api/${encodeURIComponent(sessionName)}/lids/${encodeURIComponent(lid)}`,
+  );
+  return mapping.pn ?? null;
+}
+
+export async function resolveWahaContactPhone(
+  sessionName: string,
+  identifiers: Array<string | null | undefined>,
+  lookupLid: WahaLidLookup = lookupWahaPhoneByLid,
+) {
+  for (const identifier of identifiers) {
+    const phone = phoneFromWahaId(identifier);
+    if (phone) return phone;
+  }
+  const lid = identifiers.map(wahaLidFromId).find((value): value is string => Boolean(value));
+  if (!lid) return null;
+  return phoneFromWahaPhoneNumber(await lookupLid(sessionName, lid));
 }

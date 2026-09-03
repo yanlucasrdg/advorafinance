@@ -1,5 +1,5 @@
 import { qualifyInboundMessage } from "@/lib/meta-webhook.server";
-import { isInboundWahaMessage, phoneFromWahaId, wahaStatus } from "@/lib/waha-client.server";
+import { isInboundWahaMessage, phoneFromWahaId, resolveWahaContactPhone, wahaInboundContactIdentifiers, wahaLidFromId, wahaMessageCreatedAt, wahaStatus } from "@/lib/waha-client.server";
 import { getServerEnv } from "@/integrations/supabase/runtime-env.server";
 
 type WorkerBindings = Record<string, unknown>;
@@ -10,15 +10,22 @@ type WahaWebhookPayload = {
   me?: { id?: string; pushName?: string } | null;
   payload?: {
     id?: string;
-    timestamp?: number;
+    timestamp?: number | string;
+    chatId?: string;
     from?: string;
     to?: string;
     fromMe?: boolean;
     body?: string;
     type?: string;
+    participant?: string;
     ackName?: string;
     status?: string;
-    _data?: { notifyName?: string; pushName?: string };
+    _data?: {
+      notifyName?: string;
+      pushName?: string;
+      key?: { remoteJid?: string; remoteJidAlt?: string; participant?: string; participantAlt?: string };
+      Info?: { Chat?: string; Sender?: string; SenderAlt?: string };
+    };
   };
 };
 
@@ -87,20 +94,28 @@ async function persistWahaEvent(payload: WahaWebhookPayload, env: WorkerBindings
   }
 
   if (!isInboundWahaMessage(payload.event, payload.payload?.fromMe) || !payload.payload?.id) return;
-  const phone = phoneFromWahaId(payload.payload.from);
-  if (!phone) return;
+  const identifiers = wahaInboundContactIdentifiers(payload.payload);
+  if (identifiers.length === 0) return;
+  const phone = await resolveWahaContactPhone(payload.session, identifiers);
+  if (!phone) {
+    if (identifiers.map(wahaLidFromId).some(Boolean)) {
+      // Returning 500 keeps the event eligible for the WAHA retry policy.
+      throw new Error("WAHA_LID_NOT_RESOLVED");
+    }
+    console.warn("Ignored WAHA message with unsupported direct-contact identifier", {
+      event: payload.event, session: payload.session,
+    });
+    return;
+  }
   const body = payload.payload.body?.trim() || `Mensagem ${payload.payload.type ?? "recebida"}`;
   const contactName = payload.payload._data?.notifyName ?? payload.payload._data?.pushName ?? null;
-  const { data: existing, error: existingError } = await supabase.from("whatsapp_conversations")
-    .select("id, tags, assignment_status, category").eq("tenant_id", connection.tenant_id)
-    .eq("instance_id", connection.instance_id).eq("contact_phone", phone).maybeSingle();
-  if (existingError) throw new Error(existingError.message);
-  const { data: conversation, error: conversationError } = existing
-    ? { data: existing, error: null }
-    : await supabase.from("whatsapp_conversations").insert({
-      tenant_id: connection.tenant_id, instance_id: connection.instance_id, contact_phone: phone,
-      contact_name: contactName, channel: "whatsapp", assignment_status: "new", category: "triagem",
-    }).select("id, tags, assignment_status, category").single();
+  const { data: conversationRows, error: conversationError } = await supabase.rpc("get_or_create_waha_conversation", {
+    p_tenant_id: connection.tenant_id,
+    p_instance_id: connection.instance_id,
+    p_contact_phone: phone,
+    p_contact_name: contactName,
+  });
+  const conversation = conversationRows?.[0];
   if (conversationError || !conversation) throw new Error(conversationError?.message ?? "Não foi possível criar a conversa WAHA.");
 
   const qualification = qualifyInboundMessage(body);
@@ -112,9 +127,7 @@ async function persistWahaEvent(payload: WahaWebhookPayload, env: WorkerBindings
     ...currentTags.filter((tag: string) => !knownQueues.includes(tag as typeof knownQueues[number])),
     ...(qualification.urgent ? ["Urgente"] : []),
   ]));
-  const createdAt = payload.payload.timestamp
-    ? new Date(payload.payload.timestamp > 10_000_000_000 ? payload.payload.timestamp : payload.payload.timestamp * 1000).toISOString()
-    : new Date().toISOString();
+  const createdAt = wahaMessageCreatedAt(payload.payload.timestamp);
   const { error: ingestError } = await supabase.rpc("ingest_meta_whatsapp_message", {
     p_tenant_id: connection.tenant_id,
     p_conversation_id: conversation.id,

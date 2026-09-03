@@ -3,9 +3,28 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getServerEnv } from "@/integrations/supabase/runtime-env.server";
 import { requireActiveSubscription, requireServerRole } from "@/lib/authorization.server";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { isWahaConfigured, phoneFromWahaId, wahaFetch, wahaSessionName, wahaSessionRecoveryAction, wahaStatus, type WahaSession } from "@/lib/waha-client.server";
+import { isWahaConfigured, phoneFromWahaId, phoneFromWahaPhoneNumber, wahaFetch, wahaSessionName, wahaSessionRecoveryAction, wahaStatus, type WahaSession } from "@/lib/waha-client.server";
 
 type WahaConnection = { instance_id: string; tenant_id: string; session_name: string; status: string; connected_at: string | null; last_error: string | null };
+const WAHA_WEBHOOK_EVENTS = ["message", "message.ack", "session.status"];
+
+function desiredWahaSessionConfig(tenantId: string, sessionName: string, webhookUrl: string, webhookSecret: string, current?: WahaSession["config"]) {
+  return {
+    name: sessionName,
+    config: {
+      ...current,
+      metadata: { ...current?.metadata, "advora.tenant_id": tenantId },
+      ignore: { ...current?.ignore, status: true, groups: true, channels: true },
+      noweb: { ...current?.noweb, store: { ...current?.noweb?.store, enabled: true, fullSync: false } },
+      webhooks: [{
+        url: webhookUrl,
+        events: WAHA_WEBHOOK_EVENTS,
+        hmac: { key: webhookSecret },
+        retries: { policy: "exponential", delaySeconds: 2, attempts: 8 },
+      }],
+    },
+  };
+}
 
 async function tenantForUser(userId: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -71,11 +90,13 @@ export async function sendWahaText(userId: string, data: { phone: string; messag
 
   const session = await wahaFetch<WahaSession>(`/api/sessions/${encodeURIComponent(connection.session_name)}`);
   if (session.status !== "WORKING") throw new Error("A sessão WAHA não está conectada. Abra Integrações e leia o QR Code.");
-  const exists = await wahaFetch<{ numberExists?: boolean; chatId?: string }>(
+  const exists = await wahaFetch<{ numberExists?: boolean; chatId?: string; pn?: string }>(
     `/api/contacts/check-exists?phone=${encodeURIComponent(data.phone)}&session=${encodeURIComponent(connection.session_name)}`,
   );
   if (!exists.numberExists || !exists.chatId) throw new Error("Este número não foi encontrado no WhatsApp.");
-  const canonicalPhone = phoneFromWahaId(exists.chatId);
+  const canonicalPhone = phoneFromWahaPhoneNumber(exists.pn)
+    ?? phoneFromWahaId(exists.chatId)
+    ?? phoneFromWahaPhoneNumber(data.phone);
   if (!canonicalPhone) throw new Error("O WhatsApp retornou um contato inválido para este número.");
 
   const { data: existing, error: existingError } = await supabaseAdmin.from("whatsapp_conversations")
@@ -121,8 +142,11 @@ export const wahaWhatsAppStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await requireServerRole(context, ["master_admin", "owner", "admin"]);
-    const configured = isWahaConfigured() && Boolean(getServerEnv("WAHA_WEBHOOK_URL")?.trim() && getServerEnv("WAHA_WEBHOOK_HMAC_KEY")?.trim());
-    if (!configured) return { configured: false, connection: null, qrRequired: false };
+    const webhookUrl = getServerEnv("WAHA_WEBHOOK_URL")?.trim();
+    const webhookSecret = getServerEnv("WAHA_WEBHOOK_HMAC_KEY")?.trim();
+    if (!isWahaConfigured() || !webhookUrl || !webhookSecret) {
+      return { configured: false, connection: null, qrRequired: false };
+    }
     try {
       const connection = await loadWahaConnection(context.userId);
       const session = await wahaFetch<WahaSession>(`/api/sessions/${encodeURIComponent(connection.session_name)}`);
@@ -164,28 +188,20 @@ export const wahaWhatsAppConnect = createServerFn({ method: "POST" })
       });
       if (mappingError) throw new Error(mappingError.message);
     }
-    const config = {
-      name: sessionName,
-      config: {
-        metadata: { "advora.tenant_id": tenantId },
-        ignore: { status: true, groups: true, channels: true },
-        webhooks: [{
-          url: webhookUrl,
-          events: ["message", "message.ack", "session.status"],
-          hmac: { key: webhookSecret },
-          retries: { policy: "exponential", delaySeconds: 2, attempts: 8 },
-        }],
-      },
-    };
     let session: WahaSession;
     try {
       session = await wahaFetch<WahaSession>(`/api/sessions/${encodeURIComponent(sessionName)}`);
+      session = await wahaFetch<WahaSession>(`/api/sessions/${encodeURIComponent(sessionName)}`, {
+        method: "PUT",
+        body: JSON.stringify(desiredWahaSessionConfig(tenantId, sessionName, webhookUrl, webhookSecret, session.config)),
+      });
       const recoveryAction = wahaSessionRecoveryAction(session.status);
       if (recoveryAction) {
         session = await wahaFetch<WahaSession>(`/api/sessions/${encodeURIComponent(sessionName)}/${recoveryAction}`, { method: "POST", body: "{}" });
       }
     } catch (error) {
       if ((error as Error & { status?: number }).status !== 404) throw error;
+      const config = desiredWahaSessionConfig(tenantId, sessionName, webhookUrl, webhookSecret);
       session = await wahaFetch<WahaSession>("/api/sessions", { method: "POST", body: JSON.stringify(config) });
     }
     const connection = existingConnection ?? { instance_id: instanceId, tenant_id: tenantId, session_name: sessionName, status: "connecting", connected_at: null, last_error: null };
