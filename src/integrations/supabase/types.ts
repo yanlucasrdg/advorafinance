@@ -978,6 +978,7 @@ export type Database = {
       }
       tenant_subscriptions: {
         Row: {
+          admin_notes: string | null
           billing_interval: Database["public"]["Enums"]["billing_interval"] | null
           cancel_at_period_end: boolean
           created_at: string
@@ -998,6 +999,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          admin_notes?: string | null
           billing_interval?: Database["public"]["Enums"]["billing_interval"] | null
           cancel_at_period_end?: boolean
           created_at?: string
@@ -1018,6 +1020,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          admin_notes?: string | null
           billing_interval?: Database["public"]["Enums"]["billing_interval"] | null
           cancel_at_period_end?: boolean
           created_at?: string
@@ -1046,6 +1049,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      subscription_admin_audit: {
+        Row: {
+          admin_user_id: string
+          created_at: string
+          id: string
+          new_expires_at: string | null
+          new_plan: string
+          new_status: string
+          note: string | null
+          previous_expires_at: string | null
+          previous_plan: string | null
+          previous_status: string | null
+          target_user_id: string
+          tenant_id: string
+        }
+        Insert: {
+          admin_user_id: string
+          created_at?: string
+          id?: string
+          new_expires_at?: string | null
+          new_plan: string
+          new_status: string
+          note?: string | null
+          previous_expires_at?: string | null
+          previous_plan?: string | null
+          previous_status?: string | null
+          target_user_id: string
+          tenant_id: string
+        }
+        Update: {
+          admin_user_id?: string
+          created_at?: string
+          id?: string
+          new_expires_at?: string | null
+          new_plan?: string
+          new_status?: string
+          note?: string | null
+          previous_expires_at?: string | null
+          previous_plan?: string | null
+          previous_status?: string | null
+          target_user_id?: string
+          tenant_id?: string
+        }
+        Relationships: []
       }
       tenants: {
         Row: {
@@ -1483,6 +1531,55 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_effective_plan: { Args: never; Returns: string }
+      platform_admin_dashboard: { Args: never; Returns: Json }
+      platform_admin_list_users: {
+        Args: {
+          p_page?: number
+          p_page_size?: number
+          p_plan?: string | null
+          p_search?: string | null
+          p_status?: string | null
+        }
+        Returns: {
+          access_status: string
+          created_at: string
+          email: string | null
+          expires_at: string | null
+          full_name: string | null
+          plan: string
+          tenant_id: string | null
+          tenant_name: string | null
+          total_count: number
+          user_id: string
+        }[]
+      }
+      platform_admin_update_subscription: {
+        Args: {
+          p_admin_notes?: string | null
+          p_expires_at?: string | null
+          p_plan: string
+          p_status: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      platform_admin_user_detail: {
+        Args: { p_user_id: string }
+        Returns: {
+          access_status: string
+          admin_notes: string | null
+          created_at: string
+          email: string | null
+          expires_at: string | null
+          full_name: string | null
+          plan: string
+          tenant_id: string | null
+          tenant_name: string | null
+          user_id: string
+        }[]
+      }
+      tenant_effective_plan: { Args: { _tenant_id: string }; Returns: string }
       consume_rate_limit: {
         Args: { _scope: string }
         Returns: boolean
@@ -1661,6 +1758,7 @@ export type Database = {
         | "expired"
         | "refunded"
         | "chargeback"
+        | "suspended"
       tenant_plan:
         | "trial"
         | "starter"
@@ -1814,6 +1912,7 @@ export const Constants = {
         "expired",
         "refunded",
         "chargeback",
+        "suspended",
       ],
       tenant_plan: [
         "trial",
