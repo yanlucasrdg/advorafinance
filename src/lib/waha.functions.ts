@@ -141,7 +141,7 @@ export async function sendWahaText(userId: string, data: { phone: string; messag
 export const wahaWhatsAppStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireServerRole(context, ["master_admin", "owner", "admin"]);
+    await requireServerRole(context, ["master_admin", "owner", "admin"], "integrations");
     const webhookUrl = getServerEnv("WAHA_WEBHOOK_URL")?.trim();
     const webhookSecret = getServerEnv("WAHA_WEBHOOK_HMAC_KEY")?.trim();
     if (!isWahaConfigured() || !webhookUrl || !webhookSecret) {
@@ -164,7 +164,7 @@ export const wahaWhatsAppStatus = createServerFn({ method: "GET" })
 export const wahaWhatsAppConnect = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireServerRole(context, ["master_admin", "owner", "admin"]);
+    await requireServerRole(context, ["master_admin", "owner", "admin"], "integrations");
     await requireActiveSubscription(context);
     await enforceRateLimit(context.supabase, "zapi_connection_action");
     const webhookUrl = getServerEnv("WAHA_WEBHOOK_URL")?.trim();
@@ -211,7 +211,7 @@ export const wahaWhatsAppConnect = createServerFn({ method: "POST" })
 export const wahaWhatsAppQrCode = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireServerRole(context, ["master_admin", "owner", "admin"]);
+    await requireServerRole(context, ["master_admin", "owner", "admin"], "integrations");
     await enforceRateLimit(context.supabase, "zapi_qr_code");
     const connection = await loadWahaConnection(context.userId);
     const sessionName = encodeURIComponent(connection.session_name);

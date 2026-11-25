@@ -17,11 +17,13 @@ const EXPORT_TABLES = [
   "profiles",
   "user_roles",
   "clients",
+  "client_activities",
   "cases",
   "case_movements",
   "deadlines",
   "financial_entries",
   "financial_payments",
+  "financial_payment_reversals",
   "financial_audit_log",
   "dre_settings",
   "notifications",
@@ -45,16 +47,19 @@ const SAFE_INSTANCE_COLUMNS = [
   "updated_at",
 ].join(", ");
 
-async function readAllRows(table: (typeof EXPORT_TABLES)[number]) {
+async function readAllRows(table: (typeof EXPORT_TABLES)[number], tenantId: string) {
   const rows: Record<string, unknown>[] = [];
   const pageSize = 1000;
 
-  const columns = table === "whatsapp_instances" ? SAFE_INSTANCE_COLUMNS : "*";
+  const columns = table === "whatsapp_instances" ? SAFE_INSTANCE_COLUMNS
+    : table === "whatsapp_logs" ? "id, tenant_id, client_id, user_id, message, status, to_phone, created_at, updated_at" : "*";
 
   for (let start = 0; ; start += pageSize) {
     const { data, error } = await supabase
       .from(table)
       .select(columns)
+      .filter(table === "tenants" ? "id" : "tenant_id", "eq", tenantId)
+      .order(table === "dre_settings" ? "tenant_id" : "id")
       .range(start, start + pageSize - 1);
 
     if (error) throw error;
@@ -81,7 +86,7 @@ function ExportarDados() {
       for (const table of EXPORT_TABLES) {
         setProgress(`Lendo ${table}...`);
         try {
-          tables[table] = await readAllRows(table);
+          tables[table] = await readAllRows(table, profile.tenant_id);
         } catch (error) {
           unavailable[table] = error instanceof Error ? error.message : "Falha ao ler tabela.";
         }
@@ -102,7 +107,9 @@ function ExportarDados() {
       link.download = `advora-export-${profile.tenant_id}-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       URL.revokeObjectURL(href);
-      toast.success("Exportacao concluida. Guarde o arquivo em local seguro.");
+      const failedTables = Object.keys(unavailable);
+      if (failedTables.length) toast.warning(`Exportação parcial. Tabelas indisponíveis: ${failedTables.join(", ")}.`);
+      else toast.success("Exportação concluída. Guarde o arquivo em local seguro.");
     } finally {
       setRunning(false);
       setProgress("");
@@ -111,18 +118,18 @@ function ExportarDados() {
 
   return (
     <div className="p-8 max-w-3xl mx-auto space-y-6">
-      <PageHeader title="Exportar dados do tenant" subtitle="Arquivo de migracao somente leitura para o tenant autenticado." />
+      <PageHeader title="Exportar dados do escritório" subtitle="Baixe uma cópia dos registros do escritório em formato JSON." />
       <Panel className="p-6 space-y-5">
         <div className="flex gap-3">
           <ShieldCheck className="size-5 text-primary shrink-0 mt-0.5" />
           <div className="space-y-1 text-sm text-muted-foreground">
             <p className="text-foreground font-medium">O arquivo inclui CRM, processos, financeiro e conversas.</p>
-            <p>Credenciais Z-API nao sao exportadas. Elas devem ser cadastradas novamente no ambiente externo.</p>
+            <p>Guarde o arquivo em local seguro. Ele contém dados de clientes e conversas.</p>
           </div>
         </div>
         <Button onClick={exportData} disabled={running} className="bg-[image:var(--gradient-brand)]">
           {running ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          {running ? progress || "Preparando..." : "Baixar exportacao JSON"}
+          {running ? progress || "Preparando..." : "Baixar exportação JSON"}
         </Button>
       </Panel>
     </div>

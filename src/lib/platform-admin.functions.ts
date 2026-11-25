@@ -38,6 +38,8 @@ export const getPlatformAdminDashboard = createServerFn({ method: "GET" })
     if (error) throw new Error("Não foi possível carregar os indicadores administrativos.");
     return data as unknown as {
       totalUsers: number;
+      trialOffices: number;
+      paidOffices: number;
       freeUsers: number;
       starterUsers: number;
       proUsers: number;

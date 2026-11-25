@@ -28,6 +28,7 @@ export const ADMIN_PLANS = {
       "agenda",
       "finance",
       "settings",
+      "copilot",
       "users",
       "billing",
       "export",
@@ -88,6 +89,7 @@ const STORED_TO_ADMIN: Record<string, AdminPlanId> = {
   starter: "starter",
   performance: "pro",
   professional: "pro",
+  pro: "pro",
   business: "enterprise",
   enterprise: "enterprise",
 };

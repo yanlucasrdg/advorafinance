@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_authenticated/config")({
 });
 
 function Config() {
-  const { profile, branding, refreshProfile, refreshBranding } = useAuth();
+  const { profile, branding, refreshProfile, refreshBranding, effectivePlan } = useAuth();
   const [tenant, setTenant] = useState<{ name: string; slug: string; plan: string } | null>(null);
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
   const [brand, setBrand] = useState({
@@ -150,7 +150,7 @@ function Config() {
             <div>
               <Label>Plano atual</Label>
               <div className="mt-1 inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-3 py-1.5 text-sm capitalize">
-                {tenant.plan}
+                {{ free: "Free", starter: "Essencial", pro: "Performance", enterprise: "Business" }[effectivePlan]}
               </div>
             </div>
             <Button onClick={saveTenant} className="w-fit">

@@ -1531,6 +1531,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_kirvano_event: { Args: { p_event: Json }; Returns: string }
       current_effective_plan: { Args: never; Returns: string }
       platform_admin_dashboard: { Args: never; Returns: Json }
       platform_admin_list_users: {

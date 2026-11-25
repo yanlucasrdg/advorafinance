@@ -10,8 +10,7 @@ export const BILLING_PLANS = {
       "CRM jurídico e gestão de clientes",
       "Processos, agenda, prazos e tarefas",
       "Financeiro e dashboard operacional",
-      "Copiloto com 100 interações por mês",
-      "Importação e exportação de dados",
+      "Exportação de dados do escritório",
     ],
   },
   performance: {
@@ -24,9 +23,8 @@ export const BILLING_PLANS = {
     features: [
       "Tudo do Essencial",
       "Financeiro, relatórios e indicadores avançados",
-      "WhatsApp e comunicação centralizada",
       "Automações e workflows personalizados",
-      "Permissões por função e suporte prioritário",
+      "Permissões por função",
     ],
   },
   business: {
@@ -41,7 +39,6 @@ export const BILLING_PLANS = {
       "Marca branca e identidade personalizada",
       "Relatórios executivos e trilhas de auditoria",
       "Permissões, filas e workflows avançados",
-      "Migração assistida e gerente de sucesso",
     ],
   },
 } as const;
@@ -50,7 +47,12 @@ export type BillingPlanId = keyof typeof BILLING_PLANS;
 export type BillingInterval = "monthly" | "annual";
 
 export function isBillingPlanId(value: string): value is BillingPlanId {
-  return value in BILLING_PLANS;
+  return Object.prototype.hasOwnProperty.call(BILLING_PLANS, value);
+}
+
+export function billingStatus(status: string, trialEnd: string | null, now = Date.now()) {
+  if (status === "trialing" && !(trialEnd && Date.parse(trialEnd) > now)) return "expired";
+  return status;
 }
 
 export function normalizeLegacyPlan(value: string | null | undefined): BillingPlanId | "trial" {

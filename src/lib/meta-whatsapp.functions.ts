@@ -82,7 +82,7 @@ async function findOrCreateConversation(channel: MetaChannel, phone: string, cli
 export const metaWhatsAppStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireServerRole(context, ["master_admin", "owner", "admin"]);
+    await requireServerRole(context, ["master_admin", "owner", "admin"], "integrations");
     const tenantId = await tenantForUser(context.userId);
     const config = await configuredEmbeddedSignup();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -103,7 +103,7 @@ export const metaWhatsAppCompleteEmbeddedSignup = createServerFn({ method: "POST
     return { code, businessAccountId, phoneNumberId, displayPhoneNumber };
   })
   .handler(async ({ data, context }) => {
-    await requireServerRole(context, ["master_admin", "owner", "admin"]);
+    await requireServerRole(context, ["master_admin", "owner", "admin"], "integrations");
     await requireActiveSubscription(context);
     const tenantId = await tenantForUser(context.userId);
     const { accessToken, expiresIn } = await exchangeEmbeddedSignupCode(data.code);
@@ -146,7 +146,7 @@ export const metaWhatsAppSendText = createServerFn({ method: "POST" })
     return { phone, message, clientId: typeof input?.clientId === "string" && input.clientId.trim().length > 0 ? input.clientId.trim() : undefined };
   })
   .handler(async ({ data, context }) => {
-    await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer", "secretary"]);
+    await requireServerRole(context, ["master_admin", "owner", "admin", "lawyer", "secretary"], "communications");
     await requireActiveSubscription(context);
     await enforceRateLimit(context.supabase, "zapi_send_text");
     if (await hasWahaConnection(context.userId)) {
