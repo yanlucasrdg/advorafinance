@@ -32,6 +32,7 @@ import { Route as AdminPlansRouteImport } from './routes/admin.plans'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AuthIndexRouteImport } from './routes/auth.index'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AuthRecuperarRouteImport } from './routes/auth.recuperar'
 import { Route as AuthenticatedAdminUsuariosRouteImport } from './routes/_authenticated/admin.usuarios'
 import { Route as AdminUsersUserIdRouteImport } from './routes/admin.users.$userId'
 
@@ -152,6 +153,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/callback',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthRecuperarRoute = AuthRecuperarRouteImport.update({
+  id: '/recuperar',
+  path: '/recuperar',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthenticatedAdminUsuariosRoute =
   AuthenticatedAdminUsuariosRouteImport.update({
     id: '/admin/usuarios',
@@ -185,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/admin/plans': typeof AdminPlansRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/recuperar': typeof AuthRecuperarRoute
   '/admin/': typeof AdminIndexRoute
   '/auth/': typeof AuthIndexRoute
   '/admin/usuarios': typeof AuthenticatedAdminUsuariosRoute
@@ -209,6 +216,7 @@ export interface FileRoutesByTo {
   '/admin/plans': typeof AdminPlansRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/recuperar': typeof AuthRecuperarRoute
   '/admin': typeof AdminIndexRoute
   '/auth': typeof AuthIndexRoute
   '/admin/usuarios': typeof AuthenticatedAdminUsuariosRoute
@@ -237,6 +245,7 @@ export interface FileRoutesById {
   '/admin/plans': typeof AdminPlansRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/recuperar': typeof AuthRecuperarRoute
   '/admin/': typeof AdminIndexRoute
   '/auth/': typeof AuthIndexRoute
   '/_authenticated/admin/usuarios': typeof AuthenticatedAdminUsuariosRoute
@@ -265,6 +274,7 @@ export interface FileRouteTypes {
     | '/admin/plans'
     | '/admin/users'
     | '/auth/callback'
+    | '/auth/recuperar'
     | '/admin/'
     | '/auth/'
     | '/admin/usuarios'
@@ -289,6 +299,7 @@ export interface FileRouteTypes {
     | '/admin/plans'
     | '/admin/users'
     | '/auth/callback'
+    | '/auth/recuperar'
     | '/admin'
     | '/auth'
     | '/admin/usuarios'
@@ -316,6 +327,7 @@ export interface FileRouteTypes {
     | '/admin/plans'
     | '/admin/users'
     | '/auth/callback'
+    | '/auth/recuperar'
     | '/admin/'
     | '/auth/'
     | '/_authenticated/admin/usuarios'
@@ -493,6 +505,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/auth/recuperar': {
+      id: '/auth/recuperar'
+      path: '/recuperar'
+      fullPath: '/auth/recuperar'
+      preLoaderRoute: typeof AuthRecuperarRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_authenticated/admin/usuarios': {
       id: '/_authenticated/admin/usuarios'
       path: '/admin/usuarios'
@@ -575,11 +594,13 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface AuthRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthRecuperarRoute: typeof AuthRecuperarRoute
   AuthIndexRoute: typeof AuthIndexRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
+  AuthRecuperarRoute: AuthRecuperarRoute,
   AuthIndexRoute: AuthIndexRoute,
 }
 

@@ -75,7 +75,7 @@ function AuthPage() {
     }
     setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth`,
+      redirectTo: `${window.location.origin}/auth/recuperar`,
     });
     setBusy(false);
     if (error) toast.error("Não foi possível enviar o link agora. Tente novamente.");
