@@ -19,6 +19,7 @@ function Onboarding() {
   const { user, profile, loading, refreshProfile } = useAuth();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [customSlug, setCustomSlug] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -31,10 +32,10 @@ function Onboarding() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const finalSlug = slug || slugify(name);
+    const finalSlug = slugify(slug || name);
     const { error } = await supabase.rpc("create_tenant_with_owner", { _name: name, _slug: finalSlug });
     if (error) {
-      toast.error(error.message);
+      toast.error(error.code === "23505" ? "Esse identificador já está em uso. Escolha outro." : "Não foi possível criar o escritório. Confira os dados e tente novamente.");
       setBusy(false);
       return;
     }
@@ -58,21 +59,20 @@ function Onboarding() {
             <Building2 className="size-5 text-primary" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Configure seu escritório</h1>
-          <p className="text-sm text-muted-foreground mt-1">Vamos criar seu workspace. Você será o owner.</p>
+          <p className="text-sm text-muted-foreground mt-1">Ao criar o escritório, você inicia seus 7 dias de teste do plano Business como proprietário.</p>
 
           <form onSubmit={submit} className="mt-6 space-y-4">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Nome do escritório</Label>
-              <Input required value={name} onChange={e => { setName(e.target.value); if (!slug) setSlug(slugify(e.target.value)); }} placeholder="Silva & Associados" />
+              <Input required minLength={2} maxLength={120} value={name} onChange={e => { setName(e.target.value); if (!customSlug) setSlug(slugify(e.target.value)); }} placeholder="Silva & Associados" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Identificador (URL)</Label>
+              <Label className="text-xs text-muted-foreground">Identificador do escritório</Label>
               <div className="flex items-center rounded-md border border-input bg-input/40">
-                <span className="px-3 text-xs text-muted-foreground">legion.app/</span>
-                <Input className="border-0 bg-transparent" required value={slug} onChange={e => setSlug(slugify(e.target.value))} placeholder="silva-associados" />
+                <Input className="border-0 bg-transparent" required value={slug} onChange={e => { setCustomSlug(true); setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40)); }} placeholder="silva-associados" />
               </div>
             </div>
-            <Button type="submit" disabled={busy || !name} className="w-full bg-[image:var(--gradient-brand)] hover:opacity-90">
+            <Button type="submit" disabled={busy || name.trim().length < 2 || slugify(slug).length < 3} className="w-full bg-[image:var(--gradient-brand)] hover:opacity-90">
               {busy ? <Loader2 className="size-4 animate-spin" /> : "Criar escritório"}
             </Button>
           </form>

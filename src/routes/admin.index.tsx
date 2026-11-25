@@ -58,13 +58,18 @@ function MetricCard({
 
 function PlatformDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     getPlatformAdminDashboard()
       .then(setStats)
-      .catch((error) =>
-        toast.error(error instanceof Error ? error.message : "Falha ao carregar o painel."),
-      );
-  }, []);
+      .catch((error) => {
+        setFailed(true);
+        toast.error(error instanceof Error ? error.message : "Falha ao carregar o painel.");
+      });
+  }, [attempt]);
+
+  if (failed) return <div className="p-8"><p>Os indicadores estão indisponíveis.</p><Button onClick={() => { setFailed(false); setAttempt(n => n + 1); }}>Tentar novamente</Button></div>;
 
   if (!stats)
     return (
@@ -102,6 +107,8 @@ function PlatformDashboard() {
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Escritórios em teste" value={stats.trialOffices} helper="Período de experiência em andamento" icon={Clock3} />
+        <MetricCard label="Assinaturas pagas" value={stats.paidOffices} helper="Escritórios com assinatura ativa na Kirvano" icon={Building2} />
         <MetricCard
           label="Usuários cadastrados"
           value={stats.totalUsers}

@@ -28,13 +28,13 @@ function RouteComponent() {
       const code = new URLSearchParams(window.location.search).get('code')
 
       if (!code) {
-        if (active) setError('O retorno do Google não contém um código de autenticação.')
+        if (active) setError('O link de acesso está incompleto ou expirou.')
         return
       }
 
       const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
       if (exchangeError) {
-        if (active) setError('Não foi possível concluir o login com Google. Tente novamente.')
+        if (active) setError('Não foi possível confirmar seu acesso. Tente novamente.')
         return
       }
 
@@ -59,7 +59,7 @@ function RouteComponent() {
         ) : (
           <>
             <Loader2 className="mx-auto size-6 animate-spin text-primary" />
-            <p className="mt-3 text-sm text-muted-foreground">Concluindo login com Google…</p>
+            <p className="mt-3 text-sm text-muted-foreground">Confirmando seu acesso…</p>
           </>
         )}
       </div>

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { normalizeRoles, type AppRole } from "@/lib/permissions";
+import { normalizeRoles, type AppModule, type AppRole } from "@/lib/permissions";
+import { canAccessPlanModule, toAdminPlan } from "@/lib/admin-plans";
 
 export type AuthenticatedServerContext = {
   supabase: SupabaseClient<Database>;
@@ -11,7 +12,7 @@ export async function getServerAuthorization(context: AuthenticatedServerContext
   const [{ data: profile, error: profileError }, { data: roleRows, error: roleError }] =
     await Promise.all([
       context.supabase.from("profiles").select("tenant_id").eq("id", context.userId).maybeSingle(),
-      context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
+      context.supabase.from("user_roles").select("role, tenant_id").eq("user_id", context.userId),
     ]);
 
   if (profileError || roleError || !profile?.tenant_id) {
@@ -20,17 +21,24 @@ export async function getServerAuthorization(context: AuthenticatedServerContext
 
   return {
     tenantId: profile.tenant_id,
-    roles: normalizeRoles((roleRows ?? []).map((row) => row.role)),
+    roles: normalizeRoles((roleRows ?? []).filter(row => row.role === "master_admin" || row.tenant_id === profile.tenant_id).map(row => row.role)),
   };
 }
 
 export async function requireServerRole(
   context: AuthenticatedServerContext,
   allowed: readonly AppRole[],
+  module?: AppModule,
 ) {
   const authorization = await getServerAuthorization(context);
   if (!authorization.roles.some((role) => allowed.includes(role))) {
     throw new Error("Seu perfil não possui permissão para executar esta ação.");
+  }
+  if (module) {
+    const { data, error } = await context.supabase.rpc("current_effective_plan");
+    if (error || !data || !canAccessPlanModule(toAdminPlan(data), module)) {
+      throw new Error("Este recurso requer um plano com acesso ao módulo.");
+    }
   }
   return authorization;
 }

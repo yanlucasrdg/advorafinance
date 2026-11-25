@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -48,6 +49,8 @@ type AuthCtx = {
 const Ctx = createContext<AuthCtx | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+  const activeUser = useRef<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -56,14 +59,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [effectivePlan, setEffectivePlan] = useState<AdminPlanId>("free");
   const [accessSuspended, setAccessSuspended] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [trialDeadline, setTrialDeadline] = useState<number | null>(null);
 
   const loadBranding = useCallback(async (tenantId: string) => {
+    const requestedBy = activeUser.current;
     const { data } = await supabase
       .from("tenant_branding")
       .select("tenant_id, brand_name, logo_url, primary_color, secondary_color, default_theme")
       .eq("tenant_id", tenantId)
       .maybeSingle();
-    setBranding(data as TenantBranding | null);
+    if (requestedBy && activeUser.current === requestedBy) setBranding(data as TenantBranding | null);
   }, []);
 
   const loadProfile = useCallback(
@@ -74,31 +79,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .select("id, tenant_id, full_name, email, avatar_url, locale, theme")
           .eq("id", uid)
           .maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", uid),
+        supabase.from("user_roles").select("role, tenant_id").eq("user_id", uid),
       ]);
+      if (activeUser.current !== uid) return;
       const nextProfile = data as Profile | null;
-      setRoles(normalizeRoles((roleRows ?? []).map((row) => row.role)));
+      setRoles(normalizeRoles((roleRows ?? []).filter(row => row.role === "master_admin" || row.tenant_id === nextProfile?.tenant_id).map(row => row.role)));
       setProfile(nextProfile);
       if (nextProfile?.tenant_id) {
         const tenantId = nextProfile.tenant_id;
-        const [{ data: tenant }, { data: subscription }] = await Promise.all([
-          supabase.from("tenants").select("plan").eq("id", tenantId).maybeSingle(),
+        const [{ data: plan }, { data: subscription }] = await Promise.all([
+          supabase.rpc("current_effective_plan"),
           supabase
             .from("tenant_subscriptions")
-            .select("plan, status, provider, current_period_end")
+            .select("status, trial_ends_at")
             .eq("tenant_id", tenantId)
             .maybeSingle(),
           loadBranding(tenantId),
         ]);
-        const expiredManual =
-          subscription?.provider === "manual" &&
-          !!subscription.current_period_end &&
-          new Date(subscription.current_period_end).getTime() <= Date.now();
-        setEffectivePlan(
-          expiredManual || subscription?.status === "expired"
-            ? "free"
-            : toAdminPlan(subscription?.plan ?? tenant?.plan),
-        );
+        if (activeUser.current !== uid) return;
+        setEffectivePlan(toAdminPlan(plan));
+        setTrialDeadline(subscription?.status === "trialing" && subscription.trial_ends_at ? Date.parse(subscription.trial_ends_at) : null);
         setAccessSuspended(subscription?.status === "suspended");
       } else {
         setBranding(null);
@@ -110,12 +110,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    let subscribed = true;
+    let eventReceived = false;
     const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+      eventReceived = true;
+      const nextId = sess?.user.id ?? null;
+      if (activeUser.current !== nextId) {
+        queryClient.clear();
+        setProfile(null);
+        setBranding(null);
+        setEffectivePlan("free");
+        setRoles([]);
+        setAccessSuspended(false);
+        setTrialDeadline(null);
+        setLoading(!!nextId);
+        activeUser.current = nextId;
+      }
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess?.user) {
-        setTimeout(() => loadProfile(sess.user.id), 0);
+        setTimeout(() => { void loadProfile(sess.user.id).finally(() => {
+          if (subscribed && activeUser.current === sess.user.id) setLoading(false);
+        }); }, 0);
       } else {
+        setLoading(false);
         setProfile(null);
         setBranding(null);
         setRoles([]);
@@ -125,14 +143,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     supabase.auth.getSession().then(({ data: { session: sess } }) => {
+      if (!subscribed || eventReceived) return;
+      activeUser.current = sess?.user.id ?? null;
       setSession(sess);
       setUser(sess?.user ?? null);
-      if (sess?.user) loadProfile(sess.user.id).finally(() => setLoading(false));
+      if (sess?.user) loadProfile(sess.user.id).finally(() => {
+        if (subscribed && activeUser.current === sess.user.id) setLoading(false);
+      });
       else setLoading(false);
     });
 
-    return () => sub.subscription.unsubscribe();
-  }, [loadProfile]);
+    return () => { subscribed = false; sub.subscription.unsubscribe(); };
+  }, [loadProfile, queryClient]);
 
   useEffect(() => {
     if (!profile?.tenant_id || !user) return;
@@ -159,6 +181,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = useCallback(async () => {
     if (user) await loadProfile(user.id);
   }, [loadProfile, user]);
+
+  useEffect(() => {
+    if (!user || !trialDeadline || trialDeadline <= Date.now()) return;
+    const timer = window.setTimeout(() => { void loadProfile(user.id); }, trialDeadline - Date.now() + 1);
+    return () => window.clearTimeout(timer);
+  }, [trialDeadline, user, loadProfile]);
 
   const refreshBranding = useCallback(async () => {
     if (profile?.tenant_id) await loadBranding(profile.tenant_id);

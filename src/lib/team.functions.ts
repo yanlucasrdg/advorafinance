@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireActiveSubscription } from "@/lib/authorization.server";
 
 const AssignableRole = z.enum(["admin", "lawyer", "secretary", "intern"]);
 
@@ -44,6 +45,7 @@ export const inviteTeamMember = createServerFn({ method: "POST" })
   .inputValidator((data) => InviteSchema.parse(data))
   .handler(async ({ data, context }) => {
     await requireOwner(context);
+    await requireActiveSubscription(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: invited, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(data.email, {

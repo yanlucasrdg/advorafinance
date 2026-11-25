@@ -42,13 +42,13 @@ Na Kirvano, acesse **Integrações → Webhooks** e configure:
 - Token: o mesmo valor de `KIRVANO_WEBHOOK_TOKEN`
 - Eventos: compra aprovada, assinatura renovada, assinatura atrasada, assinatura cancelada, reembolso e chargeback.
 
-O endpoint aceita o token nos cabeçalhos `x-kirvano-token`, `x-webhook-token`, `authorization` ou `token`. Os eventos são idempotentes e não armazenam documento ou telefone do comprador.
+O painel envia o token no cabeçalho `Security-Token`. Inclua também o evento de devolução PIX (SALE_MED). Use os logs do painel para conferir entrega e reenvio durante a homologação. [Documentação da Kirvano](https://help.kirvano.com/hc/pt-br/articles/1765385505-configurando-integracao-via-webhook)
 
 ## 4. Fluxo de identificação
 
-O checkout é aberto pelo proprietário autenticado e recebe nome, e-mail e o identificador do escritório nos parâmetros aceitos pela Kirvano. O webhook usa o identificador em `utm_term` e, como fallback, o e-mail do comprador para localizar o tenant.
+O checkout é aberto pelo proprietário autenticado. Na primeira compra, use o e-mail confirmado da conta proprietária do escritório. O banco confere esse vínculo e o identificador enviado pelo checkout. Eventos posteriores da mesma venda usam o vínculo já registrado.
 
 ## 5. Banco de dados
 
-Aplicar a migração `20260804170000_kirvano_subscriptions.sql` antes de ativar o webhook. Escritórios existentes recebem 14 dias de experiência sem serem bloqueados imediatamente.
+Após as migrations anteriores do projeto, aplique `20261124010000_business_trial.sql` e `20261124020000_atomic_kirvano.sql` antes de publicar o frontend e o webhook. Novos escritórios recebem 7 dias de Business. No Supabase Auth, autorize os retornos do domínio de produção em `/auth/callback` e `/auth/recuperar`.
 

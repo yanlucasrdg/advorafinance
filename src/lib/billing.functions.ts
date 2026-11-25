@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
-import { BILLING_PLANS, normalizeLegacyPlan } from "@/lib/billing";
+import { BILLING_PLANS, billingStatus, normalizeLegacyPlan } from "@/lib/billing";
 
 const CheckoutSchema = z.object({
   plan: z.enum(["essential", "performance", "business"]),
@@ -49,19 +49,24 @@ export const getBillingOverview = createServerFn({ method: "GET" })
 
     if (tenantResult.error) throw new Error(tenantResult.error.message);
     if (subscriptionResult.error) throw new Error(subscriptionResult.error.message);
+    if (usersResult.error || casesResult.error) throw new Error("Não foi possível consultar o uso do plano.");
 
     const subscription = subscriptionResult.data;
     const plan = normalizeLegacyPlan(subscription?.plan ?? tenantResult.data.plan);
+    const status = billingStatus(subscription?.status ?? "expired", subscription?.trial_ends_at ?? null);
+    const inactive = ["expired", "suspended", "refunded", "chargeback"].includes(status);
+    const { getServerEnv } = await import("@/integrations/supabase/runtime-env.server");
     return {
+      checkoutEnabled: getServerEnv("KIRVANO_CHECKOUT_ENABLED") === "true",
       plan,
-      status: subscription?.status ?? "trialing",
+      status,
       billingInterval: subscription?.billing_interval ?? null,
       currentPeriodEnd: subscription?.current_period_end ?? null,
       trialEndsAt: subscription?.trial_ends_at ?? null,
       cancelAtPeriodEnd: subscription?.cancel_at_period_end ?? false,
       provider: subscription?.provider ?? "kirvano",
       usage: { users: usersResult.count ?? 0, cases: casesResult.count ?? 0 },
-      limits: plan === "trial" ? { users: 2, cases: 50, storageGb: 1, aiCredits: 30, automations: 3 } : BILLING_PLANS[plan].limits,
+      limits: plan === "trial" || inactive ? { users: 2, cases: 50, storageGb: 1, aiCredits: 30, automations: 3 } : BILLING_PLANS[plan].limits,
     };
   });
 
@@ -72,6 +77,7 @@ export const createKirvanoCheckout = createServerFn({ method: "POST" })
     const profile = await requireOwner(context);
     const { getServerEnv } = await import("@/integrations/supabase/runtime-env.server");
     const envName = `KIRVANO_${data.plan.toUpperCase()}_${data.interval.toUpperCase()}_CHECKOUT_URL`;
+    if (getServerEnv("KIRVANO_CHECKOUT_ENABLED") !== "true") throw new Error("Contratação temporariamente indisponível.");
     const checkoutUrl = getServerEnv(envName);
     if (!checkoutUrl) throw new Error(`Checkout ainda não configurado para o plano ${BILLING_PLANS[data.plan].name}.`);
 

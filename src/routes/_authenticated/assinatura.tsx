@@ -74,6 +74,12 @@ function SubscriptionPage() {
   if (loading && !overview) {
     return <div className="grid min-h-[60vh] place-items-center"><Loader2 className="size-6 animate-spin text-primary" /></div>;
   }
+  if (!overview) return (
+    <section className="mx-auto max-w-lg space-y-4 p-8">
+      <h1 className="text-xl font-semibold">Não foi possível consultar sua assinatura</h1>
+      <Button onClick={() => void load()}>Tentar novamente</Button>
+    </section>
+  );
 
   const renewalDate = formatDate(overview?.currentPeriodEnd ?? overview?.trialEndsAt ?? null);
   const warning = overview && ["past_due", "expired", "refunded", "chargeback"].includes(overview.status);
@@ -97,7 +103,8 @@ function SubscriptionPage() {
                   </span>
                 </div>
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                  {overview.cancelAtPeriodEnd && renewalDate
+                  {overview.status === "expired" ? "Escolha um plano para retomar o acesso."
+                    : overview.cancelAtPeriodEnd && renewalDate
                     ? `Seu acesso permanece ativo até ${renewalDate}.`
                     : renewalDate
                       ? `${overview.status === "trialing" ? "Seu teste termina" : "Próxima renovação"} em ${renewalDate}.`
@@ -118,7 +125,7 @@ function SubscriptionPage() {
 
       <section>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div><h2 className="text-xl font-semibold tracking-tight">Escolha o plano certo para crescer</h2><p className="mt-1 text-sm text-muted-foreground">Segurança, LGPD e exportação dos seus dados estão incluídas em todos os planos.</p></div>
+          <div><h2 className="text-xl font-semibold tracking-tight">Escolha o plano do escritório</h2><p className="mt-1 text-sm text-muted-foreground">No checkout, use o e-mail confirmado da conta proprietária.</p></div>
           <div className="relative grid w-fit grid-cols-2 rounded-xl border border-border bg-secondary/70 p-1">
             <button type="button" onClick={() => setInterval("monthly")} className={`relative z-10 rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${interval === "monthly" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>Mensal</button>
             <button type="button" onClick={() => setInterval("annual")} className={`relative z-10 rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${interval === "annual" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>Anual <span className="text-success">−20%</span></button>
@@ -129,14 +136,13 @@ function SubscriptionPage() {
           {(Object.keys(BILLING_PLANS) as BillingPlanId[]).map((planId) => {
             const plan = BILLING_PLANS[planId];
             const featured = planId === "performance";
-            const current = overview?.plan === planId;
+            const current = overview?.plan === planId && overview.status === "active";
             const price = interval === "annual" ? plan.annualMonthlyPrice : plan.monthlyPrice;
             return (
               <article key={planId} className={`relative flex min-h-[510px] flex-col overflow-hidden rounded-3xl border bg-card p-6 shadow-[var(--shadow-elegant)] transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${featured ? "border-primary/45 ring-1 ring-primary/10" : "border-border"}`}>
                 {featured && <div className="absolute inset-x-0 top-0 h-1 bg-[image:var(--gradient-brand)]" />}
                 <div className="flex items-center justify-between">
                   <span className={`grid size-10 place-items-center rounded-2xl ${featured ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}>{planId === "business" ? <ShieldCheck className="size-5" /> : <Sparkles className="size-5" />}</span>
-                  {featured && <span className="rounded-full bg-primary-soft px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">Mais escolhido</span>}
                 </div>
                 <h3 className="mt-5 text-lg font-semibold">{plan.name}</h3>
                 <p className="mt-2 min-h-10 text-xs leading-relaxed text-muted-foreground">{plan.description}</p>
@@ -146,8 +152,8 @@ function SubscriptionPage() {
                 <ul className="space-y-3">
                   {plan.features.map((feature) => <li key={feature} className="flex gap-2.5 text-xs leading-relaxed"><span className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-primary-soft text-primary"><Check className="size-2.5" strokeWidth={3} /></span>{feature}</li>)}
                 </ul>
-                <Button className="mt-auto w-full" variant={featured ? "default" : "outline"} disabled={current || checkoutPlan !== null} onClick={() => void checkout(planId)}>
-                  {checkoutPlan === planId ? <><Loader2 className="size-4 animate-spin" />Abrindo checkout</> : current ? "Seu plano atual" : <>Escolher {plan.name}<ArrowRight className="size-4" /></>}
+                <Button className="mt-auto w-full" variant={featured ? "default" : "outline"} disabled={!overview.checkoutEnabled || current || checkoutPlan !== null} onClick={() => void checkout(planId)}>
+                  {checkoutPlan === planId ? <><Loader2 className="size-4 animate-spin" />Abrindo checkout</> : current ? "Seu plano atual" : !overview.checkoutEnabled ? "Contratação indisponível" : <>Escolher {plan.name}<ArrowRight className="size-4" /></>}
                 </Button>
               </article>
             );

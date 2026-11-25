@@ -1,6 +1,6 @@
 import type { Database } from "@/integrations/supabase/types";
 import { createClient } from "@supabase/supabase-js";
-import { isBillingPlanId, type BillingPlanId } from "@/lib/billing";
+import type { BillingPlanId } from "@/lib/billing";
 
 type Bindings = Record<string, unknown>;
 type KirvanoProduct = { id?: string; offer_id?: string; is_order_bump?: boolean };
@@ -11,13 +11,13 @@ type KirvanoPayload = {
   status?: string;
   created_at?: string;
   customer?: { email?: string };
-  plan?: { charge_frequency?: string; next_charge_date?: string };
+  plan?: { charge_frequency?: string; next_charge_date?: string; charge_number?: number };
   products?: KirvanoProduct[];
   utm?: { utm_term?: string };
 };
 
 const ACTIVE_EVENTS = new Set(["SALE_APPROVED", "SUBSCRIPTION_RENEWED"]);
-const TERMINAL_EVENTS = new Set(["SALE_REFUNDED", "SALE_CHARGEBACK"]);
+const TERMINAL_EVENTS = new Set(["SALE_REFUNDED", "SALE_CHARGEBACK", "SALE_MED"]);
 const KNOWN_EVENTS = new Set([...ACTIVE_EVENTS, ...TERMINAL_EVENTS, "SUBSCRIPTION_CANCELED", "SUBSCRIPTION_EXPIRED"]);
 
 function readBinding(bindings: Bindings, key: string): string | undefined {
@@ -35,7 +35,8 @@ function tokenMatches(received: string | null, expected: string): boolean {
 }
 
 function webhookToken(request: Request): string | null {
-  return request.headers.get("x-kirvano-token")
+  return request.headers.get("security-token")
+    ?? request.headers.get("x-kirvano-token")
     ?? request.headers.get("x-webhook-token")
     ?? request.headers.get("authorization")
     ?? request.headers.get("token");
@@ -57,10 +58,10 @@ function resolvePlan(payload: KirvanoPayload, bindings: Bindings): BillingPlanId
       const configuredOffer = readBinding(bindings, `KIRVANO_${plan.toUpperCase()}_${interval}_OFFER_ID`);
       if (configuredOffer && configuredOffer === offerId) return plan;
     }
-    const configuredProduct = readBinding(bindings, `KIRVANO_${plan.toUpperCase()}_PRODUCT_ID`);
-    if (configuredProduct && configuredProduct === productId) return plan;
   }
-  return null;
+  const matchingProducts = (["essential", "performance", "business"] as const)
+    .filter(plan => productId && readBinding(bindings, `KIRVANO_${plan.toUpperCase()}_PRODUCT_ID`) === productId);
+  return matchingProducts.length === 1 ? matchingProducts[0] : null;
 }
 
 function resolveInterval(payload: KirvanoPayload): "monthly" | "annual" | null {
@@ -90,6 +91,11 @@ export async function handleKirvanoWebhook(request: Request, bindings: Bindings)
   } catch {
     return new Response("Invalid JSON", { status: 400 });
   }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)
+      || (payload.products != null && (!Array.isArray(payload.products)
+          || payload.products.some(product => !product || typeof product !== "object")))) {
+    return new Response("Invalid payload", { status: 400 });
+  }
   if (!payload.event || !KNOWN_EVENTS.has(payload.event) || !payload.sale_id) {
     return Response.json({ received: true, ignored: true });
   }
@@ -99,77 +105,23 @@ export async function handleKirvanoWebhook(request: Request, bindings: Bindings)
   if (!supabaseUrl || !serviceKey) return new Response("Server configuration error", { status: 503 });
   const admin = createClient<Database>(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const eventKey = `${payload.event}:${payload.sale_id}:${payload.created_at ?? payload.status ?? "unknown"}`;
-  const { data: inserted, error: eventError } = await admin
-    .from("billing_webhook_events")
-    .upsert({ event_key: eventKey, event_type: payload.event, sale_id: payload.sale_id, checkout_id: payload.checkout_id ?? null, processing_status: "received" }, { onConflict: "event_key", ignoreDuplicates: true })
-    .select("id")
-    .maybeSingle();
-  if (eventError) return new Response("Persistence error", { status: 500 });
-  if (!inserted) return Response.json({ received: true, duplicate: true });
-
-  let tenantId = isUuid(payload.utm?.utm_term) ? payload.utm.utm_term : null;
-  if (!tenantId && payload.customer?.email) {
-    const { data: owner } = await admin.from("profiles").select("tenant_id").ilike("email", payload.customer.email).not("tenant_id", "is", null).limit(1).maybeSingle();
-    tenantId = owner?.tenant_id ?? null;
-  }
+  const eventKey = `${payload.event}:${payload.sale_id}:${payload.plan?.charge_number ?? payload.created_at ?? payload.status ?? "unknown"}`;
   const resolvedPlan = resolvePlan(payload, bindings);
-  if (!tenantId || !resolvedPlan || !isBillingPlanId(resolvedPlan)) {
-    await admin.from("billing_webhook_events").update({ processing_status: "ignored", processed_at: new Date().toISOString(), error_message: !tenantId ? "tenant_not_found" : "offer_not_mapped" }).eq("id", inserted.id);
-    return Response.json({ received: true, ignored: true });
-  }
-
-  const incomingEventAt = normalizeDate(payload.created_at) ?? new Date().toISOString();
-  const { data: currentSubscription } = await admin
-    .from("tenant_subscriptions")
-    .select("last_event_at")
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-  if (currentSubscription?.last_event_at && new Date(currentSubscription.last_event_at) > new Date(incomingEventAt)) {
-    await admin.from("billing_webhook_events").update({
-      tenant_id: tenantId,
-      processing_status: "ignored",
-      processed_at: new Date().toISOString(),
-      error_message: "stale_event",
-    }).eq("id", inserted.id);
-    return Response.json({ received: true, stale: true });
-  }
-
+  if (!resolvedPlan) return new Response("Unmapped billing offer", { status: 422 });
   const product = payload.products?.find((entry) => !entry.is_order_bump);
-  const nextCharge = normalizeDate(payload.plan?.next_charge_date);
-  const now = new Date().toISOString();
   let status: Database["public"]["Enums"]["subscription_status"] = "active";
-  let cancelAtPeriodEnd = false;
-  if (payload.event === "SUBSCRIPTION_CANCELED") { status = "canceled"; cancelAtPeriodEnd = true; }
+  if (payload.event === "SUBSCRIPTION_CANCELED") status = "canceled";
   else if (payload.event === "SUBSCRIPTION_EXPIRED") status = "past_due";
-  else if (payload.event === "SALE_REFUNDED") status = "refunded";
+  else if (payload.event === "SALE_REFUNDED" || payload.event === "SALE_MED") status = "refunded";
   else if (payload.event === "SALE_CHARGEBACK") status = "chargeback";
 
-  const { error: subscriptionError } = await admin.from("tenant_subscriptions").upsert({
-    tenant_id: tenantId,
-    plan: resolvedPlan,
-    status,
-    provider: "kirvano",
-    billing_interval: resolveInterval(payload),
-    kirvano_sale_id: payload.sale_id,
-    kirvano_checkout_id: payload.checkout_id ?? null,
-    kirvano_offer_id: product?.offer_id ?? null,
-    kirvano_product_id: product?.id ?? null,
-    customer_email: payload.customer?.email ?? null,
-    current_period_end: nextCharge,
-    cancel_at_period_end: cancelAtPeriodEnd,
-    grace_ends_at: status === "past_due" ? new Date(Date.now() + 3 * 86_400_000).toISOString() : null,
-    last_event_at: incomingEventAt,
-    updated_at: now,
-  }, { onConflict: "tenant_id" });
-
-  if (subscriptionError) {
-    await admin.from("billing_webhook_events").update({ processing_status: "error", processed_at: now, error_message: "subscription_update_failed" }).eq("id", inserted.id);
-    return new Response("Subscription update failed", { status: 500 });
-  }
-
-  const accessRemains = ACTIVE_EVENTS.has(payload.event) || (payload.event === "SUBSCRIPTION_CANCELED" && nextCharge && new Date(nextCharge) > new Date());
-  await admin.from("tenants").update({ plan: accessRemains ? resolvedPlan : "trial", updated_at: now }).eq("id", tenantId);
-  await admin.from("billing_webhook_events").update({ tenant_id: tenantId, processing_status: "processed", processed_at: now }).eq("id", inserted.id);
-  return Response.json({ received: true });
+  const { data, error } = await admin.rpc("apply_kirvano_event", { p_event: {
+    key: eventKey, event: payload.event, sale: payload.sale_id, checkout: payload.checkout_id ?? null,
+    tenant: isUuid(payload.utm?.utm_term) ? payload.utm.utm_term : null, email: payload.customer?.email ?? null,
+    plan: resolvedPlan, status, interval: resolveInterval(payload), product: product?.id ?? null,
+    offer: product?.offer_id ?? null, at: normalizeDate(payload.created_at) ?? new Date().toISOString(),
+    period_end: normalizeDate(payload.plan?.next_charge_date),
+  } });
+  if (error) return new Response("Billing event could not be applied", { status: 500 });
+  return Response.json({ received: true, result: data });
 }
