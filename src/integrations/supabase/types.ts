@@ -49,6 +49,118 @@ export type Database = {
           },
         ]
       }
+      api_rate_limit_counters: {
+        Row: {
+          request_count: number
+          scope: string
+          user_id: string
+          window_started_at: string
+        }
+        Insert: {
+          request_count?: number
+          scope: string
+          user_id: string
+          window_started_at?: string
+        }
+        Update: {
+          request_count?: number
+          scope?: string
+          user_id?: string
+          window_started_at?: string
+        }
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          record_id: string
+          table_name: string
+          tenant_id: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id: string
+          table_name: string
+          tenant_id: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id?: string
+          table_name?: string
+          tenant_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_webhook_events: {
+        Row: {
+          checkout_id: string | null
+          error_message: string | null
+          event_key: string
+          event_type: string
+          id: string
+          processed_at: string | null
+          processing_status: string
+          received_at: string
+          sale_id: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          checkout_id?: string | null
+          error_message?: string | null
+          event_key: string
+          event_type: string
+          id?: string
+          processed_at?: string | null
+          processing_status?: string
+          received_at?: string
+          sale_id?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          checkout_id?: string | null
+          error_message?: string | null
+          event_key?: string
+          event_type?: string
+          id?: string
+          processed_at?: string | null
+          processing_status?: string
+          received_at?: string
+          sale_id?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_webhook_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_movements: {
         Row: {
           case_id: string
@@ -124,6 +236,7 @@ export type Database = {
           pipeline_value_cents: number
           responsible: string | null
           status: string
+          status_version: number
           subjects: Json | null
           tenant_id: string
           title: string
@@ -154,6 +267,7 @@ export type Database = {
           pipeline_value_cents?: number
           responsible?: string | null
           status?: string
+          status_version?: number
           subjects?: Json | null
           tenant_id: string
           title: string
@@ -184,6 +298,7 @@ export type Database = {
           pipeline_value_cents?: number
           responsible?: string | null
           status?: string
+          status_version?: number
           subjects?: Json | null
           tenant_id?: string
           title?: string
@@ -215,55 +330,181 @@ export type Database = {
           },
         ]
       }
+      client_activities: {
+        Row: {
+          body: string | null
+          client_id: string
+          created_at: string
+          id: string
+          kind: string
+          meta: Json | null
+          tenant_id: string
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          kind?: string
+          meta?: Json | null
+          tenant_id: string
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          meta?: Json | null
+          tenant_id?: string
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_activities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_activities_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
+          address: string | null
+          area: string | null
+          city: string | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
           doc: string | null
           email: string | null
           id: string
+          is_hot: boolean
           name: string
           notes: string | null
+          owner: string | null
           phone: string | null
+          stage_entered_at: string
+          state: string | null
           status: string
+          status_version: number
           tenant_id: string
           type: string
           updated_at: string
+          value_cents: number
         }
         Insert: {
+          address?: string | null
+          area?: string | null
+          city?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           doc?: string | null
           email?: string | null
           id?: string
+          is_hot?: boolean
           name: string
           notes?: string | null
+          owner?: string | null
           phone?: string | null
+          stage_entered_at?: string
+          state?: string | null
           status?: string
+          status_version?: number
           tenant_id: string
           type?: string
           updated_at?: string
+          value_cents?: number
         }
         Update: {
+          address?: string | null
+          area?: string | null
+          city?: string | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           doc?: string | null
           email?: string | null
           id?: string
+          is_hot?: boolean
           name?: string
           notes?: string | null
+          owner?: string | null
           phone?: string | null
+          stage_entered_at?: string
+          state?: string | null
           status?: string
+          status_version?: number
           tenant_id?: string
           type?: string
           updated_at?: string
+          value_cents?: number
         }
         Relationships: [
           {
             foreignKeyName: "clients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deadline_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          after: Json | null
+          before: Json | null
+          created_at: string
+          deadline_id: string
+          id: string
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          deadline_id: string
+          id?: string
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          deadline_id?: string
+          id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deadline_audit_log_deadline_id_fkey"
+            columns: ["deadline_id"]
+            isOneToOne: false
+            referencedRelation: "deadlines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deadline_audit_log_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -276,7 +517,9 @@ export type Database = {
           case_id: string | null
           client_id: string | null
           completed_at: string | null
+          completed_by: string | null
           created_at: string
+          created_by: string | null
           deleted_at: string | null
           done: boolean
           due_at: string
@@ -284,6 +527,7 @@ export type Database = {
           kind: string
           notes: string | null
           priority: string
+          status_version: number
           tenant_id: string
           title: string
           updated_at: string
@@ -292,7 +536,9 @@ export type Database = {
           case_id?: string | null
           client_id?: string | null
           completed_at?: string | null
+          completed_by?: string | null
           created_at?: string
+          created_by?: string | null
           deleted_at?: string | null
           done?: boolean
           due_at: string
@@ -300,6 +546,7 @@ export type Database = {
           kind?: string
           notes?: string | null
           priority?: string
+          status_version?: number
           tenant_id: string
           title: string
           updated_at?: string
@@ -308,7 +555,9 @@ export type Database = {
           case_id?: string | null
           client_id?: string | null
           completed_at?: string | null
+          completed_by?: string | null
           created_at?: string
+          created_by?: string | null
           deleted_at?: string | null
           done?: boolean
           due_at?: string
@@ -316,6 +565,7 @@ export type Database = {
           kind?: string
           notes?: string | null
           priority?: string
+          status_version?: number
           tenant_id?: string
           title?: string
           updated_at?: string
@@ -337,6 +587,76 @@ export type Database = {
           },
           {
             foreignKeyName: "deadlines_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          case_id: string | null
+          client_id: string | null
+          created_at: string
+          description: string | null
+          document_type: string
+          file_name: string
+          file_path: string
+          file_size: number
+          file_type: string
+          id: string
+          tenant_id: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          case_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          description?: string | null
+          document_type?: string
+          file_name: string
+          file_path: string
+          file_size?: number
+          file_type: string
+          id?: string
+          tenant_id: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          case_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          description?: string | null
+          document_type?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          file_type?: string
+          id?: string
+          tenant_id?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -576,6 +896,54 @@ export type Database = {
           },
         ]
       }
+      financial_payment_reversals: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          created_by: string | null
+          id: string
+          payment_id: string
+          reason: string
+          reversed_at: string
+          tenant_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payment_id: string
+          reason: string
+          reversed_at?: string
+          tenant_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payment_id?: string
+          reason?: string
+          reversed_at?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_payment_reversals_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "financial_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_payment_reversals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string | null
@@ -680,6 +1048,178 @@ export type Database = {
           },
         ]
       }
+      subscription_admin_audit: {
+        Row: {
+          admin_user_id: string
+          created_at: string
+          id: string
+          new_expires_at: string | null
+          new_plan: string
+          new_status: string
+          note: string | null
+          previous_expires_at: string | null
+          previous_plan: string | null
+          previous_status: string | null
+          target_user_id: string
+          tenant_id: string
+        }
+        Insert: {
+          admin_user_id: string
+          created_at?: string
+          id?: string
+          new_expires_at?: string | null
+          new_plan: string
+          new_status: string
+          note?: string | null
+          previous_expires_at?: string | null
+          previous_plan?: string | null
+          previous_status?: string | null
+          target_user_id: string
+          tenant_id: string
+        }
+        Update: {
+          admin_user_id?: string
+          created_at?: string
+          id?: string
+          new_expires_at?: string | null
+          new_plan?: string
+          new_status?: string
+          note?: string | null
+          previous_expires_at?: string | null
+          previous_plan?: string | null
+          previous_status?: string | null
+          target_user_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_admin_audit_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_branding: {
+        Row: {
+          brand_name: string
+          created_at: string
+          default_theme: string
+          logo_url: string | null
+          primary_color: string
+          secondary_color: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          brand_name: string
+          created_at?: string
+          default_theme?: string
+          logo_url?: string | null
+          primary_color?: string
+          secondary_color?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          brand_name?: string
+          created_at?: string
+          default_theme?: string
+          logo_url?: string | null
+          primary_color?: string
+          secondary_color?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_branding_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_subscriptions: {
+        Row: {
+          admin_notes: string | null
+          billing_interval: Database["public"]["Enums"]["billing_interval"] | null
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string | null
+          customer_email: string | null
+          grace_ends_at: string | null
+          id: string
+          kirvano_checkout_id: string | null
+          kirvano_offer_id: string | null
+          kirvano_product_id: string | null
+          kirvano_sale_id: string | null
+          last_event_at: string | null
+          plan: Database["public"]["Enums"]["tenant_plan"]
+          provider: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          tenant_id: string
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          billing_interval?:
+            | Database["public"]["Enums"]["billing_interval"]
+            | null
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          customer_email?: string | null
+          grace_ends_at?: string | null
+          id?: string
+          kirvano_checkout_id?: string | null
+          kirvano_offer_id?: string | null
+          kirvano_product_id?: string | null
+          kirvano_sale_id?: string | null
+          last_event_at?: string | null
+          plan?: Database["public"]["Enums"]["tenant_plan"]
+          provider?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          tenant_id: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          billing_interval?:
+            | Database["public"]["Enums"]["billing_interval"]
+            | null
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          customer_email?: string | null
+          grace_ends_at?: string | null
+          id?: string
+          kirvano_checkout_id?: string | null
+          kirvano_offer_id?: string | null
+          kirvano_product_id?: string | null
+          kirvano_sale_id?: string | null
+          last_event_at?: string | null
+          plan?: Database["public"]["Enums"]["tenant_plan"]
+          provider?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          tenant_id?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           created_at: string
@@ -688,6 +1228,7 @@ export type Database = {
           name: string
           plan: Database["public"]["Enums"]["tenant_plan"]
           slug: string
+          timezone: string
           updated_at: string
         }
         Insert: {
@@ -697,6 +1238,7 @@ export type Database = {
           name: string
           plan?: Database["public"]["Enums"]["tenant_plan"]
           slug: string
+          timezone?: string
           updated_at?: string
         }
         Update: {
@@ -706,6 +1248,7 @@ export type Database = {
           name?: string
           plan?: Database["public"]["Enums"]["tenant_plan"]
           slug?: string
+          timezone?: string
           updated_at?: string
         }
         Relationships: []
@@ -997,20 +1540,198 @@ export type Database = {
           },
         ]
       }
+      whatsapp_meta_connections: {
+        Row: {
+          access_token_ciphertext: string
+          access_token_expires_at: string | null
+          business_account_id: string
+          connected_at: string | null
+          created_at: string
+          id: string
+          instance_id: string
+          last_error: string | null
+          phone_number_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          access_token_ciphertext: string
+          access_token_expires_at?: string | null
+          business_account_id: string
+          connected_at?: string | null
+          created_at?: string
+          id?: string
+          instance_id: string
+          last_error?: string | null
+          phone_number_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          access_token_ciphertext?: string
+          access_token_expires_at?: string | null
+          business_account_id?: string
+          connected_at?: string | null
+          created_at?: string
+          id?: string
+          instance_id?: string
+          last_error?: string | null
+          phone_number_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_meta_connections_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: true
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_meta_connections_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_waha_connections: {
+        Row: {
+          connected_at: string | null
+          created_at: string
+          id: string
+          instance_id: string
+          last_error: string | null
+          session_name: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          connected_at?: string | null
+          created_at?: string
+          id?: string
+          instance_id: string
+          last_error?: string | null
+          session_name: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          connected_at?: string | null
+          created_at?: string
+          id?: string
+          instance_id?: string
+          last_error?: string | null
+          session_name?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_waha_connections_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: true
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_waha_connections_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      apply_kirvano_event: {
+        Args: { p_event: Json }
+        Returns: string
+      }
+      consume_rate_limit: {
+        Args: { _scope: string }
+        Returns: boolean
+      }
+      create_deadline: {
+        Args: {
+          p_title: string
+          p_kind: string
+          p_due_at: string
+          p_priority?: string
+          p_case_id?: string | null
+          p_client_id?: string | null
+          p_notes?: string | null
+        }
+        Returns: Database["public"]["Tables"]["deadlines"]["Row"]
+      }
+      create_intake_followup: {
+        Args: { p_client_id: string; p_contact_name: string }
+        Returns: string
+      }
       create_tenant_with_owner: {
         Args: { _name: string; _slug: string }
         Returns: string
       }
+      current_effective_plan: { Args: never; Returns: string }
       current_tenant_id: { Args: never; Returns: string }
+      financial_report_filter_options: {
+        Args: { _dimension: string; _search?: string; _limit?: number }
+        Returns: { id: string; label: string }[]
+      }
+      financial_reports: {
+        Args: {
+          _client_id?: string
+          _area?: string
+          _from?: string
+          _responsible?: string
+          _to?: string
+        }
+        Returns: Json
+      }
+      get_or_create_waha_conversation: {
+        Args: {
+          p_tenant_id: string
+          p_instance_id: string
+          p_contact_phone: string
+          p_contact_name?: string | null
+        }
+        Returns: {
+          id: string
+          tags: string[] | null
+          assignment_status: string | null
+          category: string | null
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
+        }
+        Returns: boolean
+      }
+      ingest_meta_whatsapp_message: {
+        Args: {
+          p_tenant_id: string
+          p_conversation_id: string
+          p_body: string
+          p_external_message_id: string
+          p_created_at: string
+          p_tags: string[]
+          p_category: string | null
+          p_urgent: boolean
+          p_notification_body: string | null
         }
         Returns: boolean
       }
@@ -1030,12 +1751,128 @@ export type Database = {
         Returns: Json
       }
       metrics_processos: { Args: never; Returns: Json }
+      move_case_status: {
+        Args: {
+          p_case_id: string
+          p_next_status: string
+          p_expected_version: number
+        }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
+      }
+      move_client_stage: {
+        Args: {
+          p_client_id: string
+          p_next_status: string
+          p_expected_version: number
+        }
+        Returns: Database["public"]["Tables"]["clients"]["Row"]
+      }
       notifications_summary: { Args: never; Returns: Json }
+      platform_admin_dashboard: { Args: never; Returns: Json }
+      platform_admin_list_users: {
+        Args: {
+          p_search?: string | null
+          p_plan?: string | null
+          p_status?: string | null
+          p_page?: number
+          p_page_size?: number
+        }
+        Returns: {
+          user_id: string
+          full_name: string | null
+          email: string | null
+          created_at: string
+          tenant_id: string | null
+          tenant_name: string | null
+          plan: string
+          access_status: string
+          expires_at: string | null
+          total_count: number
+        }[]
+      }
+      platform_admin_update_subscription: {
+        Args: {
+          p_user_id: string
+          p_plan: string
+          p_status: string
+          p_expires_at?: string | null
+          p_admin_notes?: string | null
+        }
+        Returns: undefined
+      }
+      platform_admin_user_detail: {
+        Args: { p_user_id: string }
+        Returns: {
+          user_id: string
+          full_name: string | null
+          email: string | null
+          created_at: string
+          tenant_id: string | null
+          tenant_name: string | null
+          plan: string
+          access_status: string
+          expires_at: string | null
+          admin_notes: string | null
+        }[]
+      }
+      provision_tenant_member: {
+        Args: {
+          p_user_id: string
+          p_full_name: string
+          p_email: string
+          p_phone: string
+          p_role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: undefined
+      }
       reconcile_financial_entry: {
         Args: { _entry_id: string }
         Returns: undefined
       }
+      replace_tenant_member_role: {
+        Args: {
+          p_user_id: string
+          p_role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: undefined
+      }
+      reverse_financial_payment: {
+        Args: {
+          p_payment_id: string
+          p_reason: string
+          p_amount_cents?: number
+        }
+        Returns: Database["public"]["Tables"]["financial_entries"]["Row"]
+      }
+      soft_delete_case: {
+        Args: { p_case_id: string; p_expected_version: number }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
+      }
+      soft_delete_client: {
+        Args: { p_client_id: string }
+        Returns: Database["public"]["Tables"]["clients"]["Row"]
+      }
+      soft_delete_deadline: {
+        Args: { p_deadline_id: string; p_expected_version: number }
+        Returns: Database["public"]["Tables"]["deadlines"]["Row"]
+      }
+      soft_delete_financial_entry: {
+        Args: { p_entry_id: string }
+        Returns: Database["public"]["Tables"]["financial_entries"]["Row"]
+      }
+      toggle_deadline_completion: {
+        Args: { p_deadline_id: string; p_expected_version: number }
+        Returns: Database["public"]["Tables"]["deadlines"]["Row"]
+      }
       tz_today: { Args: never; Returns: string }
+      update_deadline: {
+        Args: {
+          p_deadline_id: string
+          p_expected_version: number
+          p_patch: Json
+        }
+        Returns: Database["public"]["Tables"]["deadlines"]["Row"]
+      }
       user_in_tenant: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
@@ -1050,7 +1887,24 @@ export type Database = {
         | "secretary"
         | "intern"
         | "client"
-      tenant_plan: "trial" | "starter" | "professional" | "enterprise"
+      billing_interval: "monthly" | "annual"
+      subscription_status:
+        | "trialing"
+        | "active"
+        | "past_due"
+        | "canceled"
+        | "expired"
+        | "refunded"
+        | "chargeback"
+        | "suspended"
+      tenant_plan:
+        | "trial"
+        | "starter"
+        | "professional"
+        | "enterprise"
+        | "essential"
+        | "performance"
+        | "business"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1187,7 +2041,26 @@ export const Constants = {
         "intern",
         "client",
       ],
-      tenant_plan: ["trial", "starter", "professional", "enterprise"],
+      billing_interval: ["monthly", "annual"],
+      subscription_status: [
+        "trialing",
+        "active",
+        "past_due",
+        "canceled",
+        "expired",
+        "refunded",
+        "chargeback",
+        "suspended",
+      ],
+      tenant_plan: [
+        "trial",
+        "starter",
+        "professional",
+        "enterprise",
+        "essential",
+        "performance",
+        "business",
+      ],
     },
   },
 } as const
